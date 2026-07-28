@@ -1,0 +1,56 @@
+name: Alerte neige annoncée (MétéoSuisse Les Collines)
+
+on:
+  schedule:
+    # 05:23 et 16:23 locales en hiver (UTC+1) — heures fixes, minutes décalées
+    - cron: "23 4,15 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Analyser sans notifier ni enregistrer"
+        type: boolean
+        default: true
+      seuil_cm:
+        description: "Seuil en cm — surcharge ponctuelle (vide = variable SEUIL_NEIGE_CM, sinon 20)"
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snow-forecast-alert
+  cancel-in-progress: false
+
+jobs:
+  alerte:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Vérifier les chutes annoncées
+        env:
+          NTFY_TOPIC_NEIGE: ${{ secrets.NTFY_TOPIC_NEIGE }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          # Priorité : input manuel > variable de dépôt > défaut du script (20)
+          SEUIL_CM: ${{ inputs.seuil_cm || vars.SEUIL_NEIGE_CM }}
+        run: node snow-forecast-alert.mjs
+
+      - name: Commit l'état si modifié
+        if: always()
+        run: |
+          git config --global user.name "snow-alert-bot"
+          git config --global user.email "snow-alert-bot@users.noreply.github.com"
+          if [ -f snow-forecast-alerted.json ]; then
+            git add snow-forecast-alerted.json
+            git diff --staged --quiet || git commit -m "chore: chute annoncée notifiée [skip ci]"
+            git push
+          else
+            echo "snow-forecast-alerted.json absent — rien à committer."
+          fi
