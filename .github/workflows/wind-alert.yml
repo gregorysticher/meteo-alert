@@ -2,7 +2,7 @@ name: Alerte vent Reposoir
 
 on:
   schedule:
-    # 2x/jour, heures fixes, minutes décalées (UTC → 07:13 et 18:13 locales en été)
+    # 07:13 et 18:13 locales en été (UTC+2)
     - cron: "13 5,16 * * *"
   workflow_dispatch:
     inputs:
@@ -11,15 +11,15 @@ on:
         type: boolean
         default: true
       seuil_kn:
-        description: "Seuil en nœuds (vide = 12, valeur de production)"
+        description: "Seuil en nœuds — surcharge ponctuelle (vide = variable SEUIL_VENT_KN, sinon 12)"
         type: string
         default: ""
       min_heures:
-        description: "Nb de relevés consécutifs (vide = 4)"
+        description: "Relevés consécutifs (vide = variable MIN_HEURES_VENT, sinon 4)"
         type: string
         default: ""
       horizon_jours:
-        description: "Horizon en jours (vide = 7)"
+        description: "Horizon en jours (vide = variable HORIZON_JOURS_VENT, sinon 7)"
         type: string
         default: ""
 
@@ -46,9 +46,10 @@ jobs:
         env:
           NTFY_TOPIC_VENT: ${{ secrets.NTFY_TOPIC_VENT }}
           DRY_RUN: ${{ inputs.dry_run }}
-          SEUIL_KN: ${{ inputs.seuil_kn }}
-          MIN_HEURES: ${{ inputs.min_heures }}
-          HORIZON_JOURS: ${{ inputs.horizon_jours }}
+          # Priorité : input manuel > variable de dépôt > défaut du script
+          SEUIL_KN: ${{ inputs.seuil_kn || vars.SEUIL_VENT_KN }}
+          MIN_HEURES: ${{ inputs.min_heures || vars.MIN_HEURES_VENT }}
+          HORIZON_JOURS: ${{ inputs.horizon_jours || vars.HORIZON_JOURS_VENT }}
         run: node wind-alert.mjs
 
       - name: Commit l'état si modifié
