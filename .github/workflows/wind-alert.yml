@@ -10,6 +10,14 @@ on:
         description: "Analyser sans notifier ni enregistrer"
         type: boolean
         default: true
+      seuil_kn:
+        description: "Seuil en nœuds (vide = 12, valeur de production)"
+        type: string
+        default: ""
+      min_heures:
+        description: "Nb de relevés consécutifs (vide = 4)"
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -34,6 +42,8 @@ jobs:
         env:
           NTFY_TOPIC_VENT: ${{ secrets.NTFY_TOPIC_VENT }}
           DRY_RUN: ${{ inputs.dry_run }}
+          SEUIL_KN: ${{ inputs.seuil_kn }}
+          MIN_HEURES: ${{ inputs.min_heures }}
         run: node wind-alert.mjs
 
       - name: Commit l'état si modifié
