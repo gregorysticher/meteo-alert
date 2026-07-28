@@ -1,7 +1,8 @@
 // Alerte vent Reposoir — notifie quand une fenêtre exploitable apparaît.
 //
 // Critères : plage de >3h consécutives à plus de 12 kn (vent soutenu),
-// samedi/dimanche en journée ou mardi matin, entre le 15 avril et le 15 octobre.
+// samedi/dimanche en journée ou mardi matin, entre le 15 avril et le 15 octobre,
+// pas encore terminée, et à moins de 7 jours.
 //
 // Source : Open-Meteo directement — JSON propre, pas de clé,
 // mêmes coordonnées que le plugin Wind Forecast du dashboard.
@@ -14,6 +15,7 @@
 //   DRY_RUN=true      → analyse et affiche, sans notifier ni écrire
 //   SEUIL_KN=5        → abaisse le seuil (test de la chaîne de détection)
 //   MIN_HEURES=2      → abaisse la durée minimale (test)
+//   HORIZON_JOURS=14  → élargit l'horizon (test)
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
 
@@ -21,10 +23,12 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 const LAT = 46.23046;
 const LON = 6.150208;
 const LIEU = "Reposoir";
+const TZ = "Europe/Zurich";
 
 // Valeurs de production, surchargeables uniquement pour les tests
-const SEUIL_KN = Number(process.env.SEUIL_KN) || 12;   // strictement supérieur
-const MIN_HEURES = Number(process.env.MIN_HEURES) || 4; // 4 relevés = plus de 3h
+const SEUIL_KN = Number(process.env.SEUIL_KN) || 12;        // strictement supérieur
+const MIN_HEURES = Number(process.env.MIN_HEURES) || 4;     // 4 relevés = plus de 3h
+const HORIZON_JOURS = Number(process.env.HORIZON_JOURS) || 7;
 
 const SAISON_DEBUT = 415;   // 15 avril  (MMDD)
 const SAISON_FIN = 1015;    // 15 octobre
@@ -48,6 +52,29 @@ if (!NTFY_TOPIC && !DRY_RUN) {
   process.exit(1);
 }
 
+// ══════ TEMPS LOCAL ══════
+// Les horodatages Open-Meteo sont en heure locale suisse, alors que le runner
+// GitHub tourne en UTC. On lit donc l'heure courante dans le même fuseau.
+// La locale "sv-SE" produit un format ISO-like : "2026-07-28 08:45".
+function maintenantLocal() {
+  const s = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date());
+  return { jour: s.slice(0, 10), heure: parseInt(s.slice(11, 13), 10) };
+}
+
+function ajouterJours(jourISO, n) {
+  const d = new Date(`${jourISO}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
 // ══════ RÉCUPÉRATION ══════
 async function fetchWind() {
   const url =
@@ -55,7 +82,7 @@ async function fetchWind() {
     `?latitude=${LAT}&longitude=${LON}` +
     "&hourly=wind_speed_10m,wind_gusts_10m" +
     "&wind_speed_unit=kn" +
-    "&timezone=Europe/Zurich" +
+    `&timezone=${encodeURIComponent(TZ)}` +
     "&forecast_days=16";
 
   console.log(`Requête : ${url}\n`);
@@ -132,15 +159,17 @@ function trouverFenetres(data) {
   return fenetres;
 }
 
+function finFenetre(f) {
+  return f.heures[f.heures.length - 1];
+}
+
 function idFenetre(f) {
-  const h1 = f.heures[0];
-  const h2 = f.heures[f.heures.length - 1];
-  return `${f.jour}|${h1}-${h2}`;
+  return `${f.jour}|${f.heures[0]}-${finFenetre(f)}`;
 }
 
 function decrire(f) {
   const h1 = f.heures[0];
-  const h2 = f.heures[f.heures.length - 1];
+  const h2 = finFenetre(f);
   const [, m, d] = f.jour.split("-");
   return {
     titre: `Vent ${LIEU} — ${JOURS[f.dow]} ${d}.${m}`,
@@ -162,9 +191,8 @@ function chargerEtat() {
   }
 }
 
-function sauverEtat(alerted) {
+function sauverEtat(alerted, aujourdhui) {
   // On purge les entrées dont la date est passée, pour ne pas gonfler le fichier
-  const aujourdhui = new Date().toISOString().slice(0, 10);
   const propre = alerted.filter((id) => id.slice(0, 10) >= aujourdhui);
   writeFileSync(
     ETAT_FILE,
@@ -185,7 +213,14 @@ async function notifier(titre, corps) {
 
 // ══════ MAIN ══════
 async function main() {
-  console.log(`Seuil : plus de ${SEUIL_KN} kn · Durée min : ${MIN_HEURES} relevés\n`);
+  const now = maintenantLocal();
+  const limite = ajouterJours(now.jour, HORIZON_JOURS);
+
+  console.log(
+    `Seuil : plus de ${SEUIL_KN} kn · Durée min : ${MIN_HEURES} relevés · ` +
+      `Horizon : ${HORIZON_JOURS} j`
+  );
+  console.log(`Maintenant (${TZ}) : ${now.jour} ${now.heure}h · limite ${limite}\n`);
 
   const data = await fetchWind();
 
@@ -199,17 +234,38 @@ async function main() {
   }
   console.log(`Relevés horaires : ${data.hourly.time.length}\n`);
 
-  const fenetres = trouverFenetres(data);
-  console.log(`Fenêtres correspondant aux critères : ${fenetres.length}`);
-  for (const f of fenetres) {
-    const { titre, corps } = decrire(f);
-    console.log(`  • ${titre} — ${corps.replace(/\n/g, " | ")}`);
+  const brutes = trouverFenetres(data);
+  console.log(`Fenêtres brutes (météo + jour + créneau) : ${brutes.length}`);
+
+  const retenues = [];
+  for (const f of brutes) {
+    const { titre } = decrire(f);
+    const plage = `${f.heures[0]}h-${finFenetre(f)}h`;
+
+    // Écartée si déjà terminée
+    const passee =
+      f.jour < now.jour || (f.jour === now.jour && finFenetre(f) < now.heure);
+    if (passee) {
+      console.log(`  ✗ ${titre} ${plage} — déjà passée`);
+      continue;
+    }
+
+    // Écartée si trop lointaine (prévision peu fiable au-delà de l'horizon)
+    if (f.jour > limite) {
+      console.log(`  ✗ ${titre} ${plage} — au-delà de ${HORIZON_JOURS} j`);
+      continue;
+    }
+
+    console.log(`  ✓ ${titre} ${plage}`);
+    retenues.push(f);
   }
 
-  const etat = chargerEtat();
-  const nouvelles = fenetres.filter((f) => !etat.alerted.includes(idFenetre(f)));
+  console.log(`\nFenêtres retenues : ${retenues.length}`);
 
-  console.log(`\nDéjà notifiées : ${fenetres.length - nouvelles.length}`);
+  const etat = chargerEtat();
+  const nouvelles = retenues.filter((f) => !etat.alerted.includes(idFenetre(f)));
+
+  console.log(`Déjà notifiées : ${retenues.length - nouvelles.length}`);
   console.log(`Nouvelles à notifier : ${nouvelles.length}`);
 
   if (DRY_RUN) {
@@ -223,7 +279,7 @@ async function main() {
     etat.alerted.push(idFenetre(f));
   }
 
-  sauverEtat(etat.alerted);
+  sauverEtat(etat.alerted, now.jour);
 }
 
 main().catch((err) => {
