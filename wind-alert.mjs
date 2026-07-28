@@ -3,14 +3,17 @@
 // Critères : plage de >3h consécutives à plus de 12 kn (vent soutenu),
 // samedi/dimanche en journée ou mardi matin, entre le 15 avril et le 15 octobre.
 //
-// Source : Open-Meteo directement (pas via TRMNL) — JSON propre, pas de clé,
-// mêmes coordonnées que le plugin Wind Forecast.
+// Source : Open-Meteo directement — JSON propre, pas de clé,
+// mêmes coordonnées que le plugin Wind Forecast du dashboard.
 //
 // Anti-spam : chaque fenêtre détectée est mémorisée dans alerted.json.
 // Une même fenêtre n'est notifiée qu'une fois, même si le cron la revoit.
 //
 // Env requis : NTFY_TOPIC_VENT
-// Env optionnel : DRY_RUN=true → analyse et affiche, sans notifier ni écrire
+// Env optionnel :
+//   DRY_RUN=true      → analyse et affiche, sans notifier ni écrire
+//   SEUIL_KN=5        → abaisse le seuil (test de la chaîne de détection)
+//   MIN_HEURES=2      → abaisse la durée minimale (test)
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
 
@@ -19,8 +22,9 @@ const LAT = 46.23046;
 const LON = 6.150208;
 const LIEU = "Reposoir";
 
-const SEUIL_KN = 12;        // strictement supérieur à cette valeur
-const MIN_HEURES = 4;       // 4 relevés consécutifs = plus de 3h
+// Valeurs de production, surchargeables uniquement pour les tests
+const SEUIL_KN = Number(process.env.SEUIL_KN) || 12;   // strictement supérieur
+const MIN_HEURES = Number(process.env.MIN_HEURES) || 4; // 4 relevés = plus de 3h
 
 const SAISON_DEBUT = 415;   // 15 avril  (MMDD)
 const SAISON_FIN = 1015;    // 15 octobre
@@ -137,7 +141,7 @@ function idFenetre(f) {
 function decrire(f) {
   const h1 = f.heures[0];
   const h2 = f.heures[f.heures.length - 1];
-  const [y, m, d] = f.jour.split("-");
+  const [, m, d] = f.jour.split("-");
   return {
     titre: `Vent ${LIEU} — ${JOURS[f.dow]} ${d}.${m}`,
     corps:
@@ -181,6 +185,8 @@ async function notifier(titre, corps) {
 
 // ══════ MAIN ══════
 async function main() {
+  console.log(`Seuil : plus de ${SEUIL_KN} kn · Durée min : ${MIN_HEURES} relevés\n`);
+
   const data = await fetchWind();
 
   // Vérification de l'unité renvoyée — on ne suppose pas, on confirme
