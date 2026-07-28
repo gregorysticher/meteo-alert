@@ -1,0 +1,50 @@
+name: Alerte vent Reposoir
+
+on:
+  schedule:
+    # 2x/jour, heures fixes, minutes décalées (UTC → 07:13 et 18:13 locales en été)
+    - cron: "13 5,16 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Analyser sans notifier ni enregistrer"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wind-alert
+  cancel-in-progress: false
+
+jobs:
+  alerte:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Analyser les prévisions de vent
+        env:
+          NTFY_TOPIC_VENT: ${{ secrets.NTFY_TOPIC_VENT }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: node wind-alert.mjs
+
+      - name: Commit l'état si modifié
+        if: always()
+        run: |
+          git config --global user.name "wind-alert-bot"
+          git config --global user.email "wind-alert-bot@users.noreply.github.com"
+          if [ -f alerted.json ]; then
+            git add alerted.json
+            git diff --staged --quiet || git commit -m "chore: fenêtres vent notifiées [skip ci]"
+            git push
+          else
+            echo "alerted.json absent — rien à committer."
+          fi
