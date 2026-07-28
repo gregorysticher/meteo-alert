@@ -12,4 +12,4 @@ jobs:
         with:
           node-version: "22"
       - name: Explorer l'API SLF
-        run: node discover-slf.mjs
+        run: node inspect-ili2.mjs
