@@ -18,6 +18,10 @@ on:
         description: "Nb de relevés consécutifs (vide = 4)"
         type: string
         default: ""
+      horizon_jours:
+        description: "Horizon en jours (vide = 7)"
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -44,6 +48,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           SEUIL_KN: ${{ inputs.seuil_kn }}
           MIN_HEURES: ${{ inputs.min_heures }}
+          HORIZON_JOURS: ${{ inputs.horizon_jours }}
         run: node wind-alert.mjs
 
       - name: Commit l'état si modifié
