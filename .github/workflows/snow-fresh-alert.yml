@@ -8,6 +8,9 @@ on:
     # avec 4 à 7 h de retard, et un créneau qui tombe alors que le précédent
     # est encore en attente est abandonné. Avec les anciens créneaux 05:47 et
     # 11:47 (6 h d'écart), un jour sur deux ne recevait qu'un seul run.
+    #
+    # L'heure exacte n'est pas critique : le script prend le relevé SLF le
+    # plus récent sur 3 jours, il ne suppose pas que celui du jour est publié.
     - cron: "47 5,16 * * *"
   workflow_dispatch:
     inputs:
@@ -15,6 +18,10 @@ on:
         description: "Analyser sans notifier ni enregistrer"
         type: boolean
         default: true
+      ignorer_saison:
+        description: "Forcer l'analyse hors saison (test en été)"
+        type: boolean
+        default: false
       seuil_cm:
         description: "Seuil en cm — surcharge ponctuelle (vide = variable SEUIL_NEIGE_FRAICHE_CM, sinon 20)"
         type: string
@@ -43,6 +50,7 @@ jobs:
         env:
           NTFY_TOPIC_NEIGE: ${{ secrets.NTFY_TOPIC_NEIGE }}
           DRY_RUN: ${{ inputs.dry_run }}
+          IGNORER_SAISON: ${{ inputs.ignorer_saison }}
           SEUIL_CM: ${{ inputs.seuil_cm || vars.SEUIL_NEIGE_FRAICHE_CM }}
         run: node snow-fresh-alert.mjs
 
