@@ -11,10 +11,12 @@
 //
 // Env requis  : NTFY_TOPIC_NEIGE
 // Env optionnel :
-//   DRY_RUN=true   → analyse sans notifier ni écrire
-//   SEUIL_CM=10    → abaisse le seuil (test)
+//   DRY_RUN=true         → analyse sans notifier ni écrire
+//   SEUIL_CM=10          → abaisse le seuil (test)
+//   IGNORER_SAISON=true  → force l'analyse hors saison (test en été)
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
+import { notifier, sortieSiEchecs } from "./notify.mjs";
 
 // ══════ PARAMÈTRES ══════
 const LAT = 46.1913556421;
@@ -34,6 +36,7 @@ const ETAT_FILE = "snow-forecast-alerted.json";
 
 const NTFY_TOPIC = process.env.NTFY_TOPIC_NEIGE;
 const DRY_RUN = process.env.DRY_RUN === "true";
+const IGNORER_SAISON = process.env.IGNORER_SAISON === "true";
 
 if (!NTFY_TOPIC && !DRY_RUN) {
   console.error("Erreur : NTFY_TOPIC_NEIGE manquante.");
@@ -80,25 +83,17 @@ function sauverEtat(alerted, jour) {
   console.log(`${ETAT_FILE} mis à jour (${propre.length} entrée(s)).`);
 }
 
-async function notifier(titre, corps) {
-  const res = await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
-    method: "POST",
-    headers: { Title: titre, Priority: "high", Tags: "snowflake" },
-    body: corps,
-  });
-  console.log(`ntfy → ${titre} (HTTP ${res.status})`);
-}
-
 // ══════ MAIN ══════
 async function main() {
   const jour = aujourdhuiLocal();
   console.log(`${LIEU} (${ALT} m) · seuil ${SEUIL_CM} cm cumulés`);
   console.log(`Date locale : ${jour}\n`);
 
-  if (!enSaison(jour)) {
+  if (!enSaison(jour) && !IGNORER_SAISON) {
     console.log("Hors saison hivernale (15 oct → 15 avr) — aucune vérification.");
     return;
   }
+  if (IGNORER_SAISON) console.log("*** IGNORER_SAISON actif ***\n");
 
   const url =
     "https://api.open-meteo.com/v1/forecast" +
@@ -150,7 +145,8 @@ async function main() {
     const v = neige[i];
     // Valeur absente ou aberrante (cf. remarque Open-Meteo sur le niveau sol)
     const valide = typeof v === "number" && Number.isFinite(v) && v >= 0;
-    if (valide && v >= MIN_JOUR_CM && enSaison(dates[i])) {
+    const jourRetenu = enSaison(dates[i]) || IGNORER_SAISON;
+    if (valide && v >= MIN_JOUR_CM && jourRetenu) {
       if (cur) {
         cur.fin = dates[i];
         cur.total += v;
@@ -187,6 +183,7 @@ async function main() {
     return;
   }
 
+  let envoyes = 0;
   for (const e of nouveaux) {
     const periode =
       e.debut === e.fin ? label(e.debut) : `${label(e.debut)} → ${label(e.fin)}`;
@@ -194,17 +191,26 @@ async function main() {
       .map((j) => `${label(j.d)} ${Math.round(j.v)} cm`)
       .join("\n");
 
-    await notifier(
+    // Mémorisé seulement si l'envoi a réussi, sinon l'épisode serait
+    // considéré comme notifié sans que rien ne soit parti.
+    const ok = await notifier(
+      NTFY_TOPIC,
       `Neige annoncée — ${LIEU}`,
-      `${Math.round(e.total)} cm cumulés · ${periode}\n${detail}`
+      `${Math.round(e.total)} cm cumulés · ${periode}\n${detail}`,
+      { priorite: "high", tags: ["snowflake"] }
     );
-    etat.alerted.push(`${e.debut}|${e.fin}|${Math.round(e.total)}`);
+    if (ok) {
+      etat.alerted.push(`${e.debut}|${e.fin}|${Math.round(e.total)}`);
+      envoyes++;
+    }
   }
 
-  sauverEtat(etat.alerted, jour);
+  if (envoyes > 0) sauverEtat(etat.alerted, jour);
 }
 
-main().catch((err) => {
-  console.error("Erreur inattendue :", err.message);
-  console.log("Aucune alerte envoyée.");
-});
+main()
+  .then(sortieSiEchecs)
+  .catch((err) => {
+    console.error("Erreur inattendue :", err.message);
+    console.log("Aucune alerte envoyée.");
+  });
