@@ -2,8 +2,13 @@ name: Alerte neige fraîche (SLF Les Collines)
 
 on:
   schedule:
-    # 06:47 et 12:47 locales en hiver (UTC+1)
-    - cron: "47 5,11 * * *"
+    # 06:47 et 17:47 locales en hiver (UTC+1) — heures fixes, minutes décalées.
+    #
+    # ESPACEMENT DE 11 H, PAS MOINS : les runs planifiés de ce compte partent
+    # avec 4 à 7 h de retard, et un créneau qui tombe alors que le précédent
+    # est encore en attente est abandonné. Avec les anciens créneaux 05:47 et
+    # 11:47 (6 h d'écart), un jour sur deux ne recevait qu'un seul run.
+    - cron: "47 5,16 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
