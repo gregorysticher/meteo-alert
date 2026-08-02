@@ -18,6 +18,7 @@
 //   HORIZON_JOURS=14  → élargit l'horizon (test)
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
+import { notifier, sortieSiEchecs } from "./notify.mjs";
 
 // ══════ PARAMÈTRES ══════
 const LAT = 46.23046;
@@ -201,16 +202,6 @@ function sauverEtat(alerted, aujourdhui) {
   console.log(`alerted.json mis à jour (${propre.length} fenêtre(s) mémorisée(s)).`);
 }
 
-// ══════ NOTIFICATION ══════
-async function notifier(titre, corps) {
-  const res = await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
-    method: "POST",
-    headers: { Title: titre, Priority: "high", Tags: "wind_face" },
-    body: corps,
-  });
-  console.log(`ntfy → ${titre} (HTTP ${res.status})`);
-}
-
 // ══════ MAIN ══════
 async function main() {
   const now = maintenantLocal();
@@ -273,16 +264,23 @@ async function main() {
     return;
   }
 
+  let envoyees = 0;
   for (const f of nouvelles) {
     const { titre, corps } = decrire(f);
-    await notifier(titre, corps);
-    etat.alerted.push(idFenetre(f));
+    // Mémorisée seulement si l'envoi a réussi, sinon la fenêtre serait
+    // considérée comme notifiée sans que rien ne soit parti.
+    if (await notifier(NTFY_TOPIC, titre, corps, { priorite: "high", tags: ["wind_face"] })) {
+      etat.alerted.push(idFenetre(f));
+      envoyees++;
+    }
   }
 
-  sauverEtat(etat.alerted, now.jour);
+  if (envoyees > 0) sauverEtat(etat.alerted, now.jour);
 }
 
-main().catch((err) => {
-  console.error("Erreur :", err.message);
-  process.exit(1);
-});
+main()
+  .then(sortieSiEchecs)
+  .catch((err) => {
+    console.error("Erreur :", err.message);
+    process.exit(1);
+  });
