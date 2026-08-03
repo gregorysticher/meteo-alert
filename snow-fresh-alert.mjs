@@ -22,18 +22,31 @@
 // Env requis  : NTFY_TOPIC_NEIGE
 // Env optionnel :
 //   DRY_RUN=true         → analyse sans notifier ni écrire
-//   SEUIL_CM=10          → abaisse le seuil (test)
+//   SEUIL_CM=10          → abaisse le seuil (test) ; 0 est accepté
 //   IGNORER_SAISON=true  → force l'analyse hors saison (test en été)
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
+
+// ══════ OUTILS DE CONFIGURATION ══════
+// "Number(x) || defaut" rejetterait un seuil de 0, qui est justement la
+// valeur utile pour tester la chaîne d'envoi hors saison (HN_1D vaut 0 en
+// été). On ne retombe sur le défaut que si la variable est absente, vide
+// ou non numérique.
+function nombreOuDefaut(valeur, defaut) {
+  if (valeur === undefined || valeur === null || String(valeur).trim() === "") {
+    return defaut;
+  }
+  const n = Number(valeur);
+  return Number.isFinite(n) ? n : defaut;
+}
 
 // ══════ PARAMÈTRES ══════
 const STATION = "ILI2";
 const STATION_NOM = "Les Collines";
 const STATION_ALT = 2022;
 
-const SEUIL_CM = Number(process.env.SEUIL_CM) || 20;   // neige fraîche 24 h
+const SEUIL_CM = nombreOuDefaut(process.env.SEUIL_CM, 20);   // neige fraîche 24 h
 
 // Âge maximal accepté pour le relevé le plus récent. 2 jours couvre le cas
 // d'un run tombant avant la publication du jour ; au-delà, la station est
