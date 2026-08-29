@@ -9,11 +9,19 @@
   "references_meteo": [
     { "nom": "Creux de Genthod",
       "lat": 46.2665, "lon": 6.1585,
-      "usage": "Point de reference meteo, PAS un spot de navigation. Recommande par Tropical Corner pour leur propre spot, via le modele AROME 1.3 km sur Windguru. Valable pour eux seulement, et non representatif des thermiques.",
+      "usage": "Point de reference meteo, PAS un spot de navigation. Recommande par Tropical Corner pour leur propre spot de Cologny, via le modele AROME 1.3 km sur Windguru. Valable pour eux seulement, et non representatif des thermiques.",
       "modele": "meteofrance_arome_france_hd",
-      "spot_rattache": null }
+      "spot_rattache": "cologny" }
   ],
   "spots": [
+    { "key": "cologny", "nom": "Cologny (Tropical Corner)", "court": "Cologny",
+      "point": { "type": "npa", "nom": "Cologny" }, "station": "GVE",
+      "lat": 46.2147, "lon": 6.1747, "lac": "geneva", "route_min": 15,
+      "secteurs": [[0, 90], [315, 360], [200, 260]],
+      "ref_meteo": "Creux de Genthod",
+      "maps": "https://maps.google.com/?q=Tropical+Corner+Quai+de+Cologny",
+      "club": { "nom": "Tropical Corner", "tel": "+41 22 786 16 79",
+                "wing": true, "tracte": false, "assiste": false, "vent_min_kn": 12 } },
     { "key": "reposoir", "nom": "Le Reposoir", "court": "Reposoir",
       "point": { "type": "npa", "nom": "Bellevue" }, "station": "GVE",
       "lat": 46.23046, "lon": 6.150208, "lac": "geneva", "route_min": 12,
