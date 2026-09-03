@@ -1,286 +1,260 @@
-// Alerte vent Reposoir — notifie quand une fenêtre exploitable apparaît.
+// wind-alert.mjs — alerte wingfoil multi-spots sur le Leman.
+// Source: MeteoSwiss (mesures + previsions locales) / Eawag Alplakes.
 //
-// Critères : plage de >3h consécutives à plus de 12 kn (vent soutenu),
-// samedi/dimanche en journée ou mardi matin, entre le 15 avril et le 15 octobre,
-// pas encore terminée, et à moins de 7 jours.
-//
-// Source : Open-Meteo directement — JSON propre, pas de clé,
-// mêmes coordonnées que le plugin Wind Forecast du dashboard.
-//
-// Anti-spam : chaque fenêtre détectée est mémorisée dans alerted.json.
-// Une même fenêtre n'est notifiée qu'une fois, même si le cron la revoit.
-//
-// Env requis : NTFY_TOPIC_VENT
-// Env optionnel :
-//   DRY_RUN=true      → analyse et affiche, sans notifier ni écrire
-//   SEUIL_KN=5        → abaisse le seuil (test de la chaîne de détection)
-//   MIN_HEURES=2      → abaisse la durée minimale (test)
-//   HORIZON_JOURS=14  → élargit l'horizon (test)
+// Remplace la version Open-Meteo mono-spot. Ce qui est CONSERVE de l'original,
+// parce que c'etaient de bonnes decisions :
+//   - creneaux reels de dispo (sam/dim 9-18, mardi 8-13) : inutile d'alerter
+//     un jeudi ou Greg ne peut pas y aller
+//   - saison 15/04 - 15/10
+//   - anti-spam via alerted.json
+//   - DRY_RUN pour valider sans notifier
+//   - verification explicite des colonnes plutot que confiance aveugle
+// Ce qui CHANGE : source MeteoSuisse, 8 spots, seuil 12 kn / 3 h, club +
+// telephone + lien Maps dans le message, sortie webhook TRMNL, boucle QA.
 
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { notifier, sortieSiEchecs } from "./notify.mjs";
+import { readFile, writeFile } from 'node:fs/promises';
+import { notifier, sortieSiEchecs } from './notify.mjs';
+import { previsions, mesures, tempLac } from './wind-sources.mjs';
+import { archiver, apparier, rapport, versDate } from './wind-qa.mjs';
 
-// ══════ PARAMÈTRES ══════
-const LAT = 46.23046;
-const LON = 6.150208;
-const LIEU = "Reposoir";
-const TZ = "Europe/Zurich";
+const CONFIG = 'wind/spots.json';
+const VUS = 'alerted.json';
+const DRY_RUN = process.env.DRY_RUN === '1';
+const QA_ONLY = process.env.QA_ONLY === '1';
+const TOPIC = process.env.NTFY_TOPIC_VENT;
+const TRMNL = process.env.TRMNL_WEBHOOK_URL;
 
-// Valeurs de production, surchargeables uniquement pour les tests
-const SEUIL_KN = Number(process.env.SEUIL_KN) || 12;        // strictement supérieur
-const MIN_HEURES = Number(process.env.MIN_HEURES) || 4;     // 4 relevés = plus de 3h
-const HORIZON_JOURS = Number(process.env.HORIZON_JOURS) || 7;
+const TZ = 'Europe/Zurich';
 
-const SAISON_DEBUT = 415;   // 15 avril  (MMDD)
-const SAISON_FIN = 1015;    // 15 octobre
+// ---- temps ---------------------------------------------------------------
 
-// Créneaux éligibles par jour de semaine (0 = dimanche … 6 = samedi)
-// [heure_debut, heure_fin] inclusives
-const CRENEAUX = {
-  6: [9, 18],   // samedi — journée
-  0: [9, 18],   // dimanche — journée
-  2: [8, 13],   // mardi — matin
-};
-
-const JOURS = ["Di", "Lu", "Ma", "Me", "Je", "Ve", "Sa"];
-const ETAT_FILE = "alerted.json";
-
-const NTFY_TOPIC = process.env.NTFY_TOPIC_VENT;
-const DRY_RUN = process.env.DRY_RUN === "true";
-
-if (!NTFY_TOPIC && !DRY_RUN) {
-  console.error("Erreur : NTFY_TOPIC_VENT manquante.");
-  process.exit(1);
-}
-
-// ══════ TEMPS LOCAL ══════
-// Les horodatages Open-Meteo sont en heure locale suisse, alors que le runner
-// GitHub tourne en UTC. On lit donc l'heure courante dans le même fuseau.
-// La locale "sv-SE" produit un format ISO-like : "2026-07-28 08:45".
-function maintenantLocal() {
-  const s = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date());
-  return { jour: s.slice(0, 10), heure: parseInt(s.slice(11, 13), 10) };
-}
-
-function ajouterJours(jourISO, n) {
-  const d = new Date(`${jourISO}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
-
-// ══════ RÉCUPÉRATION ══════
-async function fetchWind() {
-  const url =
-    "https://api.open-meteo.com/v1/forecast" +
-    `?latitude=${LAT}&longitude=${LON}` +
-    "&hourly=wind_speed_10m,wind_gusts_10m" +
-    "&wind_speed_unit=kn" +
-    `&timezone=${encodeURIComponent(TZ)}` +
-    "&forecast_days=16";
-
-  console.log(`Requête : ${url}\n`);
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Open-Meteo HTTP ${res.status} — ${await res.text()}`);
-  }
-  return res.json();
-}
-
-// ══════ ANALYSE ══════
-// Découpe les relevés en plages consécutives qui satisfont tous les critères.
-function trouverFenetres(data) {
-  const times = data.hourly?.time || [];
-  const speeds = data.hourly?.wind_speed_10m || [];
-  const gusts = data.hourly?.wind_gusts_10m || [];
-
-  const fenetres = [];
-  let cur = null;
-
-  const cloturer = () => {
-    if (cur && cur.heures.length >= MIN_HEURES) fenetres.push(cur);
-    cur = null;
-  };
-
-  for (let i = 0; i < times.length; i++) {
-    const t = times[i];              // "2026-08-01T14:00" (heure locale)
-    const jour = t.slice(0, 10);
-    const heure = parseInt(t.slice(11, 13), 10);
-    const v = speeds[i];
-    const g = gusts[i];
-
-    // Jour de semaine sans piège de fuseau : on ancre la date en UTC
-    const dow = new Date(`${jour}T00:00:00Z`).getUTCDay();
-
-    // Saison, calculée sur la date de la fenêtre (pas sur aujourd'hui)
-    const md = parseInt(jour.slice(5, 7), 10) * 100 + parseInt(jour.slice(8, 10), 10);
-    const enSaison = md >= SAISON_DEBUT && md <= SAISON_FIN;
-
-    const creneau = CRENEAUX[dow];
-    const eligible =
-      enSaison &&
-      creneau &&
-      heure >= creneau[0] &&
-      heure <= creneau[1] &&
-      typeof v === "number" &&
-      v > SEUIL_KN;
-
-    if (!eligible) {
-      cloturer();
-      continue;
-    }
-
-    const contigu =
-      cur && cur.jour === jour && heure === cur.heures[cur.heures.length - 1] + 1;
-
-    if (contigu) {
-      cur.heures.push(heure);
-      cur.pic = Math.max(cur.pic, v);
-      if (typeof g === "number") cur.rafale = Math.max(cur.rafale, g);
-    } else {
-      cloturer();
-      cur = {
-        jour,
-        dow,
-        heures: [heure],
-        pic: v,
-        rafale: typeof g === "number" ? g : 0,
-      };
-    }
-  }
-  cloturer();
-
-  return fenetres;
-}
-
-function finFenetre(f) {
-  return f.heures[f.heures.length - 1];
-}
-
-function idFenetre(f) {
-  return `${f.jour}|${f.heures[0]}-${finFenetre(f)}`;
-}
-
-function decrire(f) {
-  const h1 = f.heures[0];
-  const h2 = finFenetre(f);
-  const [, m, d] = f.jour.split("-");
+/** Heure locale et jour de la semaine (0 = dimanche) pour une Date UTC. */
+function local(d) {
+  const p = new Intl.DateTimeFormat('fr-CH', {
+    timeZone: TZ, weekday: 'short', hour: '2-digit', minute: '2-digit',
+    day: '2-digit', month: '2-digit', hour12: false,
+  }).formatToParts(d);
+  const v = (t) => p.find((x) => x.type === t).value;
+  const jours = { dim: 0, lun: 1, mar: 2, mer: 3, jeu: 4, ven: 5, sam: 6 };
+  const cle = v('weekday').replace('.', '').slice(0, 3).toLowerCase();
   return {
-    titre: `Vent ${LIEU} — ${JOURS[f.dow]} ${d}.${m}`,
-    corps:
-      `${h1}h-${h2}h · ${f.heures.length}h à plus de ${SEUIL_KN} kn\n` +
-      `Pic ${Math.round(f.pic)} kn` +
-      (f.rafale ? ` · rafales ${Math.round(f.rafale)} kn` : ""),
+    heure: +v('hour'),
+    jour: jours[cle],
+    label: `${v('weekday')} ${v('day')}.${v('month')} ${v('hour')}:${v('minute')}`,
+    court: `${v('hour')}:${v('minute')}`,
   };
 }
 
-// ══════ ÉTAT ══════
-function chargerEtat() {
-  if (!existsSync(ETAT_FILE)) return { alerted: [] };
+function dansSaison(d, saison) {
+  const p = new Intl.DateTimeFormat('fr-CH', {
+    timeZone: TZ, day: '2-digit', month: '2-digit',
+  }).formatToParts(d);
+  const v = (t) => +p.find((x) => x.type === t).value;
+  const mmjj = v('month') * 100 + v('day');
+  return mmjj >= saison.debut && mmjj <= saison.fin;
+}
+
+// ---- selection ------------------------------------------------------------
+
+const secteurOk = (deg, secteurs) =>
+  !secteurs.length || deg === null
+    ? !secteurs.length
+    : secteurs.some(([a, b]) => deg >= a && deg <= b);
+
+/** Plus longue plage consecutive au-dessus du seuil, dans un creneau valide. */
+function fenetre(lignes, spot, cfg) {
+  let best = null;
+  let run = [];
+  for (const l of lignes) {
+    const d = versDate(l.date);
+    const t = local(d);
+    const creneau = cfg.creneaux[String(t.jour)];
+    const ok =
+      dansSaison(d, cfg.saison) &&
+      creneau &&
+      t.heure >= creneau[0] &&
+      t.heure < creneau[1] &&
+      l.kn >= cfg.seuil_kn &&
+      secteurOk(l.dir, spot.secteurs);
+    if (ok) {
+      run.push({ ...l, t });
+      if (run.length >= cfg.min_heures && (!best || run.length > best.length)) {
+        best = [...run];
+      }
+    } else {
+      run = [];
+    }
+  }
+  return best;
+}
+
+const moyenne = (f) => f.reduce((a, b) => a + b.kn, 0) / f.length;
+
+/** Penalise le trajet : 20 sessions pres de chez soi valent mieux que 5 loin. */
+const score = (f, spot, cfg) =>
+  !f ? -999 : f.length * (moyenne(f) / cfg.seuil_kn) - spot.route_min / 60;
+
+// ---- message --------------------------------------------------------------
+
+function message(best, f, cfg, eau, autres) {
+  const moy = moyenne(f);
+  const raf = Math.max(...f.map((l) => l.rafale));
+  const q10 = Math.min(...f.map((l) => l.q10));
+  const dir = Math.round(f[0].dir ?? 0);
+  const lignes = [
+    `${f[0].t.label} → ${f[f.length - 1].t.court}`,
+    `${moy.toFixed(0)} kn moy (min ${q10.toFixed(0)}), rafales ${raf.toFixed(0)} kn, ${dir}°`,
+    `${best.route_min} min de route`,
+  ];
+  const ratio = moy ? raf / moy : 0;
+  if (ratio > cfg.ratio_rafale_max) {
+    lignes.push(`⚠ rafales ×${ratio.toFixed(1)} — mauvais pour travailler le jibe`);
+  }
+  if (eau !== null) lignes.push(`Eau ${eau.toFixed(1)}°C`);
+  const c = best.club;
+  if (c) {
+    const offres = [
+      c.wing && 'wing',
+      c.tracte && 'tracté',
+      c.assiste && 'assisté',
+    ].filter(Boolean);
+    lignes.push(`${c.nom}${c.tel ? ' — ' + c.tel : ''} (${offres.join('/')})`);
+    if (c.vent_min_kn && moy < c.vent_min_kn) {
+      lignes.push(`  sous leur seuil wing (${c.vent_min_kn} kn)`);
+    }
+  }
+  lignes.push(best.maps);
+  if (autres.length) {
+    lignes.push('Autres : ' + autres.map((a) => `${a.court} ${a.pic} kn`).join(', '));
+  }
+  return lignes.join('\n');
+}
+
+// ---- sortie TRMNL (< 2 kB, contrainte webhook documentee) -----------------
+
+async function versTrmnl(classement, cfg, emission) {
+  if (!TRMNL) return 'pas de TRMNL_WEBHOOK_URL';
+  const spots = classement.slice(0, 6).map(({ spot, f, mesure }) => ({
+    n: spot.court,
+    now: mesure?.kn != null ? +mesure.kn.toFixed(0) : null,
+    d: mesure?.dir != null ? Math.round(mesure.dir) : null,
+    de: f ? f[0].t.court : null,
+    a: f ? f[f.length - 1].t.court : null,
+    kn: f ? +moyenne(f).toFixed(0) : null,
+    raf: f ? +Math.max(...f.map((l) => l.rafale)).toFixed(0) : null,
+    e: f ? 2 : null,
+  }));
+  const payload = {
+    merge_variables: { maj: emission, seuil: cfg.seuil_kn, spots },
+  };
+  const corps = JSON.stringify(payload);
+  if (corps.length > 2000) {
+    return `payload ${corps.length} o > 2000, non envoye`;
+  }
+  if (DRY_RUN) return `DRY_RUN — ${corps.length} o prets`;
+  const res = await fetch(TRMNL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: corps,
+  });
+  return `TRMNL HTTP ${res.status} (${corps.length} o)`;
+}
+
+// ---- anti-spam ------------------------------------------------------------
+
+async function lireVus() {
   try {
-    const e = JSON.parse(readFileSync(ETAT_FILE, "utf-8"));
-    return { alerted: Array.isArray(e.alerted) ? e.alerted : [] };
+    const j = JSON.parse(await readFile(VUS, 'utf8'));
+    return Array.isArray(j) ? { forme: 'array', ids: j }
+      : { forme: 'objet', cle: Object.keys(j)[0], ids: Object.values(j)[0] };
   } catch {
-    return { alerted: [] };
+    return { forme: 'array', ids: [] };
   }
 }
 
-function sauverEtat(alerted, aujourdhui) {
-  // On purge les entrées dont la date est passée, pour ne pas gonfler le fichier
-  const propre = alerted.filter((id) => id.slice(0, 10) >= aujourdhui);
-  writeFileSync(
-    ETAT_FILE,
-    JSON.stringify({ alerted: propre, updatedAt: new Date().toISOString() }, null, 2) + "\n"
+async function ecrireVus(v, ids) {
+  const garde = ids.slice(-40);
+  await writeFile(
+    VUS,
+    JSON.stringify(v.forme === 'array' ? garde : { [v.cle]: garde }, null, 2) + '\n'
   );
-  console.log(`alerted.json mis à jour (${propre.length} fenêtre(s) mémorisée(s)).`);
 }
 
-// ══════ MAIN ══════
-async function main() {
-  const now = maintenantLocal();
-  const limite = ajouterJours(now.jour, HORIZON_JOURS);
+// ---- principal ------------------------------------------------------------
 
-  console.log(
-    `Seuil : plus de ${SEUIL_KN} kn · Durée min : ${MIN_HEURES} relevés · ` +
-      `Horizon : ${HORIZON_JOURS} j`
-  );
-  console.log(`Maintenant (${TZ}) : ${now.jour} ${now.heure}h · limite ${limite}\n`);
+const cfg = JSON.parse(await readFile(CONFIG, 'utf8'));
 
-  const data = await fetchWind();
+if (QA_ONLY) {
+  const n = await apparier(cfg.spots);
+  console.log(`Appariements ajoutes : ${n}`);
+  console.log(await rapport());
+  sortieSiEchecs();
+} else {
+  const { emission, parSpot } = await previsions(cfg.spots);
+  console.log(`Run MeteoSuisse ${emission} — seuil ${cfg.seuil_kn} kn / ${cfg.min_heures} h`);
 
-  // Vérification de l'unité renvoyée — on ne suppose pas, on confirme
-  const unite = data.hourly_units?.wind_speed_10m;
-  console.log(`Unité vent renvoyée par Open-Meteo : ${unite}`);
-  if (unite !== "kn") {
-    throw new Error(
-      `Unité inattendue "${unite}" — le seuil de ${SEUIL_KN} suppose des nœuds. Arrêt.`
+  const codes = new Set(cfg.spots.map((s) => s.station));
+  const m = await mesures(codes).catch(() => new Map());
+
+  const classement = [];
+  for (const spot of cfg.spots) {
+    const lignes = parSpot.get(spot.key) || [];
+    const f = fenetre(lignes, spot, cfg);
+    const pic = lignes.length ? Math.max(...lignes.map((l) => l.kn)) : 0;
+    classement.push({
+      spot, f, pic: +pic.toFixed(0),
+      court: spot.court,
+      mesure: m.get(spot.station) || null,
+      s: score(f, spot, cfg),
+    });
+  }
+  classement.sort((a, b) => b.s - a.s || b.pic - a.pic);
+
+  console.log('\n| Spot | Fenetre | Moy | Pic | Maintenant | Score |');
+  console.log('|---|---|---|---|---|---|');
+  for (const c of classement) {
+    console.log(
+      `| ${c.spot.nom} | ${c.f ? c.f[0].t.court + '-' + c.f.at(-1).t.court : '—'} `
+      + `| ${c.f ? moyenne(c.f).toFixed(1) : '—'} | ${c.pic} `
+      + `| ${c.mesure?.kn != null ? c.mesure.kn.toFixed(1) : '—'} `
+      + `| ${c.f ? c.s.toFixed(2) : '—'} |`
     );
   }
-  console.log(`Relevés horaires : ${data.hourly.time.length}\n`);
 
-  const brutes = trouverFenetres(data);
-  console.log(`Fenêtres brutes (météo + jour + créneau) : ${brutes.length}`);
-
-  const retenues = [];
-  for (const f of brutes) {
-    const { titre } = decrire(f);
-    const plage = `${f.heures[0]}h-${finFenetre(f)}h`;
-
-    // Écartée si déjà terminée
-    const passee =
-      f.jour < now.jour || (f.jour === now.jour && finFenetre(f) < now.heure);
-    if (passee) {
-      console.log(`  ✗ ${titre} ${plage} — déjà passée`);
-      continue;
-    }
-
-    // Écartée si trop lointaine (prévision peu fiable au-delà de l'horizon)
-    if (f.jour > limite) {
-      console.log(`  ✗ ${titre} ${plage} — au-delà de ${HORIZON_JOURS} j`);
-      continue;
-    }
-
-    console.log(`  ✓ ${titre} ${plage}`);
-    retenues.push(f);
-  }
-
-  console.log(`\nFenêtres retenues : ${retenues.length}`);
-
-  const etat = chargerEtat();
-  const nouvelles = retenues.filter((f) => !etat.alerted.includes(idFenetre(f)));
-
-  console.log(`Déjà notifiées : ${retenues.length - nouvelles.length}`);
-  console.log(`Nouvelles à notifier : ${nouvelles.length}`);
-
-  if (DRY_RUN) {
-    console.log("\n*** DRY_RUN — aucune notif envoyée, aucun état écrit ***");
-    return;
-  }
-
-  let envoyees = 0;
-  for (const f of nouvelles) {
-    const { titre, corps } = decrire(f);
-    // Mémorisée seulement si l'envoi a réussi, sinon la fenêtre serait
-    // considérée comme notifiée sans que rien ne soit parti.
-    if (await notifier(NTFY_TOPIC, titre, corps, { priorite: "high", tags: ["wind_face"] })) {
-      etat.alerted.push(idFenetre(f));
-      envoyees++;
+  const gagnant = classement.find((c) => c.f);
+  if (!gagnant) {
+    console.log('\nAucune fenetre exploitable sur l\'horizon et les creneaux.');
+  } else {
+    const { spot, f } = gagnant;
+    const id = `${spot.key}|${f[0].date}`;
+    const vus = await lireVus();
+    if (vus.ids.includes(id)) {
+      console.log(`\nDeja alerte : ${id}`);
+    } else {
+      const eau = await tempLac(spot.lac, spot.lat, spot.lon);
+      const autres = classement
+        .filter((c) => c !== gagnant && c.pic > 0)
+        .slice(0, 3);
+      const corps = message(spot, f, cfg, eau, autres);
+      const titre = `Wingfoil — ${spot.court} ${f[0].t.court}`;
+      console.log('\n' + titre + '\n' + corps);
+      if (DRY_RUN) {
+        console.log('\nDRY_RUN : aucune notification envoyee.');
+      } else if (!TOPIC) {
+        console.error('NTFY_TOPIC_VENT absent — notification impossible.');
+        process.exitCode = 1;
+      } else {
+        await notifier(TOPIC, titre, corps, { priorite: 'high', tags: ['wind'] });
+        vus.ids.push(id);
+        await ecrireVus(vus, vus.ids);
+      }
     }
   }
 
-  if (envoyees > 0) sauverEtat(etat.alerted, now.jour);
+  console.log('\n' + (await versTrmnl(classement, cfg, emission)));
+  console.log(`Archive QA : ${await archiver(emission, cfg.spots, parSpot)} lignes`);
+  console.log(`Appariements : ${await apparier(cfg.spots)}`);
+  console.log('\n' + (await rapport()));
+  console.log('\nSource: MeteoSwiss / Eawag Alplakes');
+  sortieSiEchecs();
 }
-
-main()
-  .then(sortieSiEchecs)
-  .catch((err) => {
-    console.error("Erreur :", err.message);
-    process.exit(1);
-  });
