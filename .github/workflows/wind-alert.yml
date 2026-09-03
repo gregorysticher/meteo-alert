@@ -1,27 +1,19 @@
-name: Alerte vent Reposoir
+name: wind-alert
 
 on:
-  schedule:
-    # 07:13 et 18:13 locales en été (UTC+2)
-    - cron: "13 5,16 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Analyser sans notifier ni enregistrer"
-        type: boolean
-        default: true
-      seuil_kn:
-        description: "Seuil en nœuds — surcharge ponctuelle (vide = variable SEUIL_VENT_KN, sinon 12)"
-        type: string
-        default: ""
-      min_heures:
-        description: "Relevés consécutifs (vide = variable MIN_HEURES_VENT, sinon 4)"
-        type: string
-        default: ""
-      horizon_jours:
-        description: "Horizon en jours (vide = variable HORIZON_JOURS_VENT, sinon 7)"
-        type: string
-        default: ""
+        description: "1 = ne rien notifier, afficher seulement"
+        default: "1"
+      qa_only:
+        description: "1 = appariement QA seul, pas de prevision"
+        default: "0"
+  schedule:
+    # 05:00 UTC = 07:00 locale ete : alerte de planification du jour
+    - cron: "0 5 * * *"
+    # horaire : alimente la boucle QA (prevision archivee <-> mesure reelle)
+    - cron: "30 * * * *"
 
 permissions:
   contents: write
@@ -31,36 +23,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  alerte:
+  wind:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      - name: Analyser les prévisions de vent
+      - name: Alerte + previsions
+        if: github.event.schedule != '30 * * * *'
         env:
           NTFY_TOPIC_VENT: ${{ secrets.NTFY_TOPIC_VENT }}
-          DRY_RUN: ${{ inputs.dry_run }}
-          # Priorité : input manuel > variable de dépôt > défaut du script
-          SEUIL_KN: ${{ inputs.seuil_kn || vars.SEUIL_VENT_KN }}
-          MIN_HEURES: ${{ inputs.min_heures || vars.MIN_HEURES_VENT }}
-          HORIZON_JOURS: ${{ inputs.horizon_jours || vars.HORIZON_JOURS_VENT }}
-        run: node wind-alert.mjs
+          TRMNL_WEBHOOK_URL: ${{ secrets.TRMNL_WEBHOOK_URL }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || '0' }}
+          QA_ONLY: ${{ inputs.qa_only || '0' }}
+        run: node wind-alert.mjs | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Commit l'état si modifié
-        if: always()
+      - name: QA seul (runs horaires)
+        if: github.event.schedule == '30 * * * *'
+        env:
+          QA_ONLY: "1"
+        run: node wind-alert.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Les donnees QA n'ont de valeur qu'accumulees : on commite a chaque run.
+      - name: Commit des donnees
         run: |
-          git config --global user.name "wind-alert-bot"
-          git config --global user.email "wind-alert-bot@users.noreply.github.com"
-          if [ -f alerted.json ]; then
-            git add alerted.json
-            git diff --staged --quiet || git commit -m "chore: fenêtres vent notifiées [skip ci]"
-            git push
-          else
-            echo "alerted.json absent — rien à committer."
-          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/ alerted.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "data: wind $(date -u +%FT%TZ)"
+          git pull --rebase --autostash || true
+          git push || true
