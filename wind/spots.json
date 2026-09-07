@@ -1,6 +1,6 @@
 {
-  "_doc": "Config des alertes vent. Seuils et creneaux repris du wind-alert.mjs d'origine. MAJ 29/08/2026 : Le Ponton ne fait plus de wingfoil (tel.) ; foil tracte et e-foil lourd retires des offres utiles (tel. : n'aident pas a apprendre le wingfoil au-dela du tout debut). Restent le wing selon le vent et le foil assist.",
-  "seuil_kn": 12,
+  "_doc": "Config des alertes vent. Creneaux repris du wind-alert.mjs d'origine. MAJ 07/09/2026 : seuil_kn passe de 12 a 11, valide par Greg — c'est le seuil utilise pour les stats MeteoSuisse ayant servi au classement des spots. MAJ 29/08/2026 : Le Ponton ne fait plus de wingfoil (tel.) ; foil tracte et e-foil lourd retires des offres utiles (tel. : n'aident pas a apprendre le wingfoil au-dela du tout debut). Restent le wing selon le vent et le foil assist.",
+  "seuil_kn": 11,
   "min_heures": 3,
   "horizon_jours": 7,
   "ratio_rafale_max": 1.8,
