@@ -3,14 +3,17 @@
 //
 // Remplace la version Open-Meteo mono-spot. Ce qui est CONSERVE de l'original,
 // parce que c'etaient de bonnes decisions :
-//   - creneaux reels de dispo (sam/dim 9-18, mardi 8-13) : inutile d'alerter
-//     un jeudi ou Greg ne peut pas y aller
+//   - creneaux reels de dispo (sam/dim 9-18, mardi 8-13)
 //   - saison 15/04 - 15/10
 //   - anti-spam via alerted.json
 //   - DRY_RUN pour valider sans notifier
 //   - verification explicite des colonnes plutot que confiance aveugle
-// Ce qui CHANGE : source MeteoSuisse, 8 spots, seuil 12 kn / 3 h, club +
-// telephone + lien Maps dans le message, sortie webhook TRMNL, boucle QA.
+//
+// SELECTION DU SPOT : le plus PROCHE qui a assez de vent, pas le plus vente.
+// On parcourt les spots par distance croissante et on retient le premier qui
+// tient le seuil pendant min_heures. Un spot plus lointain n'est jamais
+// prefere, meme s'il annonce nettement plus de vent — c'est le trajet qui
+// decide du nombre de sessions, pas les noeuds.
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { notifier, sortieSiEchecs } from './notify.mjs';
@@ -90,10 +93,6 @@ function fenetre(lignes, spot, cfg) {
 
 const moyenne = (f) => f.reduce((a, b) => a + b.kn, 0) / f.length;
 
-/** Penalise le trajet : 20 sessions pres de chez soi valent mieux que 5 loin. */
-const score = (f, spot, cfg) =>
-  !f ? -999 : f.length * (moyenne(f) / cfg.seuil_kn) - spot.route_min / 60;
-
 // ---- message --------------------------------------------------------------
 
 function message(best, f, cfg, eau, autres) {
@@ -104,7 +103,7 @@ function message(best, f, cfg, eau, autres) {
   const lignes = [
     `${f[0].t.label} → ${f[f.length - 1].t.court}`,
     `${moy.toFixed(0)} kn moy (min ${q10.toFixed(0)}), rafales ${raf.toFixed(0)} kn, ${dir}°`,
-    `${best.route_min} min de route`,
+    `${best.route_min} min de route — le plus proche qui tient le seuil`,
   ];
   const ratio = moy ? raf / moy : 0;
   if (ratio > cfg.ratio_rafale_max) {
@@ -125,17 +124,22 @@ function message(best, f, cfg, eau, autres) {
   }
   lignes.push(best.maps);
   if (autres.length) {
-    lignes.push('Autres : ' + autres.map((a) => `${a.court} ${a.pic} kn`).join(', '));
+    lignes.push(
+      'Plus loin : ' +
+      autres.map((a) => `${a.court} ${a.pic} kn (${a.spot.route_min}′)`).join(', ')
+    );
   }
   return lignes.join('\n');
 }
 
-// ---- sortie TRMNL (< 2 kB, contrainte webhook documentee) -----------------
+// ---- sortie TRMNL (webhook, 5 kB max) ------------------------------------
 
 async function versTrmnl(classement, cfg, emission) {
   if (!TRMNL) return 'pas de TRMNL_WEBHOOK_URL';
+  // Ordre = distance croissante, comme la logique de selection.
   const spots = classement.slice(0, 6).map(({ spot, f, mesure }) => ({
     n: spot.court,
+    min: spot.route_min,
     now: mesure?.kn != null ? +mesure.kn.toFixed(0) : null,
     d: mesure?.dir != null ? Math.round(mesure.dir) : null,
     de: f ? f[0].t.court : null,
@@ -148,9 +152,7 @@ async function versTrmnl(classement, cfg, emission) {
     merge_variables: { maj: emission, seuil: cfg.seuil_kn, spots },
   };
   const corps = JSON.stringify(payload);
-  if (corps.length > 2000) {
-    return `payload ${corps.length} o > 2000, non envoye`;
-  }
+  if (corps.length > 5000) return `payload ${corps.length} o > 5000, non envoye`;
   if (DRY_RUN) return `DRY_RUN — ${corps.length} o prets`;
   const res = await fetch(TRMNL, {
     method: 'POST',
@@ -202,25 +204,25 @@ if (QA_ONLY) {
     const f = fenetre(lignes, spot, cfg);
     const pic = lignes.length ? Math.max(...lignes.map((l) => l.kn)) : 0;
     classement.push({
-      spot, f, pic: +pic.toFixed(0),
-      court: spot.court,
+      spot, f, pic: +pic.toFixed(0), court: spot.court,
       mesure: m.get(spot.station) || null,
-      s: score(f, spot, cfg),
     });
   }
-  classement.sort((a, b) => b.s - a.s || b.pic - a.pic);
+  // Le plus proche d'abord : c'est la distance qui tranche, pas la force du vent.
+  classement.sort((a, b) => a.spot.route_min - b.spot.route_min);
 
-  console.log('\n| Spot | Fenetre | Moy | Pic | Maintenant | Score |');
+  console.log('\n| Spot | Route | Fenetre | Moy | Pic | Maintenant |');
   console.log('|---|---|---|---|---|---|');
   for (const c of classement) {
     console.log(
-      `| ${c.spot.nom} | ${c.f ? c.f[0].t.court + '-' + c.f.at(-1).t.court : '—'} `
+      `| ${c.spot.nom} | ${c.spot.route_min}′ `
+      + `| ${c.f ? c.f[0].t.court + '-' + c.f.at(-1).t.court : '—'} `
       + `| ${c.f ? moyenne(c.f).toFixed(1) : '—'} | ${c.pic} `
-      + `| ${c.mesure?.kn != null ? c.mesure.kn.toFixed(1) : '—'} `
-      + `| ${c.f ? c.s.toFixed(2) : '—'} |`
+      + `| ${c.mesure?.kn != null ? c.mesure.kn.toFixed(1) : '—'} |`
     );
   }
 
+  // Premier de la liste (donc le plus proche) qui tient le seuil.
   const gagnant = classement.find((c) => c.f);
   if (!gagnant) {
     console.log('\nAucune fenetre exploitable sur l\'horizon et les creneaux.');
@@ -232,8 +234,9 @@ if (QA_ONLY) {
       console.log(`\nDeja alerte : ${id}`);
     } else {
       const eau = await tempLac(spot.lac, spot.lat, spot.lon);
+      // Uniquement les spots PLUS LOIN, pour signaler s'il y a nettement mieux.
       const autres = classement
-        .filter((c) => c !== gagnant && c.pic > 0)
+        .filter((c) => c.spot.route_min > spot.route_min && c.pic > 0)
         .slice(0, 3);
       const corps = message(spot, f, cfg, eau, autres);
       const titre = `Wingfoil — ${spot.court} ${f[0].t.court}`;
