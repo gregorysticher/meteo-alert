@@ -1,15 +1,25 @@
 {
-  "_doc": "Config des alertes vent. Creneaux repris du wind-alert.mjs d'origine. MAJ 07/09/2026 : Creux de Genthod confirme comme point de reference du spot de Tropical Corner (Cologny) — confirme par Greg, ce n'est plus une deduction. min_heures reste a 3, decide par Greg : 2 h ne justifient pas le deplacement. Attention en relisant le classement des spots (PRE 52 j, MAH 47 j, GVE 42 j...) : ces stats comptaient des creneaux de 2 h, le nombre reel d'alertes a 3 h sera plus bas. MAJ 07/09/2026 : seuil_kn passe de 12 a 11, aligne sur ces memes stats. MAJ 29/08/2026 : Le Ponton ne fait plus de wingfoil (tel.) ; foil tracte et e-foil lourd retires des offres utiles (tel. : n'aident pas a apprendre le wingfoil au-dela du tout debut). Restent le wing selon le vent et le foil assist.",
+  "_doc": "Config des alertes vent. MAJ 24/09/2026 : alertes en 3 etages (pre-alerte J-4/J-5, confirmation la veille, rappel le matin) + correction du biais mesure par la boucle QA.",
   "seuil_kn": 11,
   "min_heures": 3,
   "horizon_jours": 7,
   "ratio_rafale_max": 1.8,
   "saison": { "debut": 415, "fin": 1015 },
   "creneaux": { "6": [9, 18], "0": [9, 18], "2": [8, 13] },
+
+  "_doc_alertes": "lead_h = heures entre l'envoi et le debut de la fenetre. marge_kn = tolerance SOUS le seuil : a longue echeance on alerte plus large, la confirmation tranchera. correction_biais : applique le biais mesure par le QA a cette echeance.",
+  "alertes": {
+    "pre":    { "titre": "Potentiel",    "lead_min_h": 72, "lead_max_h": 132, "marge_kn": 1.5, "correction_biais": true },
+    "conf":   { "titre": "Confirme",     "lead_min_h": 13, "lead_max_h": 34,  "marge_kn": 0,   "correction_biais": true },
+    "jour":   { "titre": "Aujourd'hui",  "lead_min_h": 1,  "lead_max_h": 9,   "marge_kn": 0,   "correction_biais": true }
+  },
+  "_doc_annulation": "Si une pre-alerte a ete envoyee et qu'aucune fenetre ne tient a l'echeance de confirmation, on previent : une pre-organisation annulee doit etre annoncee.",
+  "annulation": true,
+
   "references_meteo": [
     { "nom": "Creux de Genthod",
       "lat": 46.2665, "lon": 6.1585,
-      "usage": "Point de reference meteo, PAS un spot de navigation. Recommande par Tropical Corner pour leur propre spot de Cologny, via le modele AROME 1.3 km sur Windguru. Rattachement a Cologny confirme par Greg le 07/09/2026. Valable pour ce spot seulement, et non representatif des thermiques.",
+      "usage": "Point de reference meteo, PAS un spot. Recommande par Tropical Corner pour leur spot de Cologny, via AROME 1.3 km sur Windguru. Valable pour eux seulement, pas pour les thermiques.",
       "modele": "meteofrance_arome_france_hd",
       "spot_rattache": "cologny" }
   ],
