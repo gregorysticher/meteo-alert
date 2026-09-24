@@ -3,21 +3,23 @@
 //
 // SELECTION : le spot le plus PROCHE qui tient le seuil, pas le plus vente.
 //
-// ALERTES EN 3 ETAGES, pour permettre de s'organiser puis de confirmer :
-//   pre   J-3 a J-5  "Potentiel"   seuil abaisse, c'est un signal, pas une promesse
-//   conf  la veille  "Confirme"    seuil plein, la fenetre est fiable
-//   jour  le matin   "Aujourd'hui" rappel, dernier etat connu
+// ALERTES EN 3 ETAGES CONTIGUS (aucune fenetre ne passe entre deux tranches) :
+//   pre   34 a 168 h  "Potentiel"   seuil abaisse — signal, pas promesse
+//   conf   9 a  34 h  "Confirme"    seuil plein
+//   jour 0.5 a   9 h  "Aujourd'hui" rappel
 // Plus une annulation si une pre-alerte tombe a l'eau.
 //
 // CORRECTION DE BIAIS : le QA mesure que la prevision sous-estime le vent,
-// d'autant plus que l'echeance est longue (~ -2 kn a J-5). Sans correction une
-// pre-alerte au seuil brut raterait la moitie des journees. On remonte donc la
-// prevision du biais mesure a cette echeance.
+// d'autant plus que l'echeance est longue (~ -2 kn a J-5). On remonte donc la
+// prevision du biais mesure a cette echeance avant de comparer au seuil.
 //
-// DECLENCHEMENT : le script tourne a CHAQUE run, pas seulement au cron
-// quotidien. Les crons planifies de GitHub derivent de plusieurs heures (le
-// 22/09 le run de 05:00 UTC a tourne a 09:34), ce qui rendait l'alerte du matin
-// inutilisable. Les etages sont bornes par l'echeance, pas par l'heure du run.
+// DECLENCHEMENT : a CHAQUE run. Les crons planifies de GitHub derivent de
+// plusieurs heures (le 22/09 le run de 05:00 UTC a tourne a 09:34). Les etages
+// sont donc bornes par l'echeance, jamais par l'heure du run.
+//
+// MODE TEST : SEUIL_TEST=<kn> abaisse le seuil, prefixe les titres par [TEST],
+// et n'ecrit NI alerted.json NI le journal des alertes — un test ne doit
+// polluer ni l'anti-spam ni les statistiques de qualite.
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { notifier, sortieSiEchecs } from './notify.mjs';
@@ -32,6 +34,8 @@ const CONFIG = 'wind/spots.json';
 const VUS = 'alerted.json';
 const DRY_RUN = process.env.DRY_RUN === '1';
 const QA_ONLY = process.env.QA_ONLY === '1';
+const SEUIL_TEST = parseFloat(process.env.SEUIL_TEST || '');
+const TEST = Number.isFinite(SEUIL_TEST);
 const TOPIC = process.env.NTFY_TOPIC_VENT;
 const TRMNL = process.env.TRMNL_WEBHOOK_URL;
 const TZ = 'Europe/Zurich';
@@ -70,11 +74,6 @@ const secteurOk = (deg, secteurs) =>
     ? !secteurs.length
     : secteurs.some(([a, b]) => deg >= a && deg <= b);
 
-/**
- * Plus longue plage consecutive au-dessus du seuil effectif, dans un creneau.
- * seuilEff varie selon l'etage : abaisse pour la pre-alerte.
- * La prevision est corrigee du biais mesure a son echeance.
- */
 function fenetre(lignes, spot, cfg, seuilEff, biais, maintenant) {
   let best = null;
   let run = [];
@@ -108,7 +107,7 @@ const moyenne = (f, champ = 'kn') =>
 
 // ---- message --------------------------------------------------------------
 
-function message(etage, cfgEtage, spot, f, cfg, eau, autres) {
+function message(etage, spot, f, cfg, eau, autres) {
   const moy = moyenne(f, 'corrige');
   const brut = moyenne(f);
   const raf = Math.max(...f.map((l) => l.rafale));
@@ -116,16 +115,20 @@ function message(etage, cfgEtage, spot, f, cfg, eau, autres) {
   const dir = Math.round(f[0].dir ?? 0);
   const lead = Math.round(f[0].lead);
 
-  const lignes = [`${f[0].t.label} → ${f[f.length - 1].t.court}`];
-
-  if (etage === 'pre') {
-    lignes.push(`Dans ${Math.round(lead / 24)} j — a confirmer`);
+  const lignes = [];
+  if (TEST) {
+    lignes.push(`Test d'acheminement — seuil abaisse a ${cfg.seuil_kn} kn.`,
+      'Donnees reelles, mais ce n\'est pas une vraie alerte.', '');
   }
-  lignes.push(
-    `${moy.toFixed(0)} kn moy${Math.abs(moy - brut) >= 0.5
-      ? ` (brut ${brut.toFixed(0)}, corrige du biais)` : ''}` +
-    `, rafales ${raf.toFixed(0)} kn, ${dir}°`
-  );
+  lignes.push(`${f[0].t.label} → ${f[f.length - 1].t.court}`);
+  if (etage === 'pre') {
+    lignes.push(lead >= 48
+      ? `Dans ${Math.round(lead / 24)} j — a confirmer`
+      : 'A confirmer');
+  }
+  lignes.push(`${moy.toFixed(0)} kn moy${Math.abs(moy - brut) >= 0.5
+    ? ` (brut ${brut.toFixed(0)}, corrige du biais)` : ''}` +
+    `, rafales ${raf.toFixed(0)} kn, ${dir}°`);
   if (etage !== 'pre') lignes.push(`Scenario bas : ${q10.toFixed(0)} kn`);
   lignes.push(`${spot.route_min} min de route — le plus proche qui tient`);
 
@@ -156,6 +159,7 @@ function message(etage, cfgEtage, spot, f, cfg, eau, autres) {
 
 async function versTrmnl(classement, cfg, emission) {
   if (!TRMNL) return 'pas de TRMNL_WEBHOOK_URL';
+  if (TEST) return 'TEST : webhook TRMNL non touche';
   const spots = classement.slice(0, 6).map(({ spot, f, mesure }) => ({
     n: spot.court, min: spot.route_min,
     now: mesure?.kn != null ? +mesure.kn.toFixed(0) : null,
@@ -199,6 +203,7 @@ async function ecrireVus(v) {
 // ---- principal ------------------------------------------------------------
 
 const cfg = JSON.parse(await readFile(CONFIG, 'utf8'));
+if (TEST) cfg.seuil_kn = SEUIL_TEST;
 
 if (QA_ONLY) {
   await journaliserMesures(cfg.spots);
@@ -212,19 +217,18 @@ if (QA_ONLY) {
   const { emission, parSpot } = await previsions(cfg.spots);
   const biais = await biaisParEcheance();
   console.log(`Run MeteoSuisse ${emission} — seuil ${cfg.seuil_kn} kn / ` +
-    `${cfg.min_heures} h — correction de biais sur ${biais.size} echeances`);
+    `${cfg.min_heures} h — biais sur ${biais.size} echeances` +
+    (TEST ? '  *** MODE TEST ***' : ''));
 
   const codes = new Set(cfg.spots.map((s) => s.station));
   const m = await mesures(codes).catch(() => new Map());
   const vus = await lireVus();
   let modifie = false;
 
-  // --- etat par spot, trie par proximite ---------------------------------
   const classement = cfg.spots.map((spot) => {
     const lignes = parSpot.get(spot.key) || [];
     return {
-      spot, court: spot.court,
-      lignes,
+      spot, court: spot.court, lignes,
       f: fenetre(lignes, spot, cfg, cfg.seuil_kn, biais, maintenant),
       pic: lignes.length ? +Math.max(...lignes.map((l) => l.kn)).toFixed(0) : 0,
       mesure: m.get(spot.station) || null,
@@ -240,12 +244,10 @@ if (QA_ONLY) {
       `| ${c.mesure?.kn != null ? c.mesure.kn.toFixed(1) : '—'} |`);
   }
 
-  // --- un passage par etage ----------------------------------------------
   for (const [etage, e] of Object.entries(cfg.alertes)) {
     const seuilEff = cfg.seuil_kn - (e.marge_kn || 0);
     const b = e.correction_biais ? biais : new Map();
 
-    // le plus proche qui tient, dans la tranche d'echeance de cet etage
     let gagnant = null;
     for (const c of classement) {
       const f = fenetre(c.lignes, c.spot, cfg, seuilEff, b, maintenant);
@@ -259,7 +261,7 @@ if (QA_ONLY) {
 
     const { c, f, lead } = gagnant;
     const id = `${etage}|${c.spot.key}|${f[0].date}`;
-    if (vus.ids.includes(id)) {
+    if (!TEST && vus.ids.includes(id)) {
       console.log(`\n[${etage}] deja envoye : ${id}`);
       continue;
     }
@@ -268,15 +270,12 @@ if (QA_ONLY) {
     const autres = classement
       .filter((x) => x.spot.route_min > c.spot.route_min && x.pic > 0)
       .slice(0, 3);
-    const corps = message(etage, e, c.spot, f, cfg, eau, autres);
-    const titre = `${e.titre} — ${c.court} ${f[0].t.label.slice(0, 9)} ` +
-      `${f[0].t.court}`;
+    const corps = message(etage, c.spot, f, cfg, eau, autres);
+    const titre = `${TEST ? '[TEST] ' : ''}${e.titre} — ${c.court} ` +
+      `${f[0].t.label.slice(0, 9)} ${f[0].t.court}`;
     console.log(`\n[${etage}] ${titre}\n${corps}`);
 
-    if (DRY_RUN) {
-      console.log(`[${etage}] DRY_RUN : rien envoye.`);
-      continue;
-    }
+    if (DRY_RUN) { console.log(`[${etage}] DRY_RUN : rien envoye.`); continue; }
     if (!TOPIC) {
       console.error('NTFY_TOPIC_VENT absent — notification impossible.');
       process.exitCode = 1;
@@ -284,8 +283,12 @@ if (QA_ONLY) {
     }
     await notifier(TOPIC, titre, corps, {
       priorite: etage === 'pre' ? 'default' : 'high',
-      tags: ['wind', etage],
+      tags: ['wind', etage, ...(TEST ? ['test'] : [])],
     });
+    if (TEST) {
+      console.log(`[${etage}] TEST : ni anti-spam ni journal QA.`);
+      break;                        // une seule notification de test suffit
+    }
     vus.ids.push(id);
     modifie = true;
     await journaliserAlerte({
@@ -295,23 +298,22 @@ if (QA_ONLY) {
     });
   }
 
-  // --- annulation d'une pre-alerte tombee a l'eau -------------------------
-  if (cfg.annulation && !DRY_RUN && TOPIC) {
+  if (cfg.annulation && !TEST && !DRY_RUN && TOPIC) {
     for (const id of vus.ids.filter((i) => i.startsWith('pre|'))) {
       const [, key, debut] = id.split('|');
       const lead = (versDate(debut) - maintenant) / 36e5;
-      if (lead < 13 || lead > 34) continue;      // au moment de confirmer
+      if (lead < 9 || lead > 34) continue;
       const annul = `annul|${key}|${debut}`;
       if (vus.ids.includes(annul)) continue;
-      if (vus.ids.includes(`conf|${key}|${debut}`)) continue; // confirmee
+      if (vus.ids.includes(`conf|${key}|${debut}`)) continue;
       const c = classement.find((x) => x.spot.key === key);
       if (!c) continue;
       const f = fenetre(c.lignes, c.spot, cfg, cfg.seuil_kn, biais, maintenant);
-      if (f && f[0].date === debut) continue;    // tient toujours
+      if (f && f[0].date === debut) continue;
       const t = local(versDate(debut));
-      const corps = `La fenetre annoncee a ${c.court} ne tient plus.\n` +
-        `Pic revu a ${c.pic} kn. Inutile de bloquer le creneau.`;
-      await notifier(TOPIC, `Annule — ${c.court} ${t.label}`, corps,
+      await notifier(TOPIC, `Annule — ${c.court} ${t.label}`,
+        `La fenetre annoncee a ${c.court} ne tient plus.\n` +
+        `Pic revu a ${c.pic} kn. Inutile de bloquer le creneau.`,
         { priorite: 'default', tags: ['wind', 'annul'] });
       vus.ids.push(annul);
       modifie = true;
@@ -321,12 +323,14 @@ if (QA_ONLY) {
   if (modifie) await ecrireVus(vus);
 
   console.log('\n' + await versTrmnl(classement, cfg, emission));
-  console.log(`Archive QA : ${await archiver(emission, cfg.spots, parSpot)}`);
-  console.log(`Mesures : ${await journaliserMesures(cfg.spots)}`);
-  console.log(`Appariements : ${await apparier(cfg.spots)}`);
-  console.log(`Alertes evaluees : ${await evaluerAlertes(cfg)}`);
-  console.log('\n' + await rapport());
-  console.log('\n' + await rapportAlertes());
+  if (!TEST) {
+    console.log(`Archive QA : ${await archiver(emission, cfg.spots, parSpot)}`);
+    console.log(`Mesures : ${await journaliserMesures(cfg.spots)}`);
+    console.log(`Appariements : ${await apparier(cfg.spots)}`);
+    console.log(`Alertes evaluees : ${await evaluerAlertes(cfg)}`);
+    console.log('\n' + await rapport());
+    console.log('\n' + await rapportAlertes());
+  }
   console.log('\nSource: MeteoSwiss / Eawag Alplakes');
   sortieSiEchecs();
 }
