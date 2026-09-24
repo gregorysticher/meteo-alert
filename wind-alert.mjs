@@ -50,11 +50,16 @@ function local(d) {
   const v = (t) => p.find((x) => x.type === t).value;
   const jours = { dim: 0, lun: 1, mar: 2, mer: 3, jeu: 4, ven: 5, sam: 6 };
   const cle = v('weekday').replace('.', '').slice(0, 3).toLowerCase();
+  // jourLabel : date seule, pour les titres. Ne jamais la tronquer a la main —
+  // "sam. 26.09" fait 10 caracteres, un slice(0,9) coupait le mois.
+  const jourLabel = `${v('weekday')} ${v('day')}.${v('month')}`;
+  const court = `${v('hour')}:${v('minute')}`;
   return {
     heure: +v('hour'),
     jour: jours[cle],
-    label: `${v('weekday')} ${v('day')}.${v('month')} ${v('hour')}:${v('minute')}`,
-    court: `${v('hour')}:${v('minute')}`,
+    jourLabel,
+    label: `${jourLabel} ${court}`,
+    court,
   };
 }
 
@@ -126,9 +131,13 @@ function message(etage, spot, f, cfg, eau, autres) {
       ? `Dans ${Math.round(lead / 24)} j — a confirmer`
       : 'A confirmer');
   }
-  lignes.push(`${moy.toFixed(0)} kn moy${Math.abs(moy - brut) >= 0.5
-    ? ` (brut ${brut.toFixed(0)}, corrige du biais)` : ''}` +
-    `, rafales ${raf.toFixed(0)} kn, ${dir}°`);
+  // Une decimale des qu'on montre brut et corrige cote a cote : arrondis a
+  // l'entier, les deux valeurs se confondaient ("4 kn (brut 4, corrige)").
+  const ecart = Math.abs(moy - brut);
+  lignes.push(ecart >= 0.5
+    ? `${moy.toFixed(1)} kn moy (brut ${brut.toFixed(1)}, ` +
+      `corrige du biais), rafales ${raf.toFixed(0)} kn, ${dir}°`
+    : `${moy.toFixed(0)} kn moy, rafales ${raf.toFixed(0)} kn, ${dir}°`);
   if (etage !== 'pre') lignes.push(`Scenario bas : ${q10.toFixed(0)} kn`);
   lignes.push(`${spot.route_min} min de route — le plus proche qui tient`);
 
@@ -272,7 +281,7 @@ if (QA_ONLY) {
       .slice(0, 3);
     const corps = message(etage, c.spot, f, cfg, eau, autres);
     const titre = `${TEST ? '[TEST] ' : ''}${e.titre} — ${c.court} ` +
-      `${f[0].t.label.slice(0, 9)} ${f[0].t.court}`;
+      `${f[0].t.jourLabel} ${f[0].t.court}`;
     console.log(`\n[${etage}] ${titre}\n${corps}`);
 
     if (DRY_RUN) { console.log(`[${etage}] DRY_RUN : rien envoye.`); continue; }
