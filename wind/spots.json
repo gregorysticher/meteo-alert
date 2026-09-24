@@ -1,5 +1,5 @@
 {
-  "_doc": "Config des alertes vent. MAJ 24/09/2026 : alertes en 3 etages (pre-alerte J-4/J-5, confirmation la veille, rappel le matin) + correction du biais mesure par la boucle QA.",
+  "_doc": "Config des alertes vent. MAJ 24/09/2026 : alertes en 3 etages CONTIGUS (aucune zone morte entre les tranches d'echeance) + correction du biais mesure par la boucle QA.",
   "seuil_kn": 11,
   "min_heures": 3,
   "horizon_jours": 7,
@@ -7,13 +7,12 @@
   "saison": { "debut": 415, "fin": 1015 },
   "creneaux": { "6": [9, 18], "0": [9, 18], "2": [8, 13] },
 
-  "_doc_alertes": "lead_h = heures entre l'envoi et le debut de la fenetre. marge_kn = tolerance SOUS le seuil : a longue echeance on alerte plus large, la confirmation tranchera. correction_biais : applique le biais mesure par le QA a cette echeance.",
+  "_doc_alertes": "lead_h = heures entre l'envoi et le debut de la fenetre. Les tranches se touchent : 0.5-9 / 9-34 / 34-168. Une fenetre ne peut donc jamais passer entre deux etages. marge_kn = tolerance SOUS le seuil : a longue echeance on alerte plus large, la confirmation tranchera.",
   "alertes": {
-    "pre":    { "titre": "Potentiel",    "lead_min_h": 72, "lead_max_h": 132, "marge_kn": 1.5, "correction_biais": true },
-    "conf":   { "titre": "Confirme",     "lead_min_h": 13, "lead_max_h": 34,  "marge_kn": 0,   "correction_biais": true },
-    "jour":   { "titre": "Aujourd'hui",  "lead_min_h": 1,  "lead_max_h": 9,   "marge_kn": 0,   "correction_biais": true }
+    "pre":  { "titre": "Potentiel",   "lead_min_h": 34,  "lead_max_h": 168, "marge_kn": 1.5, "correction_biais": true },
+    "conf": { "titre": "Confirme",    "lead_min_h": 9,   "lead_max_h": 34,  "marge_kn": 0,   "correction_biais": true },
+    "jour": { "titre": "Aujourd'hui", "lead_min_h": 0.5, "lead_max_h": 9,   "marge_kn": 0,   "correction_biais": true }
   },
-  "_doc_annulation": "Si une pre-alerte a ete envoyee et qu'aucune fenetre ne tient a l'echeance de confirmation, on previent : une pre-organisation annulee doit etre annoncee.",
   "annulation": true,
 
   "references_meteo": [

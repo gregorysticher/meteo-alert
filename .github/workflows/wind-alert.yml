@@ -9,6 +9,9 @@ on:
       qa_only:
         description: "1 = QA seul, pas de prevision ni d'alerte"
         default: "0"
+      seuil_test:
+        description: "Seuil en noeuds pour un envoi de TEST (vide = seuil normal). Marque l'alerte [TEST], n'ecrit ni alerted.json ni le journal QA."
+        default: ""
   schedule:
     # Toutes les 2 h : les etages d'alerte sont bornes par l'ECHEANCE de la
     # fenetre, pas par l'heure du run. Inutile de viser une heure precise —
@@ -38,6 +41,7 @@ jobs:
           TRMNL_WEBHOOK_URL: ${{ secrets.TRMNL_WEBHOOK_URL }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || '0' }}
           QA_ONLY: ${{ inputs.qa_only || '0' }}
+          SEUIL_TEST: ${{ inputs.seuil_test || '' }}
         run: node wind-alert.mjs | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Les donnees QA n'ont de valeur qu'accumulees : on commite a chaque run.
