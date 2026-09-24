@@ -7,13 +7,13 @@ on:
         description: "1 = ne rien notifier, afficher seulement"
         default: "1"
       qa_only:
-        description: "1 = appariement QA seul, pas de prevision"
+        description: "1 = QA seul, pas de prevision ni d'alerte"
         default: "0"
   schedule:
-    # 05:00 UTC = 07:00 locale ete : alerte de planification du jour
-    - cron: "0 5 * * *"
-    # horaire : alimente la boucle QA (prevision archivee <-> mesure reelle)
-    - cron: "30 * * * *"
+    # Toutes les 2 h : les etages d'alerte sont bornes par l'ECHEANCE de la
+    # fenetre, pas par l'heure du run. Inutile de viser une heure precise —
+    # les crons planifies de GitHub derivent de plusieurs heures.
+    - cron: "15 */2 * * *"
 
 permissions:
   contents: write
@@ -32,19 +32,12 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Alerte + previsions
-        if: github.event.schedule != '30 * * * *'
+      - name: Previsions, alertes et QA
         env:
           NTFY_TOPIC_VENT: ${{ secrets.NTFY_TOPIC_VENT }}
           TRMNL_WEBHOOK_URL: ${{ secrets.TRMNL_WEBHOOK_URL }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || '0' }}
           QA_ONLY: ${{ inputs.qa_only || '0' }}
-        run: node wind-alert.mjs | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: QA seul (runs horaires)
-        if: github.event.schedule == '30 * * * *'
-        env:
-          QA_ONLY: "1"
         run: node wind-alert.mjs | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Les donnees QA n'ont de valeur qu'accumulees : on commite a chaque run.
