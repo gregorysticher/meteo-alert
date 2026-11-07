@@ -1,7 +1,8 @@
 # Weather station — consignes Claude Code
 
 Avant toute action, lis `HANDOFF.md` (état, architecture, conventions) puis
-`TODO.md` (priorités). Tiens `TODO.md` à jour en fin de session.
+`TODO.md` (priorités). Si la mise en route du §0 de `HANDOFF.md` n'est pas
+faite, fais-la d'abord. Tiens `TODO.md` à jour en fin de session.
 
 - Session Remote Control : Greg suit souvent depuis son téléphone. Réponses
   courtes, une question à la fois, rendus montrés en image.

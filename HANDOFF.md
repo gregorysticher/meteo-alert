@@ -1,53 +1,61 @@
 # Transmission — Weather station (TRMNL + meteo-alert)
 
 État au **07/11/2026**. À lire en premier dans toute nouvelle session, avec
-[`TODO.md`](TODO.md). Démarrage de la session : §0.
+[`TODO.md`](TODO.md). **Nouvelle session : commencer par le §0.**
 
 ---
 
-## 0. Démarrer la session — Claude Code, pilotable depuis le téléphone
+## 0. Mise en route — à faire par la session elle-même
 
-Le projet se poursuit dans **Claude Code**, sur le PC de Greg, en session
+Le projet se poursuit dans **Claude Code**, sur le PC Windows de Greg, en session
 **Remote Control** : elle tourne en local (dépôts, Node, Chrome connecté à
-TRMNL) et se pilote depuis l'app Claude du téléphone (onglet **Code**) ou
-claude.ai/code. Une session cloud (claude.ai/code seul) ne conviendrait pas :
-elle n'a pas accès au Chrome de Greg, donc pas à l'interface TRMNL.
+TRMNL) et Greg la suit depuis l'app Claude du téléphone (onglet **Code**) ou
+claude.ai/code. Une session cloud seule ne convient pas : elle n'a pas accès au
+Chrome de Greg, donc pas à l'interface TRMNL.
 
-### Une fois
+**Greg n'a rien préparé.** Il a lancé Claude Code et collé un message renvoyant
+ici. La session fait elle-même les étapes ci-dessous, dans l'ordre, et ne
+sollicite Greg que pour ce qu'elle ne peut pas faire (marqué **Greg**), une
+chose à la fois, en une phrase.
 
-1. Cloner les deux dépôts côte à côte, par exemple dans `C:\dev\weather-station\` :
-   ```powershell
-   git clone https://github.com/gregorysticher/meteo-alert.git
-   git clone https://github.com/gregorysticher/trmnl-markup.git   # privé, lecture seule
-   ```
-2. Installer GitHub CLI et `gh auth login` : remplace le connecteur GitHub pour
-   les Actions (`gh run list`, `gh run view --log`, `gh workflow run`).
-3. Se connecter à Claude Code avec le **compte claude.ai** (`/login`), pas une clé
-   API : Remote Control et l'intégration Chrome l'exigent.
-4. Chrome ouvert, extension **Claude in Chrome** installée et connectée, session
-   TRMNL ouverte.
+1. **Dépôts.** Si la session ne tourne pas déjà dans `meteo-alert`, cloner les
+   deux dépôts côte à côte dans `C:\dev\weather-station\` :
+   `meteo-alert` (public) et `trmnl-markup` (privé, lecture seule ; nécessite
+   l'étape 2). Lire ensuite `CLAUDE.md`, ce fichier et `TODO.md` depuis le clone.
+2. **GitHub CLI.** Si `gh` manque : `winget install --id GitHub.cli`. Puis
+   `gh auth login --web` : **Greg** valide le code affiché dans son navigateur.
+   Vérifier avec `gh auth status`. `gh` remplace le connecteur GitHub des
+   sessions précédentes (`gh run list`, `gh run view --log`, `gh workflow run`).
+3. **Remote Control permanent.** Vérifier que la session est joignable depuis
+   le téléphone. Sinon : **Greg** tape `/config` et passe *Enable Remote Control
+   for all sessions* à `true` (une fois pour toutes), puis `/remote-control`
+   pour la session en cours. Faire renommer la session « Weather station »
+   (`/rename`) pour la retrouver dans l'app.
+4. **Chrome.** Vérifier que les outils navigateur sont disponibles et que
+   trmnl.com est accessible avec la session de Greg. Sinon : **Greg** tape
+   `/chrome` et active Chrome par défaut ; l'extension Claude in Chrome doit
+   être installée et Chrome ouvert.
+5. **Contrôle.** Rendre à Greg un état en 5 lignes : dépôts, `gh`, Remote
+   Control, Chrome/TRMNL, derniers runs des workflows neige. Puis proposer le
+   plan de la priorité du `TODO.md`.
 
-### À chaque démarrage
+Prérequis à connaître : Remote Control et Chrome exigent une connexion Claude
+Code par **compte claude.ai** (pas une clé API). Docs :
+code.claude.com/docs/en/remote-control et code.claude.com/docs/en/chrome.
 
-```powershell
-cd C:\dev\weather-station\meteo-alert
-claude --chrome --remote-control --add-dir ..\trmnl-markup
-```
+### Contraintes de la session
 
-(ou `claude --chrome`, puis `/remote-control` dans la session ; `/remote-control`
-réaffiche l'URL et un QR code pour le téléphone.) Sur le téléphone : app Claude
-→ **Code** → choisir la session.
-
-### Contraintes
-
-- La session n'existe que tant que le PC est allumé et que le processus `claude`
-  tourne : fermer le terminal la met hors ligne. Si le PC se met en veille, elle
-  se reconnecte au réveil, mais reste injoignable entre-temps (le réveil à
-  distance du PC n'est pas encore en place).
+- Elle n'existe que tant que le PC est allumé et que le processus `claude`
+  tourne : fermer le terminal la met hors ligne. En veille, elle se reconnecte
+  au réveil mais reste injoignable entre-temps (le réveil à distance du PC
+  n'est pas encore en place).
 - Chrome doit rester ouvert pour tout ce qui touche TRMNL.
-- Commandes réservées au terminal (`/plugin`, `/resume`…) : pas depuis l'app.
+- Depuis l'app, les commandes réservées au terminal (`/plugin`, `/resume`…) ne
+  marchent pas.
+- Greg suit souvent depuis le téléphone : réponses courtes, une question à la
+  fois, rendus montrés en image.
 - Pas de mémoire claude.ai dans Claude Code : `CLAUDE.md`, ce fichier et
-  `TODO.md` font foi.
+  `TODO.md` font foi. Les tenir à jour.
 
 ---
 
