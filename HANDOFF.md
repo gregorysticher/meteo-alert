@@ -176,8 +176,6 @@ apparaît à l'écran : « Reposoir · Dim 10–14 h » (« Auj. » si aujourd'h
   `wind-alert.yml` avant chaque run. Webhook TRMNL refusé → run rouge.
 - Pas encore vu sur un vrai payload : contrôle à l'ouverture de saison.
 
-La branche `payload-jour-fenetre` (aucun commit propre) reste à supprimer.
-
 ### Sonde WindLive (04/10/2026)
 
 `/api/stations` : 789 points, 10 entre Genève et Nyon (Creux de Genthod, SNG,

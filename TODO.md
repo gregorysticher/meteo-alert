@@ -31,8 +31,6 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 - [ ] Contrôler le premier vrai `W.reco` à l'écran à l'ouverture de la
       saison (2027-04-15) : jour, heures, inversion.
-- [ ] Supprimer la branche obsolète `payload-jour-fenetre` (aucun commit
-      propre ; suppression du 07/11 bloquée par le classifieur auto mode).
 
 ### Dette technique
 
@@ -64,6 +62,7 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       markup TRMNL lisant `W.reco` (commit `trmnl-sync` `b8e95bb`). Testé sur
       4 cas simulés (`test/reco.test.mjs`, joués par le workflow) et sur
       l'aperçu TRMNL saison forcée.
+- [x] 2026-11-07 — Branche obsolète `payload-jour-fenetre` supprimée.
 - [x] 2026-11-07 — Premier run planifié neige après correctif vérifié dans le
       log (« Prévisions journalières », 5 jours de données).
 
