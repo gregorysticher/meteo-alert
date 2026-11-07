@@ -1,8 +1,11 @@
 // Alerte chute de neige annoncée — Les Collines (2022 m), Portes du Soleil.
 //
-// Source : Open-Meteo, modèle meteoswiss_seamless (ICON-CH1 ~1 km puis
+// Source : Open-Meteo, modèle meteoswiss_icon_seamless (ICON-CH1 ~1 km puis
 // ICON-CH2 ~2 km, 120 h d'horizon). Coordonnées et altitude de la station
 // IMIS ILI2, pour rester cohérent avec l'alerte neige fraîche.
+// Le nom du modèle est vérifié contre l'API : "meteoswiss_seamless" est refusé
+// (HTTP 400, "invalid String value") et a laissé l'alerte aveugle du 15/10 au
+// 07/11/2026.
 //
 // Un "épisode" = jours consécutifs avec de la neige prévue. L'alerte se
 // déclenche sur le cumul de l'épisode, pas sur une seule journée.
@@ -99,7 +102,7 @@ async function main() {
     "https://api.open-meteo.com/v1/forecast" +
     `?latitude=${LAT}&longitude=${LON}&elevation=${ALT}` +
     "&daily=snowfall_sum,temperature_2m_max" +
-    "&models=meteoswiss_seamless" +
+    "&models=meteoswiss_icon_seamless" +
     `&timezone=${encodeURIComponent(TZ)}` +
     "&forecast_days=5";   // ICON-CH2 plafonne à 120 h
 
