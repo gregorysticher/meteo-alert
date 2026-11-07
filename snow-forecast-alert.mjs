@@ -109,12 +109,20 @@ async function main() {
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      console.log(`Open-Meteo indisponible (HTTP ${res.status}) — aucune alerte.`);
+      // Un 4xx n'est pas une panne passagère : c'est la requête qui est
+      // refusée, et l'alerte reste aveugle tant qu'on ne la corrige pas.
+      // On affiche la raison renvoyée par Open-Meteo et on fait échouer le
+      // run pour qu'il apparaisse en rouge au lieu de passer pour un succès.
+      const corps = await res.text().catch(() => "");
+      console.log(`Open-Meteo refuse la requête (HTTP ${res.status}) — aucune alerte.`);
+      console.log(`Réponse : ${corps.slice(0, 500)}`);
+      process.exitCode = 1;
       return;
     }
     data = await res.json();
   } catch (err) {
     console.log(`Erreur d'accès à Open-Meteo : ${err.message} — aucune alerte.`);
+    process.exitCode = 1;
     return;
   }
 
@@ -123,6 +131,7 @@ async function main() {
   console.log(`Unité neige renvoyée : ${unite}`);
   if (unite !== "cm") {
     console.log(`Unité inattendue — le seuil suppose des cm. Aucune alerte.`);
+    process.exitCode = 1;
     return;
   }
 
