@@ -141,9 +141,14 @@ async function main() {
 
   const dates = data.daily?.time || [];
   const neige = data.daily?.snowfall_sum || [];
-  if (dates.length === 0) {
-    // Réponse 200 mais vide : l'alerte serait aveugle, le run doit être rouge.
-    console.log("Aucune donnée journalière — aucune alerte.");
+  // Réponse 200 mais vide, ou sans aucune valeur de neige exploitable :
+  // l'alerte serait aveugle, le run doit être rouge.
+  const valides = neige.filter((v) => typeof v === "number" && Number.isFinite(v));
+  if (dates.length === 0 || neige.length !== dates.length || valides.length === 0) {
+    console.log(
+      `Données journalières inexploitables (${dates.length} jours, ` +
+      `${valides.length} valeurs de neige) — aucune alerte.`
+    );
     process.exitCode = 1;
     return;
   }

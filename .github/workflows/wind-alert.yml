@@ -55,12 +55,18 @@ jobs:
           SEUIL_TEST: ${{ inputs.seuil_test || '' }}
         run: node wind-alert.mjs | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # Les donnees QA n'ont de valeur qu'accumulees : on commite a chaque run.
+      # Les donnees QA n'ont de valeur qu'accumulees : on commite a chaque run,
+      # MEME si le script a echoue (always) — sinon une alerte partie avant
+      # l'echec n'est pas memorisee dans alerted.json et repart en doublon.
       - name: Commit des donnees
+        if: always()
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/ alerted.json 2>/dev/null || true
+          # Un par un : un git add avec un chemin absent n'ajoute RIEN.
+          for f in data alerted.json; do
+            if [ -e "$f" ]; then git add "$f"; fi
+          done
           git diff --staged --quiet || git commit -m "data: wind $(date -u +%FT%TZ)"
           # Un push perdu = donnees QA perdues : 3 essais, puis run rouge.
           for i in 1 2 3; do

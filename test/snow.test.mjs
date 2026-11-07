@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,15 +16,23 @@ import { journaliserPrevision, journaliserMesures, lire, rapport } from '../snow
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MOCK = join(RACINE, 'test', 'helpers', 'mock-fetch.mjs');
 
+// cwd = dossier temporaire vide : un script qui écrirait malgré DRY_RUN le
+// ferait là (le test « aucun fichier écrit » le voit), jamais dans le vrai
+// journal du dépôt.
 function lancer(script, mock, env = {}) {
-  const r = spawnSync(process.execPath,
-    ['--import', 'file:///' + MOCK.replace(/\\/g, '/'), script], {
-      cwd: RACINE, encoding: 'utf8',
-      env: { ...process.env, DRY_RUN: 'true', IGNORER_SAISON: 'true',
-        SEUIL_CM: '10', NTFY_TOPIC_NEIGE: '',
-        MOCK_FETCH: typeof mock === 'string' ? mock : JSON.stringify(mock), ...env },
-    });
-  return { code: r.status, out: r.stdout + r.stderr };
+  const dir = mkdtempSync(join(tmpdir(), 'neige-run-'));
+  try {
+    const r = spawnSync(process.execPath,
+      ['--import', 'file:///' + MOCK.replace(/\\/g, '/'), join(RACINE, script)], {
+        cwd: dir, encoding: 'utf8',
+        env: { ...process.env, DRY_RUN: 'true', IGNORER_SAISON: 'true',
+          SEUIL_CM: '10', NTFY_TOPIC_NEIGE: '',
+          MOCK_FETCH: typeof mock === 'string' ? mock : JSON.stringify(mock), ...env },
+      });
+    return { code: r.status, out: r.stdout + r.stderr, fichiers: readdirSync(dir) };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 const jourLocal = (decalage = 0) => new Intl.DateTimeFormat('sv-SE', {
@@ -76,6 +84,14 @@ test('annoncée : unité inattendue -> rouge', () => {
 test('annoncée : réponse vide -> rouge', () => {
   assert.equal(lancer('snow-forecast-alert.mjs', { body: { daily_units: { snowfall_sum: 'cm' }, daily: {} } }).code, 1);
 });
+test('annoncée : snowfall_sum absent -> rouge', () => {
+  const m = prev([0, 5]);
+  delete m.body.daily.snowfall_sum;
+  assert.equal(lancer('snow-forecast-alert.mjs', m).code, 1);
+});
+test('annoncée : snowfall_sum tout à null -> rouge', () => {
+  assert.equal(lancer('snow-forecast-alert.mjs', prev([null, null, null])).code, 1);
+});
 test('annoncée : JSON invalide -> rouge', () => {
   assert.equal(lancer('snow-forecast-alert.mjs', { body: 'pas du json' }).code, 1);
 });
@@ -124,8 +140,12 @@ test('fraîche : 25 cm -> vert, alerte à notifier', () => {
   assert.match(r.out, /À notifier : Neige fraîche/);
 });
 test('DRY_RUN : aucun fichier écrit', () => {
-  const avant = existsSync(join(RACINE, 'data', 'neige.csv'));
-  lancer('snow-fresh-alert.mjs', slf(25));
-  lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]));
-  assert.equal(existsSync(join(RACINE, 'data', 'neige.csv')), avant);
+  assert.deepEqual(lancer('snow-fresh-alert.mjs', slf(25)).fichiers, []);
+  assert.deepEqual(lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0])).fichiers, []);
+});
+test('hors DRY_RUN : le journal est bien écrit (le test ci-dessus prouve donc quelque chose)', () => {
+  const env = { DRY_RUN: 'false', SEUIL_CM: '999', NTFY_TOPIC_NEIGE: 'x' };
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), env);
+  assert.equal(r.code, 0, r.out);
+  assert.deepEqual(r.fichiers, ['data']);
 });

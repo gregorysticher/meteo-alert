@@ -30,7 +30,7 @@ import {
   biaisParEcheance,
 } from './wind-qa.mjs';
 import {
-  local, fenetre, moyenne, choisirReco,
+  local, fenetre, fenetres, moyenne, choisirReco, choisirAlerte, dejaEnvoye,
 } from './wind-select.mjs';
 
 const CONFIG = 'wind/spots.json';
@@ -172,9 +172,22 @@ if (QA_ONLY) {
     (TEST ? '  *** MODE TEST ***' : ''));
 
   const codes = new Set(cfg.spots.map((s) => s.station));
-  const m = await mesures(codes).catch(() => new Map());
+  // Mesures : affichage et QA seulement, le run continue, mais l'echec doit
+  // se voir (run rouge) au lieu d'etre avale.
+  const m = await mesures(codes).catch((err) => {
+    console.error(`ECHEC mesures MeteoSuisse : ${err.message}`);
+    process.exitCode = 1;
+    return new Map();
+  });
   const vus = await lireVus();
   let modifie = false;
+
+  const sansPrevision = cfg.spots.filter((s) => !(parSpot.get(s.key) || []).length);
+  if (sansPrevision.length) {
+    // Un spot sans prevision disparait sinon sans bruit de la selection.
+    console.error(`ECHEC : aucune prevision pour ${sansPrevision.map((s) => s.key).join(', ')}`);
+    process.exitCode = 1;
+  }
 
   const classement = cfg.spots.map((spot) => {
     const lignes = parSpot.get(spot.key) || [];
@@ -196,23 +209,14 @@ if (QA_ONLY) {
   }
 
   for (const [etage, e] of Object.entries(cfg.alertes)) {
-    const seuilEff = cfg.seuil_kn - (e.marge_kn || 0);
     const b = e.correction_biais ? biais : new Map();
 
-    let gagnant = null;
-    for (const c of classement) {
-      const f = fenetre(c.lignes, c.spot, cfg, seuilEff, b, maintenant);
-      if (!f) continue;
-      const lead = f[0].lead;
-      if (lead < e.lead_min_h || lead > e.lead_max_h) continue;
-      gagnant = { c, f, lead };
-      break;
-    }
+    const gagnant = choisirAlerte(classement, cfg, e, b, maintenant);
     if (!gagnant) continue;
 
     const { c, f, lead } = gagnant;
     const id = `${etage}|${c.spot.key}|${f[0].date}`;
-    if (!TEST && vus.ids.includes(id)) {
+    if (!TEST && dejaEnvoye(vus.ids, etage, c.spot.key, f[0].t.iso)) {
       console.log(`\n[${etage}] deja envoye : ${id}`);
       continue;
     }
@@ -232,10 +236,13 @@ if (QA_ONLY) {
       process.exitCode = 1;
       break;
     }
-    await notifier(TOPIC, titre, corps, {
+    const envoye = await notifier(TOPIC, titre, corps, {
       priorite: etage === 'pre' ? 'default' : 'high',
       tags: ['wind', etage, ...(TEST ? ['test'] : [])],
     });
+    // Memorise seulement si l'envoi a reussi (sinon : run rouge via
+    // sortieSiEchecs, et nouvel essai au run suivant).
+    if (!envoye) continue;
     if (TEST) {
       console.log(`[${etage}] TEST : ni anti-spam ni journal QA.`);
       break;                        // une seule notification de test suffit
@@ -253,19 +260,24 @@ if (QA_ONLY) {
     for (const id of vus.ids.filter((i) => i.startsWith('pre|'))) {
       const [, key, debut] = id.split('|');
       const lead = (versDate(debut) - maintenant) / 36e5;
-      if (lead < 9 || lead > 34) continue;
+      const conf = cfg.alertes.conf;
+      if (lead < conf.lead_min_h || lead > conf.lead_max_h) continue;
       const annul = `annul|${key}|${debut}`;
       if (vus.ids.includes(annul)) continue;
-      if (vus.ids.includes(`conf|${key}|${debut}`)) continue;
+      if (dejaEnvoye(vus.ids, 'conf', key, local(versDate(debut)).iso)) continue;
       const c = classement.find((x) => x.spot.key === key);
       if (!c) continue;
-      const f = fenetre(c.lignes, c.spot, cfg, cfg.seuil_kn, biais, maintenant);
-      if (f && f[0].date === debut) continue;
+      // Tient encore = une fenetre au seuil plein le MEME jour sur ce spot
+      // (elle peut avoir glisse d'une heure ou deux sans etre annulee).
       const t = local(versDate(debut));
-      await notifier(TOPIC, `Annule — ${c.court} ${t.label}`,
+      const tient = fenetres(c.lignes, c.spot, cfg, cfg.seuil_kn, biais, maintenant)
+        .some((w) => w[0].t.iso === t.iso);
+      if (tient) continue;
+      const envoye = await notifier(TOPIC, `Annule — ${c.court} ${t.label}`,
         `La fenetre annoncee a ${c.court} ne tient plus.\n` +
         `Pic revu a ${c.pic} kn. Inutile de bloquer le creneau.`,
         { priorite: 'default', tags: ['wind', 'annul'] });
+      if (!envoye) continue;
       vus.ids.push(annul);
       modifie = true;
     }
