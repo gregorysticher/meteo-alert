@@ -1,7 +1,53 @@
 # Transmission — Weather station (TRMNL + meteo-alert)
 
 État au **07/11/2026**. À lire en premier dans toute nouvelle session, avec
-[`TODO.md`](TODO.md).
+[`TODO.md`](TODO.md). Démarrage de la session : §0.
+
+---
+
+## 0. Démarrer la session — Claude Code, pilotable depuis le téléphone
+
+Le projet se poursuit dans **Claude Code**, sur le PC de Greg, en session
+**Remote Control** : elle tourne en local (dépôts, Node, Chrome connecté à
+TRMNL) et se pilote depuis l'app Claude du téléphone (onglet **Code**) ou
+claude.ai/code. Une session cloud (claude.ai/code seul) ne conviendrait pas :
+elle n'a pas accès au Chrome de Greg, donc pas à l'interface TRMNL.
+
+### Une fois
+
+1. Cloner les deux dépôts côte à côte, par exemple dans `C:\dev\weather-station\` :
+   ```powershell
+   git clone https://github.com/gregorysticher/meteo-alert.git
+   git clone https://github.com/gregorysticher/trmnl-markup.git   # privé, lecture seule
+   ```
+2. Installer GitHub CLI et `gh auth login` : remplace le connecteur GitHub pour
+   les Actions (`gh run list`, `gh run view --log`, `gh workflow run`).
+3. Se connecter à Claude Code avec le **compte claude.ai** (`/login`), pas une clé
+   API : Remote Control et l'intégration Chrome l'exigent.
+4. Chrome ouvert, extension **Claude in Chrome** installée et connectée, session
+   TRMNL ouverte.
+
+### À chaque démarrage
+
+```powershell
+cd C:\dev\weather-station\meteo-alert
+claude --chrome --remote-control --add-dir ..\trmnl-markup
+```
+
+(ou `claude --chrome`, puis `/remote-control` dans la session ; `/remote-control`
+réaffiche l'URL et un QR code pour le téléphone.) Sur le téléphone : app Claude
+→ **Code** → choisir la session.
+
+### Contraintes
+
+- La session n'existe que tant que le PC est allumé et que le processus `claude`
+  tourne : fermer le terminal la met hors ligne. Si le PC se met en veille, elle
+  se reconnecte au réveil, mais reste injoignable entre-temps (le réveil à
+  distance du PC n'est pas encore en place).
+- Chrome doit rester ouvert pour tout ce qui touche TRMNL.
+- Commandes réservées au terminal (`/plugin`, `/resume`…) : pas depuis l'app.
+- Pas de mémoire claude.ai dans Claude Code : `CLAUDE.md`, ce fichier et
+  `TODO.md` font foi.
 
 ---
 
@@ -184,6 +230,8 @@ Voir [`TODO.md`](TODO.md).
 
 ### Accès
 
-- GitHub : connecteur GitHub (lecture, commits, Actions). Les secrets ne sont
-  ni lisibles ni modifiables par l'API.
-- TRMNL : via le navigateur de Greg (session connectée), Claude in Chrome.
+- GitHub : clones locaux + `gh` (commits, Actions). Les secrets du dépôt ne
+  sont ni lisibles ni modifiables : ce qui en dépend revient à Greg.
+- TRMNL : via le Chrome de Greg (session connectée), `claude --chrome`.
+- Mise en page, TRMNL ou captures : montrer les rendus dans la session, Greg
+  peut les regarder depuis le téléphone.
