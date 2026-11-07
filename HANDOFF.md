@@ -1,6 +1,6 @@
 # Transmission — Weather station (TRMNL + meteo-alert)
 
-État au **2026-11-07**. À lire en premier dans toute nouvelle session, avec
+État au **2026-11-07** (fin de séance). À lire en premier dans toute nouvelle session, avec
 [`TODO.md`](TODO.md). **Nouvelle session : commencer par le §0.**
 
 ---
@@ -98,10 +98,13 @@ l'envoi a réussi).
 
 | Workflow | Cron (UTC) | Ce qu'il fait |
 |---|---|---|
-| `wind-alert.yml` | `15 */2 * * *` — livré ~3-4×/jour | Prévisions MétéoSuisse 8 spots, alertes 3 étages, QA, webhook TRMNL. Tourne hors saison (QA + webhook), n'alerte que du 15/04 au 15/10 |
+| `wind-alert.yml` | `17 1,5,9,13,17,21 * * *` (depuis le 2026-11-07, à suivre) | Prévisions MétéoSuisse 8 spots, alertes 3 étages, QA, webhook TRMNL. Tourne hors saison (QA + webhook), n'alerte que du 15/04 au 15/10 |
 | `snow-forecast-alert.yml` | `23 4,15 * * *` | Open-Meteo `meteoswiss_icon_seamless` 5 j, cumul par épisode ≥ `vars.SEUIL_NEIGE_CM` (10) |
-| `snow-fresh-alert.yml` | `47 5,16 * * *` | SLF IMIS ILI2 (HN_1D) ≥ `vars.SEUIL_NEIGE_FRAICHE_CM` (10) |
+| `snow-fresh-alert.yml` | `47 5,16 * * *` | SLF IMIS ILI2 (HN_1D) ≥ `vars.SEUIL_NEIGE_FRAICHE_CM` (10) ; journal et rapport prévision/mesure (`data/neige.csv`) |
 | `probe-windlive.yml` | manuel | Sonde de découverte WindLive (lecture seule) |
+
+Tous les workflows jouent leurs tests (`test/`) avant le script ; un échec
+(test, API, push) rend le run rouge. Lire le **log**, pas seulement le statut.
 
 Runs manuels : `dry_run` vaut vrai par défaut. `wind-alert` accepte aussi
 `seuil_test` (envoi marqué `[TEST]`, sans toucher anti-spam ni QA).
@@ -172,8 +175,13 @@ apparaît à l'écran : « Reposoir · Dim 10–14 h » (« Auj. » si aujourd'h
   dernier créneau horaire, `ok` = tient le seuil. `reco` nul hors saison.
 - Markup : lit `W.reco`, `label--filled` si `ok`, actif tant que
   `now_s < W.reco.fin` (plus de fenêtre « passée » le vendredi soir).
-- Tests : `test/reco.test.mjs` (4 cas + biais + hors saison), joués par
-  `wind-alert.yml` avant chaque run. Webhook TRMNL refusé → run rouge.
+- « Tenir » = la **prochaine** fenêtre (une fenêtre commencée compte sur
+  toute sa longueur jusqu'à sa fin) dans `horizon_jours`. Alertes :
+  `choisirAlerte()` par étage, sur la partie à venir ; anti-spam par étage
+  et par jour (`dejaEnvoye()`), un jour déjà alerté est sauté.
+- Tests : `test/reco.test.mjs` (config figée, règle, étages, constats QA,
+  cohérence de `spots.json`), joués par `wind-alert.yml` avant chaque run.
+  Webhook TRMNL refusé → run rouge.
 - Pas encore vu sur un vrai payload : contrôle à l'ouverture de saison.
 
 ### Sonde WindLive (04/10/2026)

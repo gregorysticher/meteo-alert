@@ -211,7 +211,9 @@ if (QA_ONLY) {
   for (const [etage, e] of Object.entries(cfg.alertes)) {
     const b = e.correction_biais ? biais : new Map();
 
-    const gagnant = choisirAlerte(classement, cfg, e, b, maintenant);
+    // Un jour deja alerte a cet etage est saute (en TEST, rien n'est saute).
+    const gagnant = choisirAlerte(classement, cfg, e, b, maintenant,
+      (iso) => !TEST && dejaEnvoye(vus.ids, etage, null, iso));
     if (!gagnant) continue;
 
     const { c, f, lead } = gagnant;
@@ -240,13 +242,13 @@ if (QA_ONLY) {
       priorite: etage === 'pre' ? 'default' : 'high',
       tags: ['wind', etage, ...(TEST ? ['test'] : [])],
     });
+    if (TEST) {
+      console.log(`[${etage}] TEST : ni anti-spam ni journal QA.`);
+      break;                        // une seule notification de test, envoyee ou non
+    }
     // Memorise seulement si l'envoi a reussi (sinon : run rouge via
     // sortieSiEchecs, et nouvel essai au run suivant).
     if (!envoye) continue;
-    if (TEST) {
-      console.log(`[${etage}] TEST : ni anti-spam ni journal QA.`);
-      break;                        // une seule notification de test suffit
-    }
     vus.ids.push(id);
     modifie = true;
     await journaliserAlerte({

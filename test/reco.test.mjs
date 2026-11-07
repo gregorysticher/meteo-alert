@@ -180,9 +180,21 @@ test('A. fenetre en cours (sam 11:30, Reposoir 10-14) -> toujours affichee', () 
     { maintenant: new Date('2027-05-15T09:30:00Z') });       // 11:30 locale
   assert.equal(r.n, 'Reposoir');
   assert.equal(r.ok, true);
-  assert.equal(r.de, '11:00');              // heure en cours incluse, 10-11 finie
+  assert.equal(r.de, '10:00');              // fenetre entiere, debut reel
   assert.equal(r.fin, Date.parse('2027-05-15T12:00:00Z') / 1000);
   assert.equal(r.kn, 15);
+});
+
+test('A2. fenetre en cours, moins de min_heures restantes (sam 12:10) -> toujours elle, inversee', () => {
+  const r = reco({ reposoir: [{ jour: SAM, de: 10, a: 14, kn: 15 }] },
+    { maintenant: new Date('2027-05-15T10:10:00Z') });       // 12:10 locale
+  assert.equal(r.n, 'Reposoir');
+  assert.equal(r.ok, true);
+  assert.equal(r.de, '10:00');
+  // et une fois finie (14:05), elle n'est plus proposee
+  const apres = reco({ reposoir: [{ jour: SAM, de: 10, a: 14, kn: 15 }] },
+    { maintenant: new Date('2027-05-15T12:05:00Z') });
+  assert.notEqual(apres?.ok && apres.j === SAM && apres.de === '10:00', true);
 });
 
 test('B. la PROCHAINE fenetre, pas la plus longue', () => {
@@ -215,7 +227,7 @@ test('C2. alerte jour : run en retard dans une fenetre commencee', () => {
   const cl = classer({ reposoir: [{ jour: SAM, de: 9, a: 18, kn: 13 }] }, { maintenant });
   const g = choisirAlerte(cl, CFG, CFG.alertes.jour, new Map(), maintenant);
   assert.equal(g.c.spot.key, 'reposoir');
-  assert.equal(g.f[0].t.court, '10:00');     // heure en cours incluse
+  assert.equal(g.f[0].t.court, '09:00');     // fenetre entiere : id stable
   assert.ok(g.lead > 0.5 && g.lead < 1);     // partie a venir : 11:00
   // deja alerte a 08:20 avec un debut a 09:00 : meme jour -> pas de rappel
   assert.equal(dejaEnvoye(['jour|reposoir|202705150700'], 'jour', 'reposoir', SAM), true);
@@ -226,6 +238,22 @@ test('C2. alerte jour : run en retard dans une fenetre commencee', () => {
   const tard = new Date('2027-05-15T14:20:00Z');
   const cl2 = classer({ reposoir: [{ jour: SAM, de: 9, a: 18, kn: 13 }] }, { maintenant: tard });
   assert.equal(choisirAlerte(cl2, CFG, CFG.alertes.jour, new Map(), tard), null);
+});
+
+test('P2. pre-alerte deja partie pour mardi -> celle du samedi suivant part quand meme', () => {
+  const maintenant = new Date('2027-05-16T08:00:00Z');       // dim 10:00
+  const cl = classer({ reposoir: [
+    { jour: '2027-05-18', de: 8, a: 12, kn: 13 },           // mardi, lead ~46 h
+    { jour: '2027-05-22', de: 10, a: 14, kn: 13 },          // samedi, lead ~144 h
+  ] }, { maintenant });
+  const ids = ['pre|reposoir|202705180600'];               // mardi 08:00 locale
+  const deja = (iso) => dejaEnvoye(ids, 'pre', null, iso);
+  const p = choisirAlerte(cl, CFG, CFG.alertes.pre, new Map(), maintenant, deja);
+  assert.equal(p.f[0].t.iso, '2027-05-22');
+  // un autre spot ne recoit pas de pre-alerte pour un jour deja annonce
+  assert.equal(dejaEnvoye(ids, 'pre', null, '2027-05-18'), true);
+  // ids sans date (annulation, ancien format) ignores sans erreur
+  assert.equal(dejaEnvoye(['annul|x', 'pre||', 'x'], 'pre', null, '2027-05-18'), false);
 });
 
 test('D. horizon_jours respecte : rien au-dela de 7 j', () => {

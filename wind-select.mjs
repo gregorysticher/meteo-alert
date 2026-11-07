@@ -57,19 +57,23 @@ export const secteurOk = (deg, secteurs) =>
 export const moyenne = (f, champ = 'kn') =>
   f.reduce((a, b) => a + b[champ], 0) / f.length;
 
-// Heures exploitables : pas encore FINIES (l'heure en cours compte : une
-// fenetre 10-14 h tient toujours a 11:30), dans l'horizon, en saison, dans un
-// creneau, bon secteur. Le seuil n'est PAS ici : fenetres() l'ajoute,
-// meilleure() s'en passe. Chaque ligne = heure qui commence a sa date.
-function heures(lignes, spot, cfg, biais, maintenant) {
+// Heures exploitables : dans l'horizon, en saison, dans un creneau, bon
+// secteur. Le seuil n'est PAS ici : fenetres() l'ajoute, meilleure() s'en
+// passe. Chaque ligne = heure qui commence a sa date.
+// passe = true : garde aussi les heures ecoulees des dernieres 24 h, pour
+// reconnaitre une fenetre DEJA COMMENCEE sur toute sa longueur (samedi 12:10,
+// une fenetre 10-14 h tient toujours, meme s'il ne reste que 2 h).
+// passe = false : seulement les heures pas encore finies (lead > -1).
+function heures(lignes, spot, cfg, biais, maintenant, passe = false) {
   const horizonH = (cfg.horizon_jours ?? 7) * 24;
+  const leadMin = passe ? -24 : -1;
   return lignes.map((l) => {
     const d = versDate(l.date);
     const lead = (d - maintenant) / 36e5;
     const t = local(d);
     const creneau = cfg.creneaux[String(t.jour)];
     const ok =
-      lead > -1 && lead <= horizonH &&
+      lead > leadMin && lead <= horizonH &&
       dansSaison(d, cfg.saison) &&
       !!creneau &&
       t.heure >= creneau[0] && t.heure < creneau[1] &&
@@ -94,11 +98,12 @@ function suites(hs, garde) {
 }
 
 // Toutes les fenetres qui tiennent (suites >= min_heures au-dessus du
-// seuil), dans l'ordre chronologique.
+// seuil) et ne sont pas FINIES, dans l'ordre chronologique. Une fenetre en
+// cours est rendue entiere, heures ecoulees comprises (debut reel).
 export function fenetres(lignes, spot, cfg, seuilEff, biais, maintenant) {
-  return suites(heures(lignes, spot, cfg, biais, maintenant),
+  return suites(heures(lignes, spot, cfg, biais, maintenant, true),
     (h) => h.ok && h.corrige >= seuilEff)
-    .filter((r) => r.length >= cfg.min_heures);
+    .filter((r) => r.length >= cfg.min_heures && r.at(-1).lead > -1);
 }
 
 // La PROCHAINE fenetre qui tient (en cours ou a venir), pas la plus longue :
@@ -108,7 +113,8 @@ export function fenetre(lignes, spot, cfg, seuilEff, biais, maintenant) {
 }
 
 // Niveau 3 : meilleure moyenne corrigee sur min_heures consecutives
-// exploitables, sans condition de seuil. Memes filtres que fenetre().
+// exploitables, sans condition de seuil. Memes filtres que fenetre(), mais
+// sur les heures pas encore finies seulement (passe = false).
 export function meilleure(lignes, spot, cfg, biais, maintenant) {
   const n = cfg.min_heures;
   let best = null;
@@ -159,30 +165,35 @@ export function choisirReco(classement, cfg, biais, maintenant) {
 // la tranche — pas seulement la prochaine : une fenetre demain ne doit pas
 // masquer celle de dimanche pour la pre-alerte, ni l'inverse pour la
 // confirmation. Fenetre deja commencee (run en retard) : jugee sur sa partie
-// A VENIR, qui doit encore faire min_heures ; f garde le debut reel, donc
-// l'id d'anti-spam reste stable d'un run a l'autre.
+// A VENIR, qui doit encore faire min_heures ; f garde le debut reel.
+// dejaJour(iso) : vrai si cet etage a deja alerte pour ce jour (tous spots
+// confondus) — la fenetre est alors sautee et la recherche continue, pour
+// qu'une pre-alerte deja partie pour mardi n'empeche pas celle de samedi.
 // biais : celui de l'etage (Map vide si correction_biais est faux).
-export function choisirAlerte(classement, cfg, e, biais, maintenant) {
+export function choisirAlerte(classement, cfg, e, biais, maintenant, dejaJour = () => false) {
   const seuilEff = cfg.seuil_kn - (e.marge_kn || 0);
   const aVenir = (w) => w.filter((h) => h.lead > 0);
   for (const c of classement) {
     const f = fenetres(c.lignes, c.spot, cfg, seuilEff, biais, maintenant).find((w) => {
       const v = aVenir(w);
       return v.length >= cfg.min_heures &&
-        v[0].lead >= e.lead_min_h && v[0].lead <= e.lead_max_h;
+        v[0].lead >= e.lead_min_h && v[0].lead <= e.lead_max_h &&
+        !dejaJour(w[0].t.iso);
     });
     if (f) return { c, f, lead: aVenir(f)[0].lead };
   }
   return null;
 }
 
-// Anti-spam : une alerte par etage, par spot et par JOUR local. Le debut de
-// fenetre glisse d'un run a l'autre (heure ecoulee, prevision revue) : un id
-// compare a la minute pres renverrait « Aujourd'hui » a chaque run.
+// Anti-spam : une alerte par etage et par JOUR local (key = null : tous
+// spots confondus ; key donne : ce spot seulement). Le debut de fenetre
+// glisse d'un run a l'autre (heure ecoulee, prevision revue) : un id compare
+// a la minute pres renverrait « Aujourd'hui » a chaque run.
 // ids : entrees « etage|spot|AAAAMMJJHHMM » (UTC) d'alerted.json.
 export function dejaEnvoye(ids, etage, key, iso) {
   return ids.some((i) => {
     const [e, k, debut] = i.split('|');
-    return e === etage && k === key && debut && local(versDate(debut)).iso === iso;
+    return e === etage && (key === null || k === key) && /^\d{12}$/.test(debut ?? '') &&
+      local(versDate(debut)).iso === iso;
   });
 }

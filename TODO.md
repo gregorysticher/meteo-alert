@@ -19,6 +19,14 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
       Échéance : avant le 2027-04-15.
+- [ ] **Valider le design spec** [`docs/spec-2026-11-07.md`](docs/spec-2026-11-07.md)
+      (partie A à relire, décisions B3 à B7), éventuellement avec la
+      session Cowork.
+- [ ] **Retirer le plugin TRMNL « Wind Forecast »** (392131) : *Remove
+      plugin* sur trmnl.com/plugin_settings/392131/edit. Refusé à Claude par
+      le classifieur de sécurité. Spec B1.
+- [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
+      reproduit le 2026-11-07). Spec B2.
 - [ ] **WindLive** : leur `robots.txt` interdit `/api/`. Décider si on leur
       demande l'autorisation (balises lacustres du Petit-Lac, seule correction
       possible de l'angle mort Reposoir/Vengeron) ou si on abandonne.
@@ -31,31 +39,41 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 - [ ] Contrôler le premier vrai `W.reco` à l'écran à l'ouverture de la
       saison (2027-04-15) : jour, heures, inversion.
+- [ ] 2026-11-14 : compter les runs `wind-alert` livrés par jour sur les 6
+      créneaux fixes. En dessous de 4, revoir (spec B3).
+- [ ] Selon la décision B5 : archiver AROME HD en second avis (QA seule).
 
 ### Dette technique
 
-- [ ] `wind-alert.yml` : remplacer `15 */2 * * *` par des heures fixes
-      (convention ; ~3-4 runs livrés par jour sur 12 attendus).
-- [ ] Passer `actions/checkout` et `actions/setup-node` en v5 (avertissement
-      de dépréciation Node 20 sur tous les workflows).
-- [ ] Retirer le plugin TRMNL « Wind Forecast » (392131), obsolète et en erreur.
-- [ ] Runs planifiés GitHub livrés avec 6 à 7 h de retard (07/11 : cron
-      4h23 UTC parti à 11h09) — l'alerte neige du matin arrive vers midi.
-      Pistes : déclenchement externe (`workflow_dispatch` via API), autre
-      ordonnanceur. Non prioritaire.
-- [ ] Second écran vide : cause non identifiée côté serveur.
+- [ ] Retard de 6 à 7 h des runs planifiés GitHub : l'alerte neige du matin
+      arrive vers midi. Proposition : déclencheur externe (spec B3).
+      Non prioritaire.
 
 ### Améliorations
 
-- [ ] AROME 1,3 km (`meteofrance_arome_france_hd`) en second avis vent, la
-      boucle QA arbitrant par spot.
-- [ ] Gradient air-eau dans le score (calculé, pas utilisé).
-- [ ] Neige : suivre l'écart prévision / mesure (07/11 : ~0 cm prévu, 8,6 cm
-      mesurés) et l'écart cumul d'épisode (alerte) / chute du jour (écran).
+- [ ] AROME 1,3 km en second avis vent : sonde faite (horizon ~48 h),
+      plan en 3 étapes dans le spec B5, en attente de décision.
+- [ ] Gradient air-eau : en réalité **pas calculé** (seule la température de
+      l'eau est affichée). Usage à décider (spec B6).
+- [ ] Neige : le journal prévision/mesure tourne (`data/neige.csv`).
+      Trancher l'alignement après 3 ou 4 épisodes ; cumul d'épisode à
+      l'écran et anti-spam du cumul à décider (spec B4).
 
 ---
 
 ## Fait récemment
+
+- [x] 2026-11-07 — Revue QA indépendante + contre-vérification : 14 puis 6
+      constats ; importants tous corrigés et testés (37 tests), mineurs au
+      spec B7. Détail :
+      (fenêtre en cours, prochaine fenêtre, horizon, anti-spam par jour,
+      notifier() en échec, commit always, échecs MétéoSuisse visibles).
+- [x] 2026-11-07 — Un échec rend enfin le run rouge : `pipefail` sur
+      wind-alert (le `| tee` masquait tout), alerte neige fraîche rouge si la
+      source est muette, pushes avec 3 essais puis rouge.
+- [x] 2026-11-07 — Actions checkout et setup-node en v7 ; `wind-alert` sur
+      6 créneaux fixes.
+- [x] 2026-11-07 — Journal neige prévision/mesure (`snow-qa.mjs`).
 
 - [x] 2026-11-07 — Affichage vent à 3 niveaux : `choisirReco()` côté
       producteur (`wind-select.mjs`), payload `reco` + `j` + `kn` corrigé,
