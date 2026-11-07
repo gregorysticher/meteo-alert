@@ -29,10 +29,10 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ### Avant le 15/04/2027 — prioritaire
 
-- [ ] **Affichage vent à 3 niveaux** (règle du 24/09, voir HANDOFF §4) :
-      producteur `wind-alert.mjs` (`j`, `reco`, `kn` corrigé, `fin`), puis bloc
-      vent du markup. Tester en DRY_RUN et sur l'aperçu TRMNL avant la saison.
-- [ ] Supprimer la branche obsolète `payload-jour-fenetre`.
+- [ ] Contrôler le premier vrai `W.reco` à l'écran à l'ouverture de la
+      saison (2027-04-15) : jour, heures, inversion.
+- [ ] Supprimer la branche obsolète `payload-jour-fenetre` (aucun commit
+      propre ; suppression du 07/11 bloquée par le classifieur auto mode).
 
 ### Dette technique
 
@@ -58,6 +58,14 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 ---
 
 ## Fait récemment
+
+- [x] 2026-11-07 — Affichage vent à 3 niveaux : `choisirReco()` côté
+      producteur (`wind-select.mjs`), payload `reco` + `j` + `kn` corrigé,
+      markup TRMNL lisant `W.reco` (commit `trmnl-sync` `b8e95bb`). Testé sur
+      4 cas simulés (`test/reco.test.mjs`, joués par le workflow) et sur
+      l'aperçu TRMNL saison forcée.
+- [x] 2026-11-07 — Premier run planifié neige après correctif vérifié dans le
+      log (« Prévisions journalières », 5 jours de données).
 
 - [x] 07/11/2026 — Alerte neige annoncée réparée (modèle
       `meteoswiss_icon_seamless`, aveugle depuis le 15/10) ; tout refus d'API

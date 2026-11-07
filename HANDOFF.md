@@ -1,6 +1,6 @@
 # Transmission — Weather station (TRMNL + meteo-alert)
 
-État au **07/11/2026**. À lire en premier dans toute nouvelle session, avec
+État au **2026-11-07**. À lire en premier dans toute nouvelle session, avec
 [`TODO.md`](TODO.md). **Nouvelle session : commencer par le §0.**
 
 ---
@@ -153,33 +153,30 @@ point, à suivre.
 - Historique réel : 10/10/2026 Préverenges — pré-alerte, annulation, puis
   « Aujourd'hui » sur une fenêtre de 13 h.
 
-### Règle d'affichage validée le 24/09/2026 — **non implémentée**
+### Règle d'affichage validée le 24/09/2026 — implémentée le 07/11/2026
 
-1. Le Reposoir tient le seuil → lui, **inversé**.
+1. Le Reposoir (`spot_prioritaire`) tient le seuil → lui, **inversé**.
 2. Sinon, premier spot par distance qui tient → lui, **inversé**.
 3. Aucun ne tient → celui qui a la meilleure moyenne sur `min_heures` dans les
    créneaux, **affichage normal, sans avertissement**.
 
-Un mardi qui tient passe devant un week-end mort (les créneaux le permettent
-déjà). Le **jour** de la fenêtre doit apparaître à l'écran.
+Un mardi qui tient passe devant un week-end mort. Le **jour** de la fenêtre
+apparaît à l'écran : « Reposoir · Dim 10–14 h » (« Auj. » si aujourd'hui).
 
-**Défaut actuel** : `versTrmnl` n'envoie que `de`/`a` (heures, sans date) et
-`kn` brut (non corrigé du biais, alors que l'éligibilité l'est). Le markup
-compare l'heure de fin à l'heure courante : un vendredi à 19 h, la fenêtre du
-samedi 9 h est déclarée « passée » et l'écran retombe sur « Reposoir mesuré ».
+**Mise en œuvre** :
+- `wind-select.mjs` (fonctions pures) : `local()` expose `iso` ;
+  `fenetre()` ; `meilleure()` (niveau 3, mêmes filtres sans seuil) ;
+  `choisirReco()`.
+- Payload : `j` et `kn` corrigé du biais par spot ; objet `reco` racine
+  `{ n, min, j, de, a, fin, kn, raf, ok }`, `fin` = epoch UTC (s) de fin du
+  dernier créneau horaire, `ok` = tient le seuil. `reco` nul hors saison.
+- Markup : lit `W.reco`, `label--filled` si `ok`, actif tant que
+  `now_s < W.reco.fin` (plus de fenêtre « passée » le vendredi soir).
+- Tests : `test/reco.test.mjs` (4 cas + biais + hors saison), joués par
+  `wind-alert.yml` avant chaque run. Webhook TRMNL refusé → run rouge.
+- Pas encore vu sur un vrai payload : contrôle à l'ouverture de saison.
 
-**Conception prévue** (préparée le 24/09, jamais poussée) :
-- `local()` expose `iso` (date locale AAAA-MM-JJ).
-- Payload : `j` par spot ; objet `reco` au niveau racine
-  `{ n, min, j, de, a, fin, kn, raf, ok }` — `fin` = epoch UTC (s) de fin du
-  dernier créneau horaire, `ok` = tient le seuil. `kn` corrigé du biais.
-- `choisirReco()` côté producteur (logique en un seul endroit) ; `meilleure()`
-  pour le niveau 3, mêmes filtres que `fenetre()` sans condition de seuil.
-- Markup : lit `W.reco`, `label--filled` si `ok`, jour via `frd[j|date:"%w"]`
-  (« Auj. » si aujourd'hui), actif tant que `now_s < W.reco.fin`.
-- Rétrocompatible : l'ancien markup ignore `reco`.
-
-La branche `payload-jour-fenetre` part d'un ancien `main` : obsolète, à supprimer.
+La branche `payload-jour-fenetre` (aucun commit propre) reste à supprimer.
 
 ### Sonde WindLive (04/10/2026)
 
@@ -224,6 +221,10 @@ Voir [`TODO.md`](TODO.md).
    unique, puis `v.dispatch({changes:{from:0,to:v.state.doc.length,insert:s}})`.
 3. L'aperçu se met à jour en direct : le contrôler (`DEBUG_PERIME = true`
    force les badges ; **remettre à `false`** avant d'enregistrer).
+   Données simulées : ajouter après `assign W = …` une ligne
+   `{%- assign W = '<json>' | parse_json -%}` (filtre TRMNL, fonctionne) et
+   `{%- assign saison = "vent" -%}` après le calcul de saison ; les retirer et
+   contrôler le texte (hash) avant d'enregistrer.
 4. « Save Changes », puis vérifier le commit `trmnl-sync[bot]` dans
    `trmnl-markup`.
 
