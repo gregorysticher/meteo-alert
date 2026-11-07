@@ -35,6 +35,11 @@ jobs:
         with:
           node-version: "22"
 
+      # Regle d'affichage TRMNL (choisirReco) sur donnees simulees : hors
+      # saison, aucun run reel ne l'exerce. Un test en echec bloque le run.
+      - name: Tests
+        run: node --test test/*.test.mjs
+
       - name: Previsions, alertes et QA
         env:
           NTFY_TOPIC_VENT: ${{ secrets.NTFY_TOPIC_VENT }}

@@ -1,18 +1,24 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : **07/11/2026**. Contexte complet : [`HANDOFF.md`](HANDOFF.md).
+Dernière mise à jour : 2026-11-07
+Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
-À lire au début de chaque session ; à tenir à jour via le connecteur GitHub.
+À lire au début de chaque session, à mettre à jour à chaque fin de séance
+(Claude Code, clone local). Le briefing quotidien le lit.
 
 ---
 
-## À faire ou décider par Greg
+## À faire par Greg
+
+Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 - [ ] **Signaler fausses alertes et manques** (vent au printemps, neige cet
       hiver) — seule matière pour calibrer seuils, secteurs et ratio de rafales.
 - [ ] **Valider le format d'alerte vent** sur une vraie journée ventée (rendu
-      ntfy, lien Maps) — je ne vois pas ton téléphone.
+      ntfy, lien Maps) — je ne vois pas ton téléphone. Échéance : première
+      alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
+      Échéance : avant le 2027-04-15.
 - [ ] **WindLive** : leur `robots.txt` interdit `/api/`. Décider si on leur
       demande l'autorisation (balises lacustres du Petit-Lac, seule correction
       possible de l'angle mort Reposoir/Vengeron) ou si on abandonne.
@@ -35,6 +41,10 @@ Dernière mise à jour : **07/11/2026**. Contexte complet : [`HANDOFF.md`](HANDO
 - [ ] Passer `actions/checkout` et `actions/setup-node` en v5 (avertissement
       de dépréciation Node 20 sur tous les workflows).
 - [ ] Retirer le plugin TRMNL « Wind Forecast » (392131), obsolète et en erreur.
+- [ ] Runs planifiés GitHub livrés avec 6 à 7 h de retard (07/11 : cron
+      4h23 UTC parti à 11h09) — l'alerte neige du matin arrive vers midi.
+      Pistes : déclenchement externe (`workflow_dispatch` via API), autre
+      ordonnanceur. Non prioritaire.
 - [ ] Second écran vide : cause non identifiée côté serveur.
 
 ### Améliorations

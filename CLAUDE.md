@@ -2,7 +2,17 @@
 
 Avant toute action, lis `HANDOFF.md` (état, architecture, conventions) puis
 `TODO.md` (priorités). Si la mise en route du §0 de `HANDOFF.md` n'est pas
-faite, fais-la d'abord. Tiens `TODO.md` à jour en fin de session.
+faite, fais-la d'abord.
+
+## TODO.md (à tenir à jour à chaque fin de séance)
+
+- `TODO.md` à la racine, ligne « Dernière mise à jour : AAAA-MM-JJ » en tête.
+- Section « À faire par Greg » : cases à cocher, uniquement ce que Greg seul
+  peut faire ou décider, avec l'échéance quand elle est connue.
+- Mis à jour, commité et poussé à chaque fin de séance : le briefing
+  quotidien le lit.
+
+## Conventions
 
 - Session Remote Control : Greg suit souvent depuis son téléphone. Réponses
   courtes, une question à la fois, rendus montrés en image.

@@ -27,8 +27,11 @@ import { previsions, mesures, tempLac } from './wind-sources.mjs';
 import {
   archiver, apparier, rapport, versDate, versCle,
   journaliserMesures, journaliserAlerte, evaluerAlertes, rapportAlertes,
-  biaisParEcheance, correction,
+  biaisParEcheance,
 } from './wind-qa.mjs';
+import {
+  local, fenetre, moyenne, choisirReco,
+} from './wind-select.mjs';
 
 const CONFIG = 'wind/spots.json';
 const VUS = 'alerted.json';
@@ -38,77 +41,6 @@ const SEUIL_TEST = parseFloat(process.env.SEUIL_TEST || '');
 const TEST = Number.isFinite(SEUIL_TEST);
 const TOPIC = process.env.NTFY_TOPIC_VENT;
 const TRMNL = process.env.TRMNL_WEBHOOK_URL;
-const TZ = 'Europe/Zurich';
-
-// ---- temps ---------------------------------------------------------------
-
-function local(d) {
-  const p = new Intl.DateTimeFormat('fr-CH', {
-    timeZone: TZ, weekday: 'short', hour: '2-digit', minute: '2-digit',
-    day: '2-digit', month: '2-digit', hour12: false,
-  }).formatToParts(d);
-  const v = (t) => p.find((x) => x.type === t).value;
-  const jours = { dim: 0, lun: 1, mar: 2, mer: 3, jeu: 4, ven: 5, sam: 6 };
-  const cle = v('weekday').replace('.', '').slice(0, 3).toLowerCase();
-  // jourLabel : date seule, pour les titres. Ne jamais la tronquer a la main —
-  // "sam. 26.09" fait 10 caracteres, un slice(0,9) coupait le mois.
-  const jourLabel = `${v('weekday')} ${v('day')}.${v('month')}`;
-  const court = `${v('hour')}:${v('minute')}`;
-  return {
-    heure: +v('hour'),
-    jour: jours[cle],
-    jourLabel,
-    label: `${jourLabel} ${court}`,
-    court,
-  };
-}
-
-function dansSaison(d, saison) {
-  const p = new Intl.DateTimeFormat('fr-CH', {
-    timeZone: TZ, day: '2-digit', month: '2-digit',
-  }).formatToParts(d);
-  const v = (t) => +p.find((x) => x.type === t).value;
-  const mmjj = v('month') * 100 + v('day');
-  return mmjj >= saison.debut && mmjj <= saison.fin;
-}
-
-// ---- selection ------------------------------------------------------------
-
-const secteurOk = (deg, secteurs) =>
-  !secteurs.length || deg === null
-    ? !secteurs.length
-    : secteurs.some(([a, b]) => deg >= a && deg <= b);
-
-function fenetre(lignes, spot, cfg, seuilEff, biais, maintenant) {
-  let best = null;
-  let run = [];
-  for (const l of lignes) {
-    const d = versDate(l.date);
-    const lead = (d - maintenant) / 36e5;
-    const t = local(d);
-    const creneau = cfg.creneaux[String(t.jour)];
-    const kn = l.kn + correction(biais, lead);
-    const ok =
-      lead > 0 &&
-      dansSaison(d, cfg.saison) &&
-      creneau &&
-      t.heure >= creneau[0] && t.heure < creneau[1] &&
-      kn >= seuilEff &&
-      secteurOk(l.dir, spot.secteurs);
-    if (ok) {
-      run.push({ ...l, t, d, lead, corrige: kn });
-      if (run.length >= cfg.min_heures && (!best || run.length > best.length)) {
-        best = [...run];
-      }
-    } else {
-      run = [];
-    }
-  }
-  return best;
-}
-
-const moyenne = (f, champ = 'kn') =>
-  f.reduce((a, b) => a + b[champ], 0) / f.length;
 
 // ---- message --------------------------------------------------------------
 
@@ -166,28 +98,38 @@ function message(etage, spot, f, cfg, eau, autres) {
 
 // ---- sortie TRMNL ---------------------------------------------------------
 
-async function versTrmnl(classement, cfg, emission) {
+async function versTrmnl(classement, cfg, emission, reco) {
   if (!TRMNL) return 'pas de TRMNL_WEBHOOK_URL';
   if (TEST) return 'TEST : webhook TRMNL non touche';
+  // kn = moyenne CORRIGEE du biais, comme l'eligibilite (fenetre()).
+  // j = date locale AAAA-MM-JJ du debut de fenetre. reco = spot a afficher
+  // (choisirReco) ; l'ancien markup l'ignore.
   const spots = classement.slice(0, 6).map(({ spot, f, mesure }) => ({
     n: spot.court, min: spot.route_min,
     now: mesure?.kn != null ? +mesure.kn.toFixed(0) : null,
     d: mesure?.dir != null ? Math.round(mesure.dir) : null,
+    j: f ? f[0].t.iso : null,
     de: f ? f[0].t.court : null,
     a: f ? f[f.length - 1].t.court : null,
-    kn: f ? +moyenne(f).toFixed(0) : null,
+    kn: f ? +moyenne(f, 'corrige').toFixed(0) : null,
     raf: f ? +Math.max(...f.map((l) => l.rafale)).toFixed(0) : null,
     e: f ? 2 : null,
   }));
   const corps = JSON.stringify({
-    merge_variables: { maj: emission, seuil: cfg.seuil_kn, spots },
+    merge_variables: { maj: emission, seuil: cfg.seuil_kn, spots, reco },
   });
-  if (corps.length > 5000) return `payload ${corps.length} o > 5000, non envoye`;
-  if (DRY_RUN) return `DRY_RUN — ${corps.length} o prets`;
+  if (corps.length > 5000) {
+    // Payload refuse = ecran fige sans le dire : le run doit etre rouge.
+    process.exitCode = 1;
+    return `payload ${corps.length} o > 5000, non envoye`;
+  }
+  if (DRY_RUN) return `DRY_RUN — ${corps.length} o prets :
+${corps}`;
   const res = await fetch(TRMNL, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: corps,
   });
+  if (!res.ok) process.exitCode = 1;
   return `TRMNL HTTP ${res.status} (${corps.length} o)`;
 }
 
@@ -331,7 +273,12 @@ if (QA_ONLY) {
 
   if (modifie) await ecrireVus(vus);
 
-  console.log('\n' + await versTrmnl(classement, cfg, emission));
+  const reco = choisirReco(classement, cfg, biais, maintenant);
+  console.log('\nReco TRMNL : ' + (reco
+    ? `${reco.n} ${reco.j} ${reco.de}-${reco.a} ${reco.kn} kn ` +
+      `(${reco.ok ? 'tient le seuil' : 'meilleure moyenne, sous le seuil'})`
+    : 'aucune heure exploitable (hors saison ou hors creneaux)'));
+  console.log(await versTrmnl(classement, cfg, emission, reco));
   if (!TEST) {
     console.log(`Archive QA : ${await archiver(emission, cfg.spots, parSpot)}`);
     console.log(`Mesures : ${await journaliserMesures(cfg.spots)}`);
