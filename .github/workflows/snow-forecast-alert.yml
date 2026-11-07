@@ -27,12 +27,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
+
+      # Chemins d'échec (API refusée, muette, vide) sur fetch simulé :
+      # un test en échec bloque le run, il apparaît en rouge.
+      - name: Tests
+        run: node --test test/snow.test.mjs
 
       - name: Vérifier les chutes annoncées
         env:
@@ -47,10 +52,16 @@ jobs:
         run: |
           git config --global user.name "snow-alert-bot"
           git config --global user.email "snow-alert-bot@users.noreply.github.com"
-          if [ -f snow-forecast-alerted.json ]; then
-            git add snow-forecast-alerted.json
-            git diff --staged --quiet || git commit -m "chore: chute annoncée notifiée [skip ci]"
-            git push
-          else
-            echo "snow-forecast-alerted.json absent — rien à committer."
+          git add snow-forecast-alerted.json data/neige.csv 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "Rien à committer."
+            exit 0
           fi
+          git commit -m "chore: chute annoncée notifiée / journal neige [skip ci]"
+          # wind-alert pousse aussi dans le dépôt : rebase avant push, 3 essais.
+          for i in 1 2 3; do
+            git pull --rebase --autostash && git push && exit 0
+            sleep $((i * 10))
+          done
+          echo "::error::push impossible après 3 essais"
+          exit 1

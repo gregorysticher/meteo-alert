@@ -13,10 +13,12 @@ on:
         description: "Seuil en noeuds pour un envoi de TEST (vide = seuil normal). Marque l'alerte [TEST], n'ecrit ni alerted.json ni le journal QA."
         default: ""
   schedule:
-    # Toutes les 2 h : les etages d'alerte sont bornes par l'ECHEANCE de la
-    # fenetre, pas par l'heure du run. Inutile de viser une heure precise —
-    # les crons planifies de GitHub derivent de plusieurs heures.
-    - cron: "15 */2 * * *"
+    # Heures fixes, minutes decalees (convention : GitHub livre mal les crons
+    # a intervalle). Les etages d'alerte sont bornes par l'ECHEANCE de la
+    # fenetre, pas par l'heure du run : l'heure exacte n'est pas critique.
+    # Historique : "15 */2" (12 creneaux) ne livrait que 4 runs/jour, partis
+    # avec 4 a 7 h de retard. 6 creneaux espaces de 4 h : a suivre (TODO).
+    - cron: "17 1,5,9,13,17,21 * * *"
 
 permissions:
   contents: write
@@ -29,18 +31,22 @@ jobs:
   wind:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
 
       # Regle d'affichage TRMNL (choisirReco) sur donnees simulees : hors
       # saison, aucun run reel ne l'exerce. Un test en echec bloque le run.
       - name: Tests
-        run: node --test test/*.test.mjs
+        run: node --test test/reco.test.mjs
 
       - name: Previsions, alertes et QA
+        # shell: bash explicite = -o pipefail. Sans lui, "| tee" masque le
+        # code de sortie du script et un echec passe en vert (doc GitHub :
+        # shell non specifie = "bash -e {0}", sans pipefail).
+        shell: bash
         env:
           NTFY_TOPIC_VENT: ${{ secrets.NTFY_TOPIC_VENT }}
           TRMNL_WEBHOOK_URL: ${{ secrets.TRMNL_WEBHOOK_URL }}
@@ -56,5 +62,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/ alerted.json 2>/dev/null || true
           git diff --staged --quiet || git commit -m "data: wind $(date -u +%FT%TZ)"
-          git pull --rebase --autostash || true
-          git push || true
+          # Un push perdu = donnees QA perdues : 3 essais, puis run rouge.
+          for i in 1 2 3; do
+            git pull --rebase --autostash && git push && exit 0
+            sleep $((i * 10))
+          done
+          echo "::error::push des donnees QA impossible apres 3 essais"
+          exit 1

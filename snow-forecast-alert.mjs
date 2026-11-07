@@ -20,6 +20,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
+import { journaliserPrevision } from "./snow-qa.mjs";
 
 // ══════ PARAMÈTRES ══════
 const LAT = 46.1913556421;
@@ -141,13 +142,18 @@ async function main() {
   const dates = data.daily?.time || [];
   const neige = data.daily?.snowfall_sum || [];
   if (dates.length === 0) {
+    // Réponse 200 mais vide : l'alerte serait aveugle, le run doit être rouge.
     console.log("Aucune donnée journalière — aucune alerte.");
+    process.exitCode = 1;
     return;
   }
 
   console.log("\nPrévisions journalières :");
   for (let i = 0; i < dates.length; i++) {
     console.log(`  ${label(dates[i])} · ${neige[i]} cm`);
+  }
+  if (!DRY_RUN) {
+    console.log(`Journal neige : ${journaliserPrevision(jour, dates, neige)} ligne(s) ajoutée(s).`);
   }
 
   // Regroupement en épisodes de jours consécutifs enneigés
@@ -225,4 +231,5 @@ main()
   .catch((err) => {
     console.error("Erreur inattendue :", err.message);
     console.log("Aucune alerte envoyée.");
+    process.exitCode = 1;
   });

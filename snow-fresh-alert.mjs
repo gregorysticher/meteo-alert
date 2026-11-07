@@ -16,8 +16,10 @@
 // ne repart pas quand celui du lendemain arrive.
 //
 // Saison : 15 octobre → 15 avril (inverse de l'alerte vent).
-// Hors saison, ou si la station ne renvoie pas de données : sortie propre,
-// aucune alerte, aucun échec.
+// Hors saison : sortie propre. EN saison, une source muette (API en erreur,
+// station absente, relevé trop ancien, HN_1D invalide) fait ÉCHOUER le run :
+// une alerte aveugle ne doit jamais passer en vert (cf. alerte annoncée,
+// aveugle du 15/10 au 07/11/2026 sous des runs verts).
 //
 // Env requis  : NTFY_TOPIC_NEIGE
 // Env optionnel :
@@ -27,6 +29,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
+import { journaliserMesures, lire, rapport } from "./snow-qa.mjs";
 
 // ══════ OUTILS DE CONFIGURATION ══════
 // "Number(x) || defaut" rejetterait un seuil de 0, qui est justement la
@@ -125,7 +128,7 @@ async function main() {
   }
   if (IGNORER_SAISON) console.log("*** IGNORER_SAISON actif ***\n");
 
-  // Toute erreur réseau ou format inattendu : on sort proprement, sans alerte.
+  // Toute erreur réseau ou format inattendu : aucune alerte, run rouge.
   // period_in_days n'accepte que 1, 3 ou 7 (vérifié : toute autre valeur
   // renvoie un 422). On prend 3 pour couvrir un run tombant avant la
   // publication du relevé du jour.
@@ -136,12 +139,14 @@ async function main() {
     });
     if (!res.ok) {
       console.log(`API SLF indisponible (HTTP ${res.status}) — aucune alerte.`);
+      process.exitCode = 1;
       return;
     }
     const data = await res.json();
     releves = Array.isArray(data) ? data : [];
   } catch (err) {
     console.log(`Erreur d'accès à l'API SLF : ${err.message} — aucune alerte.`);
+    process.exitCode = 1;
     return;
   }
 
@@ -154,8 +159,17 @@ async function main() {
     console.log(`  ${m.measure_date} · HS=${m.HS} · HN_1D=${m.HN_1D}`);
   }
 
+  if (!DRY_RUN) {
+    const n = journaliserMesures(mesures.map((m) => ({
+      jour: String(m.measure_date).slice(0, 10), cm: m.HN_1D,
+    })));
+    console.log(`Journal neige : ${n} ligne(s) ajoutée(s).`);
+  }
+  console.log("\n" + rapport(lire()));
+
   if (mesures.length === 0) {
     console.log("\nAucun relevé pour cette station — aucune alerte.");
+    process.exitCode = 1;
     return;
   }
 
@@ -173,12 +187,14 @@ async function main() {
     console.log(
       `Relevé trop ancien (plus de ${AGE_MAX_JOURS} j) — station probablement muette, aucune alerte.`
     );
+    process.exitCode = 1;
     return;
   }
 
   // Station hors service, capteur en panne, valeur aberrante : on ne fait rien
   if (typeof hn !== "number" || !Number.isFinite(hn) || hn < 0) {
     console.log(`Neige fraîche indisponible (HN_1D = ${hn}) — aucune alerte.`);
+    process.exitCode = 1;
     return;
   }
 
@@ -221,7 +237,8 @@ async function main() {
 main()
   .then(sortieSiEchecs)
   .catch((err) => {
-    // Filet de sécurité : on ne veut jamais un job rouge pour une source absente
+    // Filet de sécurité : erreur imprévue = alerte aveugle = run rouge.
     console.error("Erreur inattendue :", err.message);
     console.log("Aucune alerte envoyée.");
+    process.exitCode = 1;
   });
