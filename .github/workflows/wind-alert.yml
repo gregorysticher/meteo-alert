@@ -65,6 +65,7 @@ jobs:
           # Un push perdu = donnees QA perdues : 3 essais, puis run rouge.
           for i in 1 2 3; do
             git pull --rebase --autostash && git push && exit 0
+            git rebase --abort 2>/dev/null || true
             sleep $((i * 10))
           done
           echo "::error::push des donnees QA impossible apres 3 essais"

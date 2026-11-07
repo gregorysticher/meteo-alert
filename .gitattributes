@@ -1,0 +1,4 @@
+# Journal neige en ajout seul, écrit par deux workflows qui peuvent pousser
+# en même temps : fusion par union (garde les lignes des deux côtés) au lieu
+# d'un conflit de rebase.
+data/neige.csv merge=union
