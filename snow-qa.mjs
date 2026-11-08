@@ -40,10 +40,10 @@ export function lire(fichier = FICHIER) {
   return readFileSync(fichier, 'utf8').trim().split('\n').slice(1)
     .filter(Boolean)
     .map((l) => {
-      const [run, source, jour, cm, ech, modele, , , , station] = l.trimEnd().split(',');
+      const [run, source, jour, cm, ech, modele, , , , station, hs] = l.trimEnd().split(',');
       return { run, source, jour, cm: +cm, echeance_j: ech === '' ? null : +ech,
         modele: modele || (source === 'prev' ? 'icon' : ''),
-        station: station || (source === 'mesure' ? STATION_REFERENCE : '') };
+        station: station || (source === 'mesure' ? STATION_REFERENCE : ''), hs: hs ?? '' };
     });
 }
 
@@ -79,11 +79,12 @@ export function journaliserPrevision(jourRun, dates, neige, {
 // valeur n'est pas réécrite (le SLF renvoie 3 jours à chaque run).
 export function journaliserMesures(mesures, { fichier = FICHIER, maintenant = new Date() } = {}) {
   const deja = new Map();
-  for (const l of lire(fichier)) if (l.source === 'mesure') deja.set(`${l.station}|${l.jour}`, l.cm);
+  const valeur = (cm, hs) => `${cm}|${hs ?? ''}`;
+  for (const l of lire(fichier)) if (l.source === 'mesure') deja.set(`${l.station}|${l.jour}`, valeur(l.cm, l.hs));
   const run = runId(maintenant);
   const lignes = mesures
     .filter((m) => typeof m.cm === 'number' && Number.isFinite(m.cm) && m.cm >= 0)
-    .filter((m) => deja.get(`${m.station ?? STATION_REFERENCE}|${m.jour}`) !== m.cm)
+    .filter((m) => deja.get(`${m.station ?? STATION_REFERENCE}|${m.jour}`) !== valeur(m.cm, m.hs))
     .map((m) => [run, 'mesure', m.jour, m.cm, '', '', '', '', '',
       m.station ?? STATION_REFERENCE, m.hs ?? '']);
   return ajouter(lignes, fichier);

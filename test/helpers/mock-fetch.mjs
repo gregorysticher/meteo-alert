@@ -12,6 +12,10 @@ if (spec) {
     if (String(url).includes('ntfy.sh') && process.env.MOCK_NTFY_STATUS) {
       return new Response('panne', { status: +process.env.MOCK_NTFY_STATUS });
     }
+    if (String(url).includes('forecast_days=16') && process.env.MOCK_LONG) {
+      const { status = 200, body = null } = JSON.parse(process.env.MOCK_LONG);
+      return new Response(JSON.stringify(body), { status });
+    }
     if (spec === 'network-error') throw new Error('ECONNRESET (simulé)');
     const { status = 200, body = null } = JSON.parse(spec);
     const texte = typeof body === 'string' ? body : JSON.stringify(body);

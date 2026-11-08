@@ -150,21 +150,36 @@ export function decider(eps, records, opts) {
   return decisions;
 }
 
-// Ligne neige de l'écran (spec B4.2) : le même découpage et le même chiffre que
-// l'alerte, sur le même horizon. Premier épisode qui mériterait une alerte, sinon
-// premier épisode avec au moins `minAffichage` cm à venir.
-export function ecranNeige(eps, dates, neige, { jour, seuil, hausse, minAffichage }) {
+// Ligne neige de l'écran (spec B4.2), dérivée des décisions de l'alerte : un épisode
+// alerté ou encore suivi est montré avec le cumul que voit l'alerte (somme des
+// épisodes qui chevauchent l'annonce). Entre deux alertes, ce cumul peut bouger de
+// moins que `hausse` sans message. Inversé si le cumul atteint le seuil.
+// Plusieurs épisodes : le plus proche qui atteint le seuil, sinon le plus proche.
+export function ecranNeige(eps, dates, neige, decisions, opts) {
+  const { jour, seuil, hausse, minAffichage, retenir = () => true } = opts;
   const minAVenir = Math.min(hausse, seuil);
-  const ouverts = eps.filter((e) => e.fin >= jour);
-  const alerte = ouverts.find((e) => e.total >= seuil && aVenir(e, jour) >= minAVenir);
-  const e = alerte ?? ouverts.find((x) => aVenir(x, jour) >= minAffichage);
+  const suivis = decisions.filter((d) =>
+    d.episode && d.episode.fin >= jour && d.apres && !d.apres.annule);
+  const candidats = suivis.map((d) => ({ e: d.episode, ok: d.episode.total >= seuil }));
+  for (const e of eps) {
+    if (e.fin < jour || suivis.some((d) => chevauche(e, d.episode))) continue;
+    const venir = aVenir(e, jour);
+    if (e.total >= seuil && venir >= minAVenir) candidats.push({ e, ok: true });
+    else if (venir >= minAffichage) candidats.push({ e, ok: false });
+  }
+  candidats.sort((a, b) => a.e.debut.localeCompare(b.e.debut));
+  const choisi = candidats.find((c) => c.ok) ?? candidats[0];
+
   const valeur = (i) => (typeof neige[i] === 'number' && Number.isFinite(neige[i]) ? neige[i] : 0);
   let j5 = 0;
-  dates.forEach((d, i) => { if (d >= jour) j5 += valeur(i); });
+  dates.forEach((d, i) => { if (d >= jour && retenir(d)) j5 += valeur(i); });
   return {
+    jour,
     min: minAffichage,
     j0: Math.round(valeur(dates.indexOf(jour))),
     j5: Math.round(j5),
-    episode: e ? { cm: Math.round(e.total), de: e.debut, a: e.fin, ok: e === alerte } : null,
+    episode: choisi
+      ? { cm: Math.round(choisi.e.total), de: choisi.e.debut, a: choisi.e.fin, ok: choisi.ok }
+      : null,
   };
 }

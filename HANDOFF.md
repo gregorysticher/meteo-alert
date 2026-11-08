@@ -121,8 +121,8 @@ heures (`cron-garde.mjs`, 3 h ; 4,5 h une fois le Worker actif).
 **Variables neige** : `SEUIL_NEIGE_CM` (10), `HAUSSE_NEIGE_CM` (5),
 `MARGE_ANNUL_NEIGE_CM` (2), `PROLONGE_MIN_NEIGE_CM` (2), `AFFICHAGE_NEIGE_CM` (5).
 Règles dans `snow-episodes.mjs` ; état dans `snow-forecast-alerted.json`. L'alerte écrit
-`data/neige-ecran.json`, que `wind-alert` joint au payload : l'écran peut donc retarder
-jusqu'au run vent suivant. Journal `data/neige.csv` : prévision du modèle de l'alerte et
+`data/neige-ecran.json`, que `wind-alert` joint au payload ; si l'épisode change, le
+workflow neige relance `wind-alert` aussitôt. Journal `data/neige.csv` : prévision du modèle de l'alerte et
 du modèle long, précipitations, température, 4 stations SLF. L'API SLF ne garde que
 7 jours : ce journal est irremplaçable.
 

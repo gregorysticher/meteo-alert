@@ -259,26 +259,28 @@ const serie = (eps) => {
   const v = Object.fromEntries(eps.flatMap((e) => e.jours.map((j) => [j.d, j.v])));
   return [CAL, CAL.map((d) => v[d] ?? 0)];
 };
-const ecran = (eps, o = ECRAN) => ecranNeige(eps, ...serie(eps), o);
+const ecran = (eps, records = [], o = ECRAN) =>
+  ecranNeige(eps, ...serie(eps), decider(eps, records, OPT), o);
 
 test('ecran : episode 6+9+8 -> 23 cm, plage, inverse', () => {
   const e = ecran([ep(ME, [6, 9, 8])]);
   assert.deepEqual(e.episode, { cm: 23, de: ME, a: VE, ok: true });
-  assert.equal(e.j5, 23);
-  assert.equal(e.j0, 0);
-  assert.equal(e.min, 5);
+  assert.deepEqual([e.jour, e.j5, e.j0, e.min], [MA, 23, 0, 5]);
 });
-test('ecran : meme chiffre que l\'alerte, arrondi compris', () => {
-  const eps = [ep(ME, [6.4, 9.3])];
-  const a = decider(eps, [], OPT)[0];
-  assert.equal(ecran(eps).episode.cm, Math.round(a.episode.total));
-  assert.equal(a.type, 'nouvelle');
+test('ecran : le cumul compte les jours passes', () => {
+  assert.equal(ecran([ep(LU, [5, 6])]).episode.cm, 11);
 });
 test('ecran : le jour meme compte dans j0', () => {
   assert.equal(ecran([ep(MA, [7, 8])]).j0, 7);
 });
 test('ecran : episode d\'alerte prioritaire sur une petite chute plus proche', () => {
   assert.deepEqual(ecran([ep(MA, [6]), ep(JE, [7, 5])]).episode, { cm: 12, de: JE, a: VE, ok: true });
+});
+test('ecran : deux episodes au seuil -> le plus proche', () => {
+  assert.equal(ecran([ep(MA, [11]), ep(JE, [7, 5])]).episode.de, MA);
+});
+test('ecran : deux petites chutes -> la plus proche', () => {
+  assert.equal(ecran([ep(MA, [6]), ep(JE, [7])]).episode.de, MA);
 });
 test('ecran : sous le seuil mais au moins 5 cm a venir -> sans inversion', () => {
   assert.deepEqual(ecran([ep(ME, [6])]).episode, { cm: 6, de: ME, a: ME, ok: false });
@@ -294,6 +296,45 @@ test('ecran : neige tombee + trace -> pas annoncee ; episode fini ignore ; passe
   assert.equal(ecran([ep(LU, [30])]).episode, null);
 });
 test('ecran : valeurs nulles sans effet sur les totaux', () => {
-  const e = ecranNeige([], [MA, ME], [null, 3], ECRAN);
+  const e = ecranNeige([], [MA, ME], [null, 3], [], ECRAN);
   assert.deepEqual([e.j0, e.j5], [0, 3]);
+});
+test('ecran : j5 ne depasse pas la saison', () => {
+  const e = ecranNeige([], [MA, ME], [1, 30], [], { ...ECRAN, retenir: (d) => d !== ME });
+  assert.equal(e.j5, 1);
+});
+
+// L'ecran montre le chiffre que vient d'annoncer l'alerte.
+const memeChiffre = (eps, records) => {
+  const d = decider(eps, records, OPT).find((x) => x.type);
+  const e = ecran(eps, records).episode;
+  assert.equal(e.cm, Math.round(d.episode.total), d.type);
+  assert.equal(e.ok, true, d.type);
+  return d.type;
+};
+test('alerte et ecran : meme chiffre, nouvelle', () => {
+  assert.equal(memeChiffre([ep(ME, [6.4, 9.3])], []), 'nouvelle');
+});
+test('alerte et ecran : meme chiffre, hausse sur episode scinde', () => {
+  assert.equal(memeChiffre([ep(ME, [9]), ep(VE, [9])], [rec(ME, VE, 12)]), 'hausse');
+});
+test('alerte et ecran : meme chiffre, annule qui redevient nouvelle, scinde', () => {
+  assert.equal(memeChiffre([ep(ME, [6]), ep(VE, [6])], [rec(ME, VE, 12, true)]), 'nouvelle');
+});
+test('alerte et ecran : meme chiffre, prolongation avec peu a venir', () => {
+  assert.equal(memeChiffre([ep(LU, [11, 1, 2])], [rec(LU, MA, 12)]), 'prolonge');
+});
+test('alerte et ecran : meme chiffre, annonce decalee', () => {
+  assert.equal(memeChiffre([ep(VE, [7, 5])], [rec(ME, JE, 12)]), 'decale');
+});
+test('episode suivi sans message : cumul courant, inverse ; dans la marge : sans inversion', () => {
+  assert.deepEqual(ecran([ep(ME, [8, 6])], [rec(ME, JE, 12)]).episode, { cm: 14, de: ME, a: JE, ok: true });
+  assert.deepEqual(ecran([ep(ME, [5, 4])], [rec(ME, JE, 12)]).episode, { cm: 9, de: ME, a: JE, ok: false });
+});
+test('episode annule : plus inverse, et plus du tout sous les 5 cm a venir', () => {
+  assert.equal(ecran([ep(ME, [2, 1])], [rec(ME, JE, 12)]).episode, null);
+});
+test('deuxieme episode nouveau : l\'ecran garde le plus proche, deja annonce', () => {
+  const e = ecran([ep(MA, [12]), ep(JE, [15])], [rec(MA, MA, 12)]);
+  assert.deepEqual(e.episode, { cm: 12, de: MA, a: MA, ok: true });
 });

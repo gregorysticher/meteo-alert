@@ -117,10 +117,13 @@ function mesureEcran(classement, cfg) {
 
 // Ligne neige, ecrite par l'alerte neige annoncee : un seul envoi vers TRMNL, un seul
 // chiffre. Hors saison ou pas encore ecrite : null (l'ecran le dit).
-async function neigeEcran(saison) {
+const NEIGE_AGE_MAX_J = 7;
+async function neigeEcran(saison, maintenant) {
   if (saison !== 'neige') return null;
   try {
-    return JSON.parse(await readFile('data/neige-ecran.json', 'utf8'));
+    const n = JSON.parse(await readFile('data/neige-ecran.json', 'utf8'));
+    // Fichier de la saison passee, si les premiers runs de l'hiver ont echoue.
+    return (maintenant - versDate(n.maj)) / 864e5 > NEIGE_AGE_MAX_J ? null : n;
   } catch (err) {
     if (err.code === 'ENOENT') return null;
     console.error(`ECHEC data/neige-ecran.json : ${err.message}`);
@@ -156,7 +159,7 @@ async function versTrmnl(classement, cfg, emission, reco, maintenant) {
     merge_variables: {
       maj: emission, seuil: cfg.seuil_kn, saison,
       mesure: mesureEcran(classement, cfg),
-      neige: await neigeEcran(saison),
+      neige: await neigeEcran(saison, maintenant),
       spots, reco,
     },
   });

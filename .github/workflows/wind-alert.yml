@@ -32,7 +32,11 @@ jobs:
   wind:
     runs-on: ubuntu-latest
     steps:
+      # ref: main : un run en file part de la pointe, pas du SHA de son evenement,
+      # anterieur au push du run precedent (conflit de rebase garanti sinon).
       - uses: actions/checkout@v7
+        with:
+          ref: main
 
       - uses: actions/setup-node@v7
         with:

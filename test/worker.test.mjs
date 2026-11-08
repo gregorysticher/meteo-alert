@@ -73,6 +73,14 @@ test('les workflows transmettent vraiment l\'entree au script', () => {
     assert.ok(annonce.includes(v), v);
   }
   assert.ok(wind.includes('-size +45M'), 'garde de taille des fichiers');
+  assert.ok(annonce.includes('AFFICHAGE_CM: ${{ vars.AFFICHAGE_NEIGE_CM }}'));
+  assert.ok(annonce.includes('data/neige-ecran.json; do'), 'ecran dans le commit');
+  assert.ok(annonce.includes('actions: write'));
+  assert.ok(annonce.includes("steps.alerte.outputs.ecran_change == 'true'"));
+  assert.ok(annonce.includes('gh workflow run wind-alert.yml -f dry_run=0'));
+  for (const f of ['wind-alert', 'snow-forecast-alert', 'snow-fresh-alert']) {
+    assert.match(readFileSync(`.github/workflows/${f}.yml`, 'utf8'), /checkout@v7\n(.*\n)*?\s+with:\n\s+ref: main/, f);
+  }
 });
 
 test('crons alignes : wrangler.toml = TACHES = cron de chaque workflow', () => {

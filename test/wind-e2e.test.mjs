@@ -292,6 +292,9 @@ test('contrat : neige jointe en saison neige, nulle en saison vent ou si absente
   assert.deepEqual(lancer(hiver, { ...HOOK, fichiers }).payload.neige, ecran);
   assert.equal(lancer(hiver, HOOK).payload.neige, null);
   assert.equal(lancer({}, { ...HOOK, fichiers }).payload.neige, null);
+  // Fichier de la saison passee : pas joint.
+  const vieux = { 'data/neige-ecran.json': JSON.stringify({ ...ecran, maj: '202604100500' }) };
+  assert.equal(lancer(hiver, { ...HOOK, fichiers: vieux }).payload.neige, null);
   const r = lancer(hiver, { ...HOOK, fichiers: { 'data/neige-ecran.json': '{pas du json' } });
   assert.equal(r.code, 1, r.out);
   assert.equal(r.payload.neige, null);

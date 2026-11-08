@@ -201,6 +201,42 @@ test('annoncée : journal complet, modèle court et long séparés', () => {
   assert.match(r.journal, /,long,/);
   assert.match(r.out, /horizon long : 5/);
 });
+test('annoncée : annexes alignées sur les jours à venir, malgré les jours passés', () => {
+  const m = prev([1, 2], 'cm', [9]);
+  m.body.daily.precipitation_sum = [90, 10, 20];
+  m.body.daily.rain_sum = [0, 0, 1];
+  m.body.daily.temperature_2m_mean = [-9, -1, -2];
+  const r = lancer('snow-forecast-alert.mjs', m, { ...REEL, SEUIL_CM: '999' });
+  assert.ok(r.journal.includes(`prev,${jourLocal()},1,0,icon,10,0,-1,,`), r.journal);
+  assert.ok(r.journal.includes(`prev,${jourLocal(1)},2,1,icon,20,1,-2,,`), r.journal);
+});
+test('annoncée : colonnes annexes demandées à l\'API', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0]));
+  assert.match(r.out, /daily=snowfall_sum,precipitation_sum,rain_sum,temperature_2m_mean/);
+});
+test('annoncée : panne du journal long -> rouge, MAIS alerte partie et écran écrit', () => {
+  for (const long of ['{"status":503,"body":{}}', '{"body":{"daily":{"time":["2026-11-08"]}}}']) {
+    const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), { ...REEL, MOCK_LONG: long });
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /ECHEC journal neige horizon long/);
+    assert.match(r.out, /ntfy → Neige annoncée/);
+    assert.equal(r.ecran.episode.cm, 12);
+  }
+});
+test('annoncée : sortie ecran_change seulement si l\'épisode change', () => {
+  const sortie = join(tmpdir(), `sortie-${process.pid}.txt`);
+  writeFileSync(sortie, '');
+  const m = prev([0, 7, 5, 0, 0]);
+  lancer('snow-forecast-alert.mjs', m, { ...REEL, GITHUB_OUTPUT: sortie });
+  const lu = readFileSync(sortie, 'utf8');
+  rmSync(sortie);
+  assert.match(lu, /ecran_change=true/);
+});
+test('annoncée : AFFICHAGE_CM absurde -> rouge', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0]), { ...REEL, AFFICHAGE_CM: '0' });
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /Variable invalide/);
+});
 test('annoncée : la requête longue n\'a ni modèle ni past_days, sur 16 jours', () => {
   const urls = join(tmpdir(), `urls-${process.pid}.log`);
   writeFileSync(urls, '');
@@ -348,5 +384,27 @@ test('fraîche : stations voisines journalisées, le rapport ne lit que la réf�
   assert.match(r.journal, /,GRA2,20/);
   assert.match(r.journal, /,ILI2,40/);
   assert.doesNotMatch(r.journal, /XXX1/);
-  assert.doesNotMatch(r.out, /99\.0/);
+});
+
+test('rapport : modèle de l\'alerte et station de référence seuls', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'neige-'));
+  const fichier = join(dir, 'neige.csv');
+  try {
+    const t = new Date('2026-11-06T16:00:00Z');
+    journaliserPrevision('2026-11-06', ['2026-11-07'], [8.4], { fichier, maintenant: t });
+    journaliserPrevision('2026-11-06', ['2026-11-07'], [77], { fichier, maintenant: new Date('2026-11-06T17:00:00Z'), modele: 'long' });
+    journaliserMesures([{ jour: '2026-11-07', cm: 3, station: 'ILI2', hs: 10 }], { fichier });
+    journaliserMesures([{ jour: '2026-11-07', cm: 99, station: 'GRA2', hs: 20 }], { fichier, maintenant: new Date(Date.now() + 6e4) });
+    const r = rapport(lire(fichier));
+    assert.match(r, /2026-11-07 {2}8\.4 \| 3\.0/);
+    assert.doesNotMatch(r, /77|99/);
+    const l = lire(fichier);
+    assert.equal(l.find((x) => x.station === 'GRA2').hs, '20', 'bonne colonne');
+    // Dédoublonnage par station, et révision de la hauteur au sol seule.
+    assert.equal(journaliserMesures([{ jour: '2026-11-07', cm: 3, station: 'ILI2', hs: 10 }], { fichier }), 0);
+    assert.equal(journaliserMesures([{ jour: '2026-11-07', cm: 3, station: 'FNH2', hs: 5 }], { fichier }), 1);
+    assert.equal(journaliserMesures([{ jour: '2026-11-07', cm: 3, station: 'ILI2', hs: 11 }], { fichier }), 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

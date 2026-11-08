@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  actions: write      # relancer wind-alert quand l'épisode à l'écran change
 
 concurrency:
   group: snow-forecast-alert
@@ -28,6 +29,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        # Un run en file part de la pointe : sinon, conflit garanti sur neige-ecran.json.
+        with:
+          ref: main
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -40,6 +44,7 @@ jobs:
         run: node --test test/snow.test.mjs test/snow-episodes.test.mjs
 
       - name: Vérifier les chutes annoncées
+        id: alerte
         env:
           NTFY_TOPIC_NEIGE: ${{ secrets.NTFY_TOPIC_NEIGE }}
           DRY_RUN: ${{ inputs.dry_run }}
@@ -75,3 +80,10 @@ jobs:
           done
           echo "::error::push impossible après 3 essais"
           exit 1
+
+      # Après le commit : wind-alert lit le fichier poussé. Rare, donc la QA grossit peu.
+      - name: Mettre l'écran à jour tout de suite
+        if: steps.alerte.outputs.ecran_change == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run wind-alert.yml -f dry_run=0 -f qa_only=0

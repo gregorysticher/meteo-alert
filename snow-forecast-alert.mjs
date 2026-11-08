@@ -34,7 +34,7 @@
 // montre le chiffre de l'alerte (docs/contrat-trmnl.md).
 //   IGNORER_SAISON=true  → force l'analyse hors saison (test en été)
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
 import { journaliserPrevision } from "./snow-qa.mjs";
 import { episodes as decouper, decider, ecranNeige } from "./snow-episodes.mjs";
@@ -59,13 +59,14 @@ const SEUIL_FORCE = Boolean(process.env.SEUIL_FORCE);
 
 // Réglage absurde : le script tourne avec les défauts, mais le run est rouge.
 function reglages() {
-  const r = { hausse: HAUSSE_CM, marge: MARGE_CM, prolongeMin: PROLONGE_MIN_CM };
+  const r = { hausse: HAUSSE_CM, marge: MARGE_CM, prolongeMin: PROLONGE_MIN_CM, affichage: AFFICHAGE_CM };
   const refuser = (msg, cle, defaut) => {
     console.error(`Variable invalide : ${msg} — défaut ${defaut} utilisé.`);
     process.exitCode = 1;
     r[cle] = defaut;
   };
   if (r.hausse <= 0) refuser(`HAUSSE_CM = ${r.hausse}`, "hausse", 5);
+  if (r.affichage <= 0) refuser(`AFFICHAGE_CM = ${r.affichage}`, "affichage", 5);
   if (r.prolongeMin < 0) refuser(`PROLONGE_MIN_CM = ${r.prolongeMin}`, "prolongeMin", 2);
   if (!SEUIL_FORCE && (r.marge < 0 || r.marge >= SEUIL_CM)) {
     refuser(`MARGE_CM = ${r.marge}, seuil ${SEUIL_CM}`, "marge", Math.min(2, SEUIL_CM / 2));
@@ -174,6 +175,20 @@ function notification({ type, episode: e, record: r }) {
   };
 }
 
+// Écrit la ligne écran et signale au workflow si l'épisode a changé : wind-alert est
+// alors relancé tout de suite, sinon l'écran attendrait le prochain run vent.
+function ecrireEcran(ecran) {
+  let avant = null;
+  try {
+    avant = JSON.parse(readFileSync(FICHIER_ECRAN, "utf-8")).episode ?? null;
+  } catch { /* premier run, ou fichier illisible : on réécrit */ }
+  mkdirSync("data", { recursive: true });
+  writeFileSync(FICHIER_ECRAN, JSON.stringify(ecran, null, 2) + "\n");
+  const change = JSON.stringify(avant) !== JSON.stringify(ecran.episode);
+  console.log(`Épisode à l'écran ${change ? "changé" : "inchangé"}.`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `ecran_change=${change}\n`);
+}
+
 // Journal seulement : prévision du modèle par défaut sur 16 jours, celle du plugin
 // écran, pour mesurer ce que vaut une annonce à J+9 avant de songer à l'afficher.
 // Sa panne ne touche pas l'alerte, mais elle se voit.
@@ -181,11 +196,11 @@ async function journaliserLong(url, jour) {
   const long = url.replace("&models=meteoswiss_icon_seamless", "")
     .replace("&forecast_days=5", "&forecast_days=16").replace(/&past_days=\d+/, "");
   try {
-    const res = await fetch(long);
+    const res = await fetch(long, { signal: AbortSignal.timeout(30000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const d = (await res.json()).daily;
-    if (!d?.time?.length) throw new Error("réponse vide");
-    const n = journaliserPrevision(jour, d.time, d.snowfall_sum ?? [], {
+    if (!d?.time?.length || !d.snowfall_sum?.length) throw new Error("réponse vide");
+    const n = journaliserPrevision(jour, d.time, d.snowfall_sum, {
       modele: "long",
       annexes: { mm: d.precipitation_sum, pluie: d.rain_sum, tMoy: d.temperature_2m_mean },
     });
@@ -276,7 +291,6 @@ async function main() {
     console.log(`Journal neige : ${journaliserPrevision(jour, datesFutur, neigeFutur, {
       annexes: { mm: serie("precipitation_sum"), pluie: serie("rain_sum"), tMoy: serie("temperature_2m_mean") },
     })} ligne(s) ajoutée(s).`);
-    await journaliserLong(url, jour);
   }
 
   const episodes = decouper(dates, neige, {
@@ -291,24 +305,12 @@ async function main() {
     console.log(`  ${marque} ${periode(e)} · ${Math.round(e.total)} cm${fini}`);
   }
 
-  const ecran = {
-    maj: new Date().toISOString().slice(0, 16).replace(/[-:T]/g, ""),
-    lieu: LIEU,
-    ...ecranNeige(episodes, dates, neige, {
-      jour, seuil: SEUIL_CM, hausse: reglages().hausse, minAffichage: AFFICHAGE_CM,
-    }),
-  };
-  console.log(`\nÉcran : ${JSON.stringify(ecran)}`);
-  // Un seuil forcé de test ne doit pas s'afficher.
-  if (!DRY_RUN && !SEUIL_FORCE) {
-    mkdirSync("data", { recursive: true });
-    writeFileSync(FICHIER_ECRAN, JSON.stringify(ecran, null, 2) + "\n");
-  }
-
   const avant = chargerEtat();
+  const regl = reglages();
+  const retenir = (d) => enSaison(d) || IGNORER_SAISON;
   const inconnus = new Set(dates.filter((_, i) => typeof neige[i] !== "number" || !Number.isFinite(neige[i])));
   let decisions = decider(episodes, avant, {
-    jour, seuil: SEUIL_CM, ...reglages(), memoire: JOURS_PASSES, inconnus,
+    jour, seuil: SEUIL_CM, ...regl, memoire: JOURS_PASSES, inconnus,
   });
   if (SEUIL_FORCE) {
     decisions = decisions.filter((d) => d.type !== "annule" && d.type !== "decale");
@@ -318,6 +320,15 @@ async function main() {
 
   console.log(`\nÀ notifier : ${aEnvoyer.length}`);
   for (const d of aEnvoyer) console.log(`  [${d.type}] ${notification(d).corps.split("\n")[0]}`);
+
+  const ecran = {
+    maj: new Date().toISOString().slice(0, 16).replace(/[-:T]/g, ""),
+    lieu: LIEU,
+    ...ecranNeige(episodes, dates, neige, decisions, {
+      jour, seuil: SEUIL_CM, hausse: regl.hausse, minAffichage: regl.affichage, retenir,
+    }),
+  };
+  console.log(`\nÉcran : ${JSON.stringify(ecran)}`);
 
   if (DRY_RUN) {
     console.log("\n*** DRY_RUN — aucune notif envoyée, aucun état écrit ***");
@@ -340,6 +351,10 @@ async function main() {
   }
 
   if (!SEUIL_FORCE && JSON.stringify(apres) !== JSON.stringify(avant)) sauverEtat(apres);
+  // Un seuil forcé de test ne doit pas s'afficher.
+  if (!SEUIL_FORCE) ecrireEcran(ecran);
+  // Après les envois : une panne ou une lenteur de ce journal ne retarde aucune alerte.
+  await journaliserLong(url, jour);
 }
 
 main()
