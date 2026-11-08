@@ -19,6 +19,10 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
       Échéance : avant le 2027-04-15.
+- [ ] **Rappel demandé par Greg pour la prochaine séance : la nouveauté TRMNL attendue
+      est arrivée.** Les *special functions* du TRMNL X sont disponibles avec le firmware
+      1.8.18 (menu de l'appareil, *Special...*). La veille a sonné le 2026-11-02. Décision
+      qui en découle : voir Guest Mode ci-dessous.
 - [ ] **Guest Mode du TRMNL X** : disponible (firmware 1.8.18 installé). Recréer
       Wind Forecast (config au spec B1, Open-Meteo) ou faire un écran vent alimenté
       par `meteo-alert` ?
@@ -26,9 +30,11 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       notification chaque lundi. `gh workflow disable` refusé à Claude par le
       classifieur ; le demander explicitement ou lancer
       `gh workflow disable veille-trmnl-x.yml -R gregorysticher/trmnl-watch`.
-- [ ] **Déclencheur Cloudflare (B3)** : créer le compte, puis le jeton GitHub
-      fine-grained, une étape à la fois avec Claude. Worker écrit et testé dans
-      `worker/`, pas encore déployé.
+- [ ] **Déclencheur Cloudflare (B3)**, reporté par Greg le 2026-11-08 à la prochaine
+      séance. Compte créé. Reste : autoriser Wrangler (Claude relance la page, droits
+      limités aux Workers ; rien n'a encore été autorisé), créer le jeton GitHub
+      fine-grained, le poser, puis Claude déploie. Il faut être devant le PC. Worker écrit
+      et testé dans `worker/`, pas encore déployé.
 - [ ] **Netatmo « degraded » depuis le 2026-08-03**, données pourtant fraîches : dire à
       Claude s'il remet à zéro (*Reset Health*).
 - [ ] **Alerte neige, réglages ajoutés après la revue QA** : marge d'annulation de
