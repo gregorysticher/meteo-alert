@@ -2,6 +2,10 @@ name = "meteo-alert-cron"
 main = "src/index.mjs"
 compatibility_date = "2026-11-01"
 
+# Aucune adresse publique : le Worker ne fait que partir sur ses crons.
+workers_dev = false
+preview_urls = false
+
 # Mêmes horaires que le cron GitHub de chaque workflow (UTC). Toute modification
 # se répercute dans TACHES (src/taches.mjs) : test/worker.test.mjs le vérifie.
 [triggers]
