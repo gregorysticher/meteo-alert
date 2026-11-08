@@ -149,3 +149,22 @@ export function decider(eps, records, opts) {
   }
   return decisions;
 }
+
+// Ligne neige de l'écran (spec B4.2) : le même découpage et le même chiffre que
+// l'alerte, sur le même horizon. Premier épisode qui mériterait une alerte, sinon
+// premier épisode avec au moins `minAffichage` cm à venir.
+export function ecranNeige(eps, dates, neige, { jour, seuil, hausse, minAffichage }) {
+  const minAVenir = Math.min(hausse, seuil);
+  const ouverts = eps.filter((e) => e.fin >= jour);
+  const alerte = ouverts.find((e) => e.total >= seuil && aVenir(e, jour) >= minAVenir);
+  const e = alerte ?? ouverts.find((x) => aVenir(x, jour) >= minAffichage);
+  const valeur = (i) => (typeof neige[i] === 'number' && Number.isFinite(neige[i]) ? neige[i] : 0);
+  let j5 = 0;
+  dates.forEach((d, i) => { if (d >= jour) j5 += valeur(i); });
+  return {
+    min: minAffichage,
+    j0: Math.round(valeur(dates.indexOf(jour))),
+    j5: Math.round(j5),
+    episode: e ? { cm: Math.round(e.total), de: e.debut, a: e.fin, ok: e === alerte } : null,
+  };
+}

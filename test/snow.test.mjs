@@ -35,6 +35,7 @@ function lancer(script, mock, env = {}, etat = null) {
       code: r.status, out: r.stdout + r.stderr, fichiers: readdirSync(dir),
       etat: existsSync(fichierEtat) ? readFileSync(fichierEtat, 'utf8') : null,
       journal: existsSync(join(dir, 'data/neige.csv')) ? readFileSync(join(dir, 'data/neige.csv'), 'utf8') : '',
+      ecran: existsSync(join(dir, 'data/neige-ecran.json')) ? JSON.parse(readFileSync(join(dir, 'data/neige-ecran.json'), 'utf8')) : null,
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -169,9 +170,47 @@ test('annoncée : requête avec le bon modèle et les jours passés', () => {
 test('annoncée : le journal ne reçoit que les jours à venir', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([1, 2, 0, 0, 0], 'cm', [9, 9]), { ...REEL, SEUIL_CM: '999' });
   assert.equal(r.code, 0, r.out);
-  const lignes = r.journal.trim().split('\n').slice(1);
+  const lignes = r.journal.trim().split('\n').slice(1).filter((l) => l.split(',')[5] === 'icon');
   assert.equal(lignes.length, 5);
   assert.ok(lignes.every((l) => l.split(',')[2] >= jourLocal()), r.journal);
+});
+test('annoncée : écran écrit avec le chiffre de l\'alerte, pas en DRY_RUN ni seuil forcé', () => {
+  const m = prev([0, 7, 5, 0, 0]);
+  const r = lancer('snow-forecast-alert.mjs', m, REEL);
+  assert.deepEqual(r.ecran.episode, { cm: 12, de: jourLocal(1), a: jourLocal(2), ok: true });
+  assert.equal(r.ecran.lieu, 'Les Collines');
+  assert.match(r.ecran.maj, /^\d{12}$/);
+  assert.match(r.out, /12 cm cumulés/);
+  assert.equal(lancer('snow-forecast-alert.mjs', m).ecran, null);
+  assert.equal(lancer('snow-forecast-alert.mjs', m, { ...REEL, SEUIL_FORCE: '1' }).ecran, null);
+});
+test('annoncée : variable AFFICHAGE_CM lue', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 3, 0, 0, 0]), { ...REEL, AFFICHAGE_CM: '2' });
+  assert.deepEqual([r.ecran.min, r.ecran.episode.cm, r.ecran.episode.ok], [2, 3, false]);
+  assert.equal(lancer('snow-forecast-alert.mjs', prev([0, 3, 0, 0, 0]), REEL).ecran.episode, null);
+});
+test('annoncée : journal complet, modèle court et long séparés', () => {
+  const m = prev([0, 7, 5, 0, 0]);
+  m.body.daily.precipitation_sum = [0, 10, 8, 0, 0];
+  m.body.daily.rain_sum = [0, 0, 1, 0, 0];
+  m.body.daily.temperature_2m_mean = [-1, -4, -2, 0, 1];
+  const r = lancer('snow-forecast-alert.mjs', m, { ...REEL, SEUIL_CM: '999' });
+  const lignes = r.journal.trim().split('\n');
+  assert.equal(lignes[0], 'run,source,jour,cm,echeance_j,modele,mm,pluie_mm,t_moy,station,hs');
+  assert.ok(lignes.some((l) => l.includes(`prev,${jourLocal(2)},5,2,icon,8,1,-2,,`)), r.journal);
+  assert.match(r.journal, /,long,/);
+  assert.match(r.out, /horizon long : 5/);
+});
+test('annoncée : la requête longue n\'a ni modèle ni past_days, sur 16 jours', () => {
+  const urls = join(tmpdir(), `urls-${process.pid}.log`);
+  writeFileSync(urls, '');
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0]), { ...REEL, SEUIL_CM: '999', MOCK_URLS: urls });
+  assert.equal(r.code, 0, r.out);
+  const liste = readFileSync(urls, 'utf8').trim().split('\n').filter((u) => u.includes('open-meteo'));
+  rmSync(urls);
+  assert.equal(liste.length, 2);
+  assert.match(liste[1], /forecast_days=16/);
+  assert.doesNotMatch(liste[1], /models=|past_days=/);
 });
 test('annoncée : annonce déplacée -> un seul message « décalée »', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 7, 5]), REEL, etatDe(0, 1, 12));
@@ -299,4 +338,15 @@ test('hors DRY_RUN : le journal est bien écrit (le test ci-dessus prouve donc q
   const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), env);
   assert.equal(r.code, 0, r.out);
   assert.deepEqual(r.fichiers, ['data']);
+});
+
+test('fraîche : stations voisines journalisées, le rapport ne lit que la référence', () => {
+  const m = slf(3, 1);
+  m.body.push({ station_code: 'GRA2', measure_date: `${jourLocal(-1)}T00:00:00Z`, HS: 20, HN_1D: 99 });
+  const r = lancer('snow-fresh-alert.mjs', m, { DRY_RUN: 'false', NTFY_TOPIC_NEIGE: 'x' });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.journal, /,GRA2,20/);
+  assert.match(r.journal, /,ILI2,40/);
+  assert.doesNotMatch(r.journal, /XXX1/);
+  assert.doesNotMatch(r.out, /99\.0/);
 });

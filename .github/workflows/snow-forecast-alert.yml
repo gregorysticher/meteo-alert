@@ -50,6 +50,7 @@ jobs:
           HAUSSE_CM: ${{ vars.HAUSSE_NEIGE_CM }}
           MARGE_CM: ${{ vars.MARGE_ANNUL_NEIGE_CM }}
           PROLONGE_MIN_CM: ${{ vars.PROLONGE_MIN_NEIGE_CM }}
+          AFFICHAGE_CM: ${{ vars.AFFICHAGE_NEIGE_CM }}
         run: node snow-forecast-alert.mjs
 
       - name: Commit l'état si modifié
@@ -58,7 +59,7 @@ jobs:
           git config --global user.name "snow-alert-bot"
           git config --global user.email "snow-alert-bot@users.noreply.github.com"
           # Un par un : un git add avec un chemin absent n'ajoute RIEN.
-          for f in snow-forecast-alerted.json data/neige.csv; do
+          for f in snow-forecast-alerted.json data/neige.csv data/neige-ecran.json; do
             if [ -f "$f" ]; then git add "$f"; fi
           done
           if git diff --staged --quiet; then

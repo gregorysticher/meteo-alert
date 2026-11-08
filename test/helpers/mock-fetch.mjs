@@ -3,9 +3,12 @@
 // body est renvoyé tel quel (objet/tableau -> JSON).
 // MOCK_NTFY_STATUS = statut renvoyé par ntfy (200 par défaut), pour simuler une
 // panne d'envoi alors que la source météo répond.
+import { appendFileSync } from 'node:fs';
+
 const spec = process.env.MOCK_FETCH;
 if (spec) {
   globalThis.fetch = async (url) => {
+    if (process.env.MOCK_URLS) appendFileSync(process.env.MOCK_URLS, `${url}\n`);
     if (String(url).includes('ntfy.sh') && process.env.MOCK_NTFY_STATUS) {
       return new Response('panne', { status: +process.env.MOCK_NTFY_STATUS });
     }

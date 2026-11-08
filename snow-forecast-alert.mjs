@@ -27,12 +27,17 @@
 //                          de dépôt MARGE_ANNUL_NEIGE_CM ; 0 = sous le seuil)
 //   PROLONGE_MIN_CM=2    → neige minimale sur les jours ajoutés pour une
 //                          prolongation (variable PROLONGE_MIN_NEIGE_CM)
+//   AFFICHAGE_CM=5       → à l'écran, chute montrée sans inversion à partir de ce
+//                          cumul à venir (variable AFFICHAGE_NEIGE_CM)
+//
+// Écrit data/neige-ecran.json, que wind-alert joint au payload TRMNL : l'écran
+// montre le chiffre de l'alerte (docs/contrat-trmnl.md).
 //   IGNORER_SAISON=true  → force l'analyse hors saison (test en été)
 
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
 import { journaliserPrevision } from "./snow-qa.mjs";
-import { episodes as decouper, decider } from "./snow-episodes.mjs";
+import { episodes as decouper, decider, ecranNeige } from "./snow-episodes.mjs";
 
 // ══════ PARAMÈTRES ══════
 const LAT = 46.1913556421;
@@ -48,6 +53,8 @@ const nombreEnv = (nom, defaut) => {
 const HAUSSE_CM = nombreEnv("HAUSSE_CM", 5);
 const MARGE_CM = nombreEnv("MARGE_CM", 2);
 const PROLONGE_MIN_CM = nombreEnv("PROLONGE_MIN_CM", 2);
+const AFFICHAGE_CM = nombreEnv("AFFICHAGE_CM", 5);
+const FICHIER_ECRAN = "data/neige-ecran.json";
 const SEUIL_FORCE = Boolean(process.env.SEUIL_FORCE);
 
 // Réglage absurde : le script tourne avec les défauts, mais le run est rouge.
@@ -167,6 +174,28 @@ function notification({ type, episode: e, record: r }) {
   };
 }
 
+// Journal seulement : prévision du modèle par défaut sur 16 jours, celle du plugin
+// écran, pour mesurer ce que vaut une annonce à J+9 avant de songer à l'afficher.
+// Sa panne ne touche pas l'alerte, mais elle se voit.
+async function journaliserLong(url, jour) {
+  const long = url.replace("&models=meteoswiss_icon_seamless", "")
+    .replace("&forecast_days=5", "&forecast_days=16").replace(/&past_days=\d+/, "");
+  try {
+    const res = await fetch(long);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d = (await res.json()).daily;
+    if (!d?.time?.length) throw new Error("réponse vide");
+    const n = journaliserPrevision(jour, d.time, d.snowfall_sum ?? [], {
+      modele: "long",
+      annexes: { mm: d.precipitation_sum, pluie: d.rain_sum, tMoy: d.temperature_2m_mean },
+    });
+    console.log(`Journal neige, horizon long : ${n} ligne(s) ajoutée(s).`);
+  } catch (err) {
+    console.error(`ECHEC journal neige horizon long : ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
 // ══════ MAIN ══════
 async function main() {
   const jour = aujourdhuiLocal();
@@ -182,7 +211,7 @@ async function main() {
   const url =
     "https://api.open-meteo.com/v1/forecast" +
     `?latitude=${LAT}&longitude=${LON}&elevation=${ALT}` +
-    "&daily=snowfall_sum,temperature_2m_max" +
+    "&daily=snowfall_sum,precipitation_sum,rain_sum,temperature_2m_mean" +
     "&models=meteoswiss_icon_seamless" +
     `&timezone=${encodeURIComponent(TZ)}` +
     "&forecast_days=5" +  // ICON-CH2 plafonne à 120 h
@@ -243,7 +272,11 @@ async function main() {
     console.log(`  ${label(datesFutur[i])} · ${neigeFutur[i]} cm`);
   }
   if (!DRY_RUN) {
-    console.log(`Journal neige : ${journaliserPrevision(jour, datesFutur, neigeFutur)} ligne(s) ajoutée(s).`);
+    const serie = (nom) => iFutur.map((i) => data.daily?.[nom]?.[i] ?? null);
+    console.log(`Journal neige : ${journaliserPrevision(jour, datesFutur, neigeFutur, {
+      annexes: { mm: serie("precipitation_sum"), pluie: serie("rain_sum"), tMoy: serie("temperature_2m_mean") },
+    })} ligne(s) ajoutée(s).`);
+    await journaliserLong(url, jour);
   }
 
   const episodes = decouper(dates, neige, {
@@ -256,6 +289,20 @@ async function main() {
     const marque = e.total >= SEUIL_CM ? "✓" : "✗";
     const fini = e.fin < jour ? " (fini)" : "";
     console.log(`  ${marque} ${periode(e)} · ${Math.round(e.total)} cm${fini}`);
+  }
+
+  const ecran = {
+    maj: new Date().toISOString().slice(0, 16).replace(/[-:T]/g, ""),
+    lieu: LIEU,
+    ...ecranNeige(episodes, dates, neige, {
+      jour, seuil: SEUIL_CM, hausse: reglages().hausse, minAffichage: AFFICHAGE_CM,
+    }),
+  };
+  console.log(`\nÉcran : ${JSON.stringify(ecran)}`);
+  // Un seuil forcé de test ne doit pas s'afficher.
+  if (!DRY_RUN && !SEUIL_FORCE) {
+    mkdirSync("data", { recursive: true });
+    writeFileSync(FICHIER_ECRAN, JSON.stringify(ecran, null, 2) + "\n");
   }
 
   const avant = chargerEtat();

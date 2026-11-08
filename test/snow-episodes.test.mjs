@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { episodes, decider, duree } from '../snow-episodes.mjs';
+import { episodes, decider, duree, ecranNeige } from '../snow-episodes.mjs';
 
 const OPT = { jour: '2027-01-12', seuil: 10, hausse: 5, marge: 2, prolongeMin: 2, memoire: 7 };
 const SA = '2027-01-09', DI = '2027-01-10', LU = '2027-01-11', MA = '2027-01-12',
@@ -250,4 +250,50 @@ test('deux episodes distincts : deux alertes', () => {
 });
 test('episode alerte + autre episode nouveau : une seule alerte', () => {
   assert.deepEqual(types(decider([ep(MA, [11]), ep(JE, [7, 5])], [rec(MA, MA, 11)], OPT)), [null, 'nouvelle']);
+});
+
+// ---- ecran (B4.2) --------------------------------------------------------------
+
+const ECRAN = { jour: MA, seuil: 10, hausse: 5, minAffichage: 5 };
+const serie = (eps) => {
+  const v = Object.fromEntries(eps.flatMap((e) => e.jours.map((j) => [j.d, j.v])));
+  return [CAL, CAL.map((d) => v[d] ?? 0)];
+};
+const ecran = (eps, o = ECRAN) => ecranNeige(eps, ...serie(eps), o);
+
+test('ecran : episode 6+9+8 -> 23 cm, plage, inverse', () => {
+  const e = ecran([ep(ME, [6, 9, 8])]);
+  assert.deepEqual(e.episode, { cm: 23, de: ME, a: VE, ok: true });
+  assert.equal(e.j5, 23);
+  assert.equal(e.j0, 0);
+  assert.equal(e.min, 5);
+});
+test('ecran : meme chiffre que l\'alerte, arrondi compris', () => {
+  const eps = [ep(ME, [6.4, 9.3])];
+  const a = decider(eps, [], OPT)[0];
+  assert.equal(ecran(eps).episode.cm, Math.round(a.episode.total));
+  assert.equal(a.type, 'nouvelle');
+});
+test('ecran : le jour meme compte dans j0', () => {
+  assert.equal(ecran([ep(MA, [7, 8])]).j0, 7);
+});
+test('ecran : episode d\'alerte prioritaire sur une petite chute plus proche', () => {
+  assert.deepEqual(ecran([ep(MA, [6]), ep(JE, [7, 5])]).episode, { cm: 12, de: JE, a: VE, ok: true });
+});
+test('ecran : sous le seuil mais au moins 5 cm a venir -> sans inversion', () => {
+  assert.deepEqual(ecran([ep(ME, [6])]).episode, { cm: 6, de: ME, a: ME, ok: false });
+});
+test('ecran : traces -> aucun episode', () => {
+  assert.equal(ecran([ep(ME, [2, 2])]).episode, null);
+  assert.equal(ecran([]).episode, null);
+});
+test('ecran : neige tombee + trace -> pas annoncee ; episode fini ignore ; passe hors j5', () => {
+  const e = ecran([ep(DI, [20, 0.5, 1.2])]);
+  assert.equal(e.episode, null);
+  assert.equal(e.j5, 1);
+  assert.equal(ecran([ep(LU, [30])]).episode, null);
+});
+test('ecran : valeurs nulles sans effet sur les totaux', () => {
+  const e = ecranNeige([], [MA, ME], [null, 3], ECRAN);
+  assert.deepEqual([e.j0, e.j5], [0, 3]);
 });

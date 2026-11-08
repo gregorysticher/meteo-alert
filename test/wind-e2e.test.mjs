@@ -209,7 +209,7 @@ const SPOT_CHAMPS = ['a', 'd', 'de', 'e', 'j', 'kn', 'min', 'n', 'now', 'raf'];
 
 test('contrat : aucun champ retire, en saison avec fenetre', () => {
   const p = lancer({ vent: venteSamedi('Bellevue') }, HOOK).payload;
-  assert.deepEqual(Object.keys(p).sort(), ['maj', 'mesure', 'reco', 'saison', 'seuil', 'spots']);
+  assert.deepEqual(Object.keys(p).sort(), ['maj', 'mesure', 'neige', 'reco', 'saison', 'seuil', 'spots']);
   assert.deepEqual(Object.keys(p.mesure).sort(), ['g', 'h', 'n', 'now']);
   assert.deepEqual(Object.keys(p.reco).sort(), ['a', 'de', 'fin', 'g', 'j', 'kn', 'min', 'n', 'ok', 'raf']);
   for (const s of p.spots) assert.deepEqual(Object.keys(s).sort(), SPOT_CHAMPS);
@@ -240,6 +240,19 @@ test('contrat : hors saison -> saison neige, reco nulle, mesure toujours la', ()
   assert.equal(p.saison, 'neige');
   assert.equal(p.reco, null);
   assert.equal(p.mesure.n, 'Reposoir');
+});
+
+test('contrat : neige jointe en saison neige, nulle en saison vent ou si absente', () => {
+  const ecran = { maj: '202611081000', lieu: 'Les Collines', min: 5, j0: 0, j5: 23,
+    episode: { cm: 23, de: '2026-11-10', a: '2026-11-12', ok: true } };
+  const fichiers = { 'data/neige-ecran.json': JSON.stringify(ecran) };
+  const hiver = { now: '2026-11-08T10:00:00Z' };
+  assert.deepEqual(lancer(hiver, { ...HOOK, fichiers }).payload.neige, ecran);
+  assert.equal(lancer(hiver, HOOK).payload.neige, null);
+  assert.equal(lancer({}, { ...HOOK, fichiers }).payload.neige, null);
+  const r = lancer(hiver, { ...HOOK, fichiers: { 'data/neige-ecran.json': '{pas du json' } });
+  assert.equal(r.code, 1, r.out);
+  assert.equal(r.payload.neige, null);
 });
 
 test('contrat : reco sous le seuil -> g vide, ok faux', () => {

@@ -115,6 +115,20 @@ function mesureEcran(classement, cfg) {
   };
 }
 
+// Ligne neige, ecrite par l'alerte neige annoncee : un seul envoi vers TRMNL, un seul
+// chiffre. Hors saison ou pas encore ecrite : null (l'ecran le dit).
+async function neigeEcran(saison) {
+  if (saison !== 'neige') return null;
+  try {
+    return JSON.parse(await readFile('data/neige-ecran.json', 'utf8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    console.error(`ECHEC data/neige-ecran.json : ${err.message}`);
+    process.exitCode = 1;
+    return null;
+  }
+}
+
 // CONTRAT : docs/contrat-trmnl.md. Ajouter des champs, jamais en retirer ni en
 // changer le sens sans prevenir le markup (DASHBOARD 392375).
 async function versTrmnl(classement, cfg, emission, reco, maintenant) {
@@ -134,11 +148,12 @@ async function versTrmnl(classement, cfg, emission, reco, maintenant) {
     raf: f ? +Math.max(...f.map((l) => l.rafale)).toFixed(0) : null,
     e: f ? 2 : null,
   }));
+  const saison = dansSaison(maintenant, cfg.saison) ? 'vent' : 'neige';
   const corps = JSON.stringify({
     merge_variables: {
-      maj: emission, seuil: cfg.seuil_kn,
-      saison: dansSaison(maintenant, cfg.saison) ? 'vent' : 'neige',
+      maj: emission, seuil: cfg.seuil_kn, saison,
       mesure: mesureEcran(classement, cfg),
+      neige: await neigeEcran(saison),
       spots, reco,
     },
   });

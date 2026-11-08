@@ -48,6 +48,8 @@ function nombreOuDefaut(valeur, defaut) {
 const STATION = "ILI2";
 const STATION_NOM = "Les Collines";
 const STATION_ALT = 2022;
+// Voisines journalisées seulement : Loz, L'Ecreuleuse, Col de Bretaye (14 à 24 km).
+const VOISINES = ["GRA2", "FNH2", "CHA3"];
 
 const SEUIL_CM = nombreOuDefaut(process.env.SEUIL_CM, 20);   // neige fraîche 24 h
 
@@ -160,9 +162,12 @@ async function main() {
   }
 
   if (!DRY_RUN) {
-    const n = journaliserMesures(mesures.map((m) => ({
-      jour: String(m.measure_date).slice(0, 10), cm: m.HN_1D,
-    })));
+    const n = journaliserMesures(releves
+      .filter((m) => m.station_code === STATION || VOISINES.includes(m.station_code))
+      .map((m) => ({
+        jour: String(m.measure_date).slice(0, 10), cm: m.HN_1D,
+        station: m.station_code, hs: m.HS,
+      })));
     console.log(`Journal neige : ${n} ligne(s) ajoutée(s).`);
   }
   console.log("\n" + rapport(lire()));
