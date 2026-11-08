@@ -19,11 +19,6 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
       Échéance : avant le 2027-04-15.
-- [ ] **Cumul neige à l'écran (B4.2)** : le plugin Neige n'utilise pas le modèle de
-      l'alerte (pas de `models`, 16 jours) ; le cumul viendra donc de `meteo-alert`.
-      Choisir l'affichage : variante A (« 6 cm · cumul 23 cm ») ou B (« 23 cm · Mar 10
-      → Jeu 12 »), maquettes du 2026-11-08. À décider aussi : la ligne neige continue-t-elle
-      à annoncer les chutes au-delà de l'horizon de l'alerte (24 cm le 17/11 aujourd'hui) ?
 - [ ] **Guest Mode du TRMNL X** : disponible (firmware 1.8.18 installé). Recréer
       Wind Forecast (config au spec B1, Open-Meteo) ou faire un écran vent alimenté
       par `meteo-alert` ?
@@ -61,6 +56,11 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       (rapport « Erreur absolue par spot, 12-36 h »).
 - [ ] Neige : après 3 ou 4 épisodes, trancher l'alignement (B4.1) et regarder la
       fréquence des révisions du passé (`snowfall_sum`) et des oscillations.
+- [ ] Fin de l'hiver 2026-27 : analyser `data/neige.csv` (alignement, dispersion entre
+      stations, rapport cm/mm selon la température, annonces à J+9). Aucune correction
+      de la neige avant au moins deux hivers (spec B4).
+- [ ] Première vraie chute : vérifier que le chiffre de l'écran et celui de l'alerte
+      sont identiques, et lire le log.
 
 ### Dette technique
 
@@ -75,6 +75,8 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-08 — B4.2 : l'écran affiche le cumul et la plage de l'alerte, horizon
+      5 jours (`W.neige`, variante B validée par Greg). Journal neige complété.
 - [x] 2026-11-08 — Contrat TRMNL écrit (`docs/contrat-trmnl.md`), webhook conservé. Le
       markup ne décide plus rien sur le vent : saison, spot mesuré, état et fin de
       fenêtre viennent du payload. Heure de fin corrigée dans l'alerte ntfy, qui

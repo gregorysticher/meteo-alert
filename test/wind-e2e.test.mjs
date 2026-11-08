@@ -243,6 +243,15 @@ test('secret du webhook absent -> rouge, sauf DRY_RUN', () => {
   assert.equal(lancer({}, { env: { TRMNL_WEBHOOK_URL: '', DRY_RUN: '1' } }).code, 0);
 });
 
+test('contrat : une vraie mesure a 0 kn reste 0, pas null ; spots du plus proche au plus loin', () => {
+  const p = lancer({ mesure_kn: 0 }, HOOK).payload;
+  assert.equal(p.mesure.now, 0);
+  assert.equal(p.spots[0].now, 0);
+  const minutes = p.spots.map((s) => s.min);
+  assert.deepEqual(minutes, [...minutes].sort((a, b) => a - b));
+  assert.equal(p.spots.length, 6);
+});
+
 test('glyphe sur la mesure brute : 8,6 kn reste ○ (seuil 11, marge 2)', () => {
   assert.equal(lancer({ mesure_kn: 8.6 }, HOOK).payload.mesure.g, '○');
   assert.equal(lancer({ mesure_kn: 9.2 }, HOOK).payload.mesure.g, '◐');
