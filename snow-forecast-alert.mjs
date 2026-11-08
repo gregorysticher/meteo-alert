@@ -180,11 +180,11 @@ function notification({ type, episode: e, record: r }) {
 function ecrireEcran(ecran) {
   let avant = null;
   try {
-    avant = JSON.parse(readFileSync(FICHIER_ECRAN, "utf-8")).episode ?? null;
+    avant = JSON.parse(readFileSync(FICHIER_ECRAN, "utf-8")).episodes ?? null;
   } catch { /* premier run, ou fichier illisible : on réécrit */ }
   mkdirSync("data", { recursive: true });
   writeFileSync(FICHIER_ECRAN, JSON.stringify(ecran, null, 2) + "\n");
-  const change = JSON.stringify(avant) !== JSON.stringify(ecran.episode);
+  const change = JSON.stringify(avant) !== JSON.stringify(ecran.episodes);
   console.log(`Épisode à l'écran ${change ? "changé" : "inchangé"}.`);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `ecran_change=${change}\n`);
 }

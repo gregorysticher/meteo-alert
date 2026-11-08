@@ -98,17 +98,20 @@ fenêtre, `j`, `de`, `a`, `kn`, `raf` et `e` sont nuls ensemble : c'est l'état 
 | `maj` | texte `AAAAMMJJHHMM`, UTC | Heure du run de l'alerte neige. Sert au badge NEIGE PÉRIMÉ |
 | `lieu` | texte | Nom du lieu |
 | `min` | cm | Cumul à venir minimal pour montrer une chute sans inversion (`AFFICHAGE_NEIGE_CM`) |
-| `jour` | `AAAA-MM-JJ` local | Date du run. Autre que la date du rendu : `j0` et `j5` ne sont plus à jour, l'écran met « — » |
-| `j0` | cm, entier | Chute prévue aujourd'hui |
-| `j5` | cm, entier | Chute prévue sur les 5 jours, aujourd'hui compris |
-| `episode` | objet ou null | Null : aucune chute à montrer |
-| `episode.cm` | cm, entier | Cumul, jours passés compris : somme des épisodes qui chevauchent l'annonce, comme l'alerte. Entre deux alertes, il peut bouger de moins que `HAUSSE_NEIGE_CM` sans message |
+| `jour` | `AAAA-MM-JJ` local | Date du run |
+| `jours` | tableau de `{ d, cm }` | Série prévue depuis le jour du run. L'écran en tire « 24 h » et « 5 j » selon la date du rendu |
+| `episodes` | tableau | Épisodes ouverts par ordre de priorité, mêmes champs que `episode`. L'écran prend le premier qui n'est pas fini au moment du rendu |
+| `j0` | cm, entier | Chute prévue le jour du run |
+| `j5` | cm, entier | Chute prévue sur les 5 jours, jour du run compris |
+| `episode` | objet ou null | Premier de `episodes`. Null : aucune chute à montrer |
+| `episode.cm` | cm, entier | Cumul, jours passés compris : somme des épisodes qui chevauchent l'annonce, comme l'alerte. Au moment d'une alerte, c'est son chiffre ; ensuite, c'est la valeur courante de la prévision, qui peut monter de moins que `HAUSSE_NEIGE_CM` ou baisser sans message |
 | `episode.de`, `episode.a` | `AAAA-MM-JJ` local | Premier et dernier jour |
 | `episode.ok` | booléen | Vrai : le cumul atteint le seuil. Libellé inversé. Dans la marge d'annulation : faux, sans message |
 
-Choix de l'épisode : le plus proche qui atteint le seuil, sinon le plus proche avec au
-moins `min` cm à venir ou encore suivi. Un épisode fini au moment du rendu n'est plus
-affiché. Quand l'épisode change, l'alerte neige relance `wind-alert`. Horizon coupé à 5 jours (décidé le 2026-11-08) : au-delà, on mesure
+Priorité : au seuil avec au moins `min` cm à venir, puis au seuil, puis les autres ; à rang
+égal, le plus proche. Le fichier s'écrit à chaque run, y compris si un envoi ntfy a échoué :
+l'écran peut alors précéder l'alerte, qui repart au run suivant (run rouge). Quand la liste
+change, l'alerte neige relance `wind-alert`. Horizon coupé à 5 jours (décidé le 2026-11-08) : au-delà, on mesure
 d'abord (`data/neige.csv`, `modele=long`), on n'affiche pas.
 
 **Reste au plugin Neige (395305) : la hauteur au sol seule.** Il interroge Open-Meteo sans

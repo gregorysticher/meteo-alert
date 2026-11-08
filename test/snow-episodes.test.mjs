@@ -266,6 +266,7 @@ test('ecran : episode 6+9+8 -> 23 cm, plage, inverse', () => {
   const e = ecran([ep(ME, [6, 9, 8])]);
   assert.deepEqual(e.episode, { cm: 23, de: ME, a: VE, ok: true });
   assert.deepEqual([e.jour, e.j5, e.j0, e.min], [MA, 23, 0, 5]);
+  assert.deepEqual(e.jours.slice(0, 3), [{ d: MA, cm: 0 }, { d: ME, cm: 6 }, { d: JE, cm: 9 }]);
 });
 test('ecran : le cumul compte les jours passes', () => {
   assert.equal(ecran([ep(LU, [5, 6])]).episode.cm, 11);
@@ -294,6 +295,23 @@ test('ecran : neige tombee + trace -> pas annoncee ; episode fini ignore ; passe
   assert.equal(e.episode, null);
   assert.equal(e.j5, 1);
   assert.equal(ecran([ep(LU, [30])]).episode, null);
+});
+test('CV R1 : l\'episode du jour fini a minuit, le suivant reste dans la liste', () => {
+  const e = ecran([ep(MA, [12]), ep(JE, [40])], [rec(MA, MA, 12), rec(JE, JE, 40)]);
+  assert.deepEqual(e.episodes.map((x) => [x.de, x.cm]), [[MA, 12], [JE, 40]]);
+});
+test('CV R1 : neige surtout tombee, grosse chute a venir -> la grosse chute d\'abord', () => {
+  const e = ecran([ep(LU, [11, 1]), ep(JE, [40])], [rec(LU, MA, 12)]);
+  assert.equal(e.episode.cm, 40);
+  assert.equal(e.episodes[1].cm, 12);
+});
+test('ecran : episode suivi mais fini -> plus montre', () => {
+  assert.equal(ecran([ep(DI, [20])], [rec(DI, DI, 20)]).episode, null);
+});
+test('ecran : un episode dans la plage d\'une annonce n\'est pas compte deux fois', () => {
+  const e = ecran([ep(ME, [9]), ep(VE, [9])], [rec(ME, VE, 12)]);
+  assert.equal(e.episodes.length, 1);
+  assert.equal(e.episode.cm, 18);
 });
 test('ecran : valeurs nulles sans effet sur les totaux', () => {
   const e = ecranNeige([], [MA, ME], [null, 3], [], ECRAN);

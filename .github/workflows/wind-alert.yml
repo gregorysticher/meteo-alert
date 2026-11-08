@@ -32,11 +32,12 @@ jobs:
   wind:
     runs-on: ubuntu-latest
     steps:
-      # ref: main : un run en file part de la pointe, pas du SHA de son evenement,
-      # anterieur au push du run precedent (conflit de rebase garanti sinon).
+      # Pointe de la branche : un run en file ne part pas du SHA de son evenement,
+      # anterieur au push du run precedent (conflit de rebase garanti sinon). Relancer
+      # un ancien run prend donc les scripts actuels, pas ceux de l'epoque.
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ github.ref_name }}
 
       - uses: actions/setup-node@v7
         with:

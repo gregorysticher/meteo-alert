@@ -152,34 +152,40 @@ export function decider(eps, records, opts) {
 
 // Ligne neige de l'écran (spec B4.2), dérivée des décisions de l'alerte : un épisode
 // alerté ou encore suivi est montré avec le cumul que voit l'alerte (somme des
-// épisodes qui chevauchent l'annonce). Entre deux alertes, ce cumul peut bouger de
-// moins que `hausse` sans message. Inversé si le cumul atteint le seuil.
-// Plusieurs épisodes : le plus proche qui atteint le seuil, sinon le plus proche.
+// épisodes qui chevauchent l'annonce). Inversé si le cumul atteint le seuil. Entre deux
+// alertes, c'est la valeur courante de la prévision, qui peut bouger sans message.
+// `episodes` : tous les épisodes ouverts, par ordre de priorité, car l'écran prend le
+// premier pas encore fini au moment du rendu : au seuil avec de la neige à venir, puis au
+// seuil, puis les autres ; à rang égal, le plus proche. `jours` : la série du run, lue
+// selon la date du rendu.
 export function ecranNeige(eps, dates, neige, decisions, opts) {
   const { jour, seuil, hausse, minAffichage, retenir = () => true } = opts;
   const minAVenir = Math.min(hausse, seuil);
   const suivis = decisions.filter((d) =>
     d.episode && d.episode.fin >= jour && d.apres && !d.apres.annule);
   const candidats = suivis.map((d) => ({ e: d.episode, ok: d.episode.total >= seuil }));
+  const rang = (c) => (c.ok ? (aVenir(c.e, jour) >= minAffichage ? 0 : 1) : 2);
   for (const e of eps) {
     if (e.fin < jour || suivis.some((d) => chevauche(e, d.episode))) continue;
     const venir = aVenir(e, jour);
     if (e.total >= seuil && venir >= minAVenir) candidats.push({ e, ok: true });
     else if (venir >= minAffichage) candidats.push({ e, ok: false });
   }
-  candidats.sort((a, b) => a.e.debut.localeCompare(b.e.debut));
-  const choisi = candidats.find((c) => c.ok) ?? candidats[0];
+  candidats.sort((a, b) => rang(a) - rang(b) || a.e.debut.localeCompare(b.e.debut));
+  const episodes = candidats.map((c) =>
+    ({ cm: Math.round(c.e.total), de: c.e.debut, a: c.e.fin, ok: c.ok }));
 
   const valeur = (i) => (typeof neige[i] === 'number' && Number.isFinite(neige[i]) ? neige[i] : 0);
-  let j5 = 0;
-  dates.forEach((d, i) => { if (d >= jour && retenir(d)) j5 += valeur(i); });
+  const jours = dates.flatMap((d, i) =>
+    (d >= jour && retenir(d) ? [{ d, cm: Math.round(valeur(i) * 10) / 10 }] : []));
+  const j5 = jours.reduce((a, x) => a + x.cm, 0);
   return {
     jour,
     min: minAffichage,
     j0: Math.round(valeur(dates.indexOf(jour))),
     j5: Math.round(j5),
-    episode: choisi
-      ? { cm: Math.round(choisi.e.total), de: choisi.e.debut, a: choisi.e.fin, ok: choisi.ok }
-      : null,
+    jours,
+    episodes,
+    episode: episodes[0] ?? null,
   };
 }

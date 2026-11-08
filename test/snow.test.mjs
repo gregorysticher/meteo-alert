@@ -232,6 +232,42 @@ test('annoncée : sortie ecran_change seulement si l\'épisode change', () => {
   rmSync(sortie);
   assert.match(lu, /ecran_change=true/);
 });
+test('annoncée : second run identique -> ecran_change=false', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'neige-chaine-'));
+  const sortie = join(dir, 'sortie.txt');
+  const m = prev([0, 7, 5, 0, 0]);
+  const env = { ...process.env, DRY_RUN: 'false', IGNORER_SAISON: 'true', SEUIL_CM: '10',
+    NTFY_TOPIC_NEIGE: 'x', MOCK_FETCH: JSON.stringify(m), GITHUB_OUTPUT: sortie };
+  const run = () => spawnSync(process.execPath,
+    ['--import', 'file:///' + MOCK.replace(/\\/g, '/'), join(RACINE, 'snow-forecast-alert.mjs')],
+    { cwd: dir, encoding: 'utf8', env });
+  try {
+    run();
+    writeFileSync(sortie, '');
+    assert.equal(run().status, 0);
+    assert.match(readFileSync(sortie, 'utf8'), /ecran_change=false/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('annoncée : l\'écran suit les décisions, épisode scindé compris (script complet)', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 9, 0, 9, 0]), REEL, etatDe(1, 3, 12));
+  assert.match(r.out, /18 cm cumulés/);
+  assert.equal(r.ecran.episode.cm, 18);
+  assert.equal(r.ecran.episode.ok, true);
+});
+test('annoncée : alerte envoyée avant le journal long, avec un délai maximal', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), REEL);
+  assert.ok(r.out.indexOf('ntfy →') < r.out.indexOf('horizon long'), r.out);
+  assert.ok(readFileSync(join(RACINE, 'snow-forecast-alert.mjs'), 'utf8').includes('AbortSignal.timeout'));
+});
+test('annoncée : écran daté du run', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), REEL);
+  const maj = r.ecran.maj;
+  const d = Date.UTC(+maj.slice(0, 4), +maj.slice(4, 6) - 1, +maj.slice(6, 8), +maj.slice(8, 10), +maj.slice(10, 12));
+  assert.ok(Math.abs(Date.now() - d) < 5 * 60e3, maj);
+  assert.equal(r.ecran.jour, jourLocal());
+});
 test('annoncée : AFFICHAGE_CM absurde -> rouge', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0]), { ...REEL, AFFICHAGE_CM: '0' });
   assert.equal(r.code, 1, r.out);

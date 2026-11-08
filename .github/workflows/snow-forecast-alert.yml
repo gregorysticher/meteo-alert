@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v7
         # Un run en file part de la pointe : sinon, conflit garanti sur neige-ecran.json.
         with:
-          ref: main
+          ref: ${{ github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -81,9 +81,11 @@ jobs:
           echo "::error::push impossible après 3 essais"
           exit 1
 
-      # Après le commit : wind-alert lit le fichier poussé. Rare, donc la QA grossit peu.
+      # Après le commit : wind-alert lit le fichier poussé. Au plus une relance par run
+      # neige. always() : une alerte partie doit s'afficher même si le journal long a
+      # rendu le run rouge ; au run suivant, le fichier est à jour et rien ne repart.
       - name: Mettre l'écran à jour tout de suite
-        if: steps.alerte.outputs.ecran_change == 'true'
+        if: always() && steps.alerte.outputs.ecran_change == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run wind-alert.yml -f dry_run=0 -f qa_only=0

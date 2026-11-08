@@ -31,6 +31,9 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       `worker/`, pas encore déployé.
 - [ ] **Netatmo « degraded » depuis le 2026-08-03**, données pourtant fraîches : dire à
       Claude s'il remet à zéro (*Reset Health*).
+- [ ] **Alerte neige, forte baisse sans message** : une annonce de 30 cm revue à 11 cm ne
+      déclenche rien (au-dessus du seuil de 10) ; seul l'écran change. Veux-tu un message
+      de baisse ?
 - [ ] **Alerte neige, réglages ajoutés après la revue QA** : marge d'annulation de
       2 cm et 2 cm minimum pour une prolongation (variables de dépôt, 0 = règle
       littérale). À confirmer ou à changer.

@@ -76,10 +76,11 @@ test('les workflows transmettent vraiment l\'entree au script', () => {
   assert.ok(annonce.includes('AFFICHAGE_CM: ${{ vars.AFFICHAGE_NEIGE_CM }}'));
   assert.ok(annonce.includes('data/neige-ecran.json; do'), 'ecran dans le commit');
   assert.ok(annonce.includes('actions: write'));
-  assert.ok(annonce.includes("steps.alerte.outputs.ecran_change == 'true'"));
+  assert.ok(annonce.includes("always() && steps.alerte.outputs.ecran_change == 'true'"));
+  assert.ok(annonce.indexOf('git commit') < annonce.indexOf('gh workflow run'), 'relance apres le commit');
   assert.ok(annonce.includes('gh workflow run wind-alert.yml -f dry_run=0'));
   for (const f of ['wind-alert', 'snow-forecast-alert', 'snow-fresh-alert']) {
-    assert.match(readFileSync(`.github/workflows/${f}.yml`, 'utf8'), /checkout@v7\n(.*\n)*?\s+with:\n\s+ref: main/, f);
+    assert.ok(readFileSync(`.github/workflows/${f}.yml`, 'utf8').includes('ref: ${{ github.ref_name }}'), f);
   }
 });
 
