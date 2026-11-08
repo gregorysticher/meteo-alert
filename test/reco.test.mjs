@@ -279,6 +279,7 @@ test('spots.json coherent', () => {
   const cfg = JSON.parse(readFileSync(new URL('../wind/spots.json', import.meta.url)));
   assert.ok(cfg.spots.some((s) => s.key === cfg.spot_prioritaire), 'spot_prioritaire inconnu');
   assert.ok(cfg.seuil_kn > 0 && cfg.min_heures >= 1 && cfg.horizon_jours >= 1);
+  assert.ok(cfg.marge_mesure_kn >= 0, 'marge_mesure_kn absente : le glyphe ◐ disparaitrait');
   for (const [j, [a, b]] of Object.entries(cfg.creneaux)) {
     assert.ok(+j >= 0 && +j <= 6 && a >= 0 && a < b && b <= 24, `creneau ${j}`);
   }

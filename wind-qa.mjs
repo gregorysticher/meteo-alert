@@ -345,7 +345,10 @@ export async function evaluerAlertes(cfg) {
   const lignes = [];
   for (const l of alertes) {
     const [envoyeLe, etage, spot, station, debut, fin, prevu] = l.split(',');
-    if (fin >= maintenant) continue;            // fenetre pas encore passee
+    // fin = DEBUT de la derniere heure de la fenetre (mesures par tranche horaire,
+    // la derniere tranche compte : d'ou le <= plus bas). Le verdict peut donc tomber
+    // dans la derniere heure. Le message ntfy annonce, lui, la vraie fin.
+    if (fin >= maintenant) continue;
     if (vu.has(envoyeLe + '|' + etage + '|' + debut)) continue;
 
     const pts = (parStation.get(station) || [])

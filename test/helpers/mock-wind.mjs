@@ -13,6 +13,7 @@
 //   emission_age_h  age du dernier run MeteoSuisse (1 par defaut)
 //   air_prev   false : la prevision d'air manque
 //   ntfy       statut HTTP de ntfy (200 par defaut)
+//   mesure_kn  vent mesure aux stations, noeuds (5 par defaut)
 // }
 // Chaque notification est ajoutee a MOCK_NTFY_LOG (une ligne JSON).
 import { appendFileSync } from 'node:fs';
@@ -99,7 +100,7 @@ globalThis.fetch = async (url, opts = {}) => {
         ['GVE', 'CGI', 'BOU', 'CHB', 'PRE'].map((s) => `${s};202705080000;90;9.26;18.5`).join('\n') + '\n');
     }
     return reponse('Station/Location;Date;tre200s0;dkl010z0;fu3010z0;fu3010z1\n' +
-      ['GVE', 'CGI', 'BOU', 'CHB'].map((s) => `${s};202705080000;${M.air ?? 18};90;9.26;18.5`).join('\n') +
+      ['GVE', 'CGI', 'BOU', 'CHB'].map((s) => `${s};202705080000;${M.air ?? 18};90;${(M.mesure_kn ?? 5) * 1.852};18.5`).join('\n') +
       '\nPRE;202705080000;-;90;9.26;18.5\n');
   }
   if (u.includes('alplakes')) {

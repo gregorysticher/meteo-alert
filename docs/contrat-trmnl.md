@@ -40,7 +40,8 @@ données ne changent qu'à chaque run. À revoir si un second consommateur appar
 | `saison` | `vent` ou `neige` | Selon `saison` de `wind/spots.json` | Choix du bloc |
 | `seuil` | nœuds | `seuil_kn` de `wind/spots.json` | Non |
 | `mesure` | objet ou null | Spot prioritaire mesuré, voir plus bas | Oui |
-| `reco` | objet ou null | Spot et fenêtre à afficher, voir plus bas. Null hors saison | Oui |
+| `neige` | objet ou null | Ligne neige, voir plus bas. Null en saison vent, ou si l'alerte neige n'a pas encore écrit | Oui, en saison neige |
+| `reco` | objet ou null | Spot et fenêtre à afficher, voir plus bas. Null s'il n'y a aucune heure exploitable dans l'horizon. Indépendant de `saison` | Oui, en saison vent |
 | `spots` | tableau | Les 6 spots les plus proches, voir plus bas | Non |
 
 ### `mesure`
@@ -50,7 +51,7 @@ données ne changent qu'à chaque run. À revoir si un second consommateur appar
 | `n` | texte | Nom court du spot prioritaire (`spot_prioritaire`) |
 | `now` | nœuds, entier, ou null | Vent mesuré à la station. 0 est une vraie mesure |
 | `h` | `HH:MM` local, ou null | Heure de cette mesure à la station |
-| `g` | `●`, `◐` ou `○` | ● une fenêtre tient à ce spot ; ◐ mesure à moins de `marge_mesure_kn` du seuil ; ○ sinon |
+| `g` | `●`, `◐` ou `○` | ● une fenêtre tient à ce spot ; ◐ mesure brute ≥ seuil − `marge_mesure_kn`, sans fenêtre ; ○ sinon |
 
 ### `reco`
 
@@ -86,12 +87,27 @@ fenêtre, `j`, `de`, `a`, `kn`, `raf` et `e` sont nuls ensemble : c'est l'état 
 | `raf` | nœuds, entier | Rafale maximale prévue |
 | `e` | 2 ou null | 2 : une fenêtre tient le seuil. Aucune autre valeur n'existe |
 
-## Neige : hors contrat pour l'instant
+### `neige`
 
-Le bloc neige lit le plugin Neige Les Collines (395305), qui interroge lui-même
-Open-Meteo, sans paramètre `models`, sur 16 jours. L'alerte utilise
-`meteoswiss_icon_seamless` sur 5 jours. **Les deux peuvent diverger.** Exemple du
-2026-11-08 : l'écran annonce 24 cm le 17/11, hors de l'horizon de l'alerte.
+Écrit par l'alerte neige annoncée (`data/neige-ecran.json`), joint au payload par
+`wind-alert` : un seul envoi vers TRMNL, un seul chiffre. Même modèle
+(`meteoswiss_icon_seamless`), même découpage et même horizon de 5 jours que l'alerte.
 
-Le cumul d'épisode (spec B4.2) ne sera pas calculé en Liquid : il viendra de
-`meteo-alert`, selon le choix de Greg.
+| Champ | Type | Sens |
+|---|---|---|
+| `maj` | texte `AAAAMMJJHHMM`, UTC | Heure du run de l'alerte neige. Sert au badge NEIGE PÉRIMÉ |
+| `lieu` | texte | Nom du lieu |
+| `min` | cm | Cumul à venir minimal pour montrer une chute sans inversion (`AFFICHAGE_NEIGE_CM`) |
+| `j0` | cm, entier | Chute prévue aujourd'hui |
+| `j5` | cm, entier | Chute prévue sur les 5 jours, aujourd'hui compris |
+| `episode` | objet ou null | Null : aucune chute à montrer |
+| `episode.cm` | cm, entier | Cumul de l'épisode, jours passés compris : le chiffre de l'alerte |
+| `episode.de`, `episode.a` | `AAAA-MM-JJ` local | Premier et dernier jour |
+| `episode.ok` | booléen | Vrai : ce cumul mérite une alerte. Libellé inversé |
+
+Choix de l'épisode : le premier qui mérite une alerte, sinon le premier avec au moins
+`min` cm à venir. Horizon coupé à 5 jours (décidé le 2026-11-08) : au-delà, on mesure
+d'abord (`data/neige.csv`, `modele=long`), on n'affiche pas.
+
+**Reste au plugin Neige (395305) : la hauteur au sol seule.** Il interroge Open-Meteo sans
+`models`, sur 16 jours : il ne doit plus fournir aucune chute à l'écran.

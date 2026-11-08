@@ -33,7 +33,7 @@ function lancer(monde, { vus = [], env = {}, fichiers = {} } = {}) {
     writeFileSync(logTrmnl, '');
     const r = spawnSync(process.execPath, ['--import', MOCK, join(RACINE, 'wind-alert.mjs')], {
       cwd: dir, encoding: 'utf8',
-      env: { ...process.env, DRY_RUN: '0', QA_ONLY: '0', SEUIL_TEST: '', TRMNL_WEBHOOK_URL: '',
+      env: { ...process.env, DRY_RUN: '0', QA_ONLY: '0', SEUIL_TEST: '', TRMNL_WEBHOOK_URL: 'https://trmnl.test/hook',
         NTFY_TOPIC_VENT: 'test', MOCK_NTFY_LOG: log, MOCK_TRMNL_LOG: logTrmnl,
         MOCK_WIND: JSON.stringify({ now: VENDREDI, ...monde }), ...env },
     });
@@ -204,15 +204,48 @@ test('B7.2 : fenetre qui commence dans 20 min -> « Aujourd\'hui » part', () =>
 
 // ---- contrat du payload TRMNL (docs/contrat-trmnl.md) --------------------------
 
-const HOOK = { env: { TRMNL_WEBHOOK_URL: 'https://trmnl.test/hook' } };
+const HOOK = {};
 const SPOT_CHAMPS = ['a', 'd', 'de', 'e', 'j', 'kn', 'min', 'n', 'now', 'raf'];
+// On peut ajouter des champs, pas en retirer : inclusion, pas egalite.
+const contient = (obj, champs, nom) => {
+  for (const c of champs) assert.ok(c in obj, `${nom}.${c} retire`);
+};
 
 test('contrat : aucun champ retire, en saison avec fenetre', () => {
   const p = lancer({ vent: venteSamedi('Bellevue') }, HOOK).payload;
-  assert.deepEqual(Object.keys(p).sort(), ['maj', 'mesure', 'neige', 'reco', 'saison', 'seuil', 'spots']);
-  assert.deepEqual(Object.keys(p.mesure).sort(), ['g', 'h', 'n', 'now']);
-  assert.deepEqual(Object.keys(p.reco).sort(), ['a', 'de', 'fin', 'g', 'j', 'kn', 'min', 'n', 'ok', 'raf']);
-  for (const s of p.spots) assert.deepEqual(Object.keys(s).sort(), SPOT_CHAMPS);
+  contient(p, ['maj', 'mesure', 'neige', 'reco', 'saison', 'seuil', 'spots'], 'payload');
+  contient(p.mesure, ['g', 'h', 'n', 'now'], 'mesure');
+  contient(p.reco, ['a', 'de', 'fin', 'g', 'j', 'kn', 'min', 'n', 'ok', 'raf'], 'reco');
+  for (const s of p.spots) contient(s, SPOT_CHAMPS, 'spots');
+});
+
+test('contrat : unites et sens des champs', () => {
+  const p = lancer({ vent: venteSamedi('Bellevue') }, HOOK).payload;
+  assert.equal(p.seuil, 11);
+  assert.deepEqual([p.reco.kn, p.reco.min], [15, 12]);
+  assert.ok(p.reco.raf >= 19 && p.reco.raf <= 20, `raf ${p.reco.raf}`);
+  const s = p.spots[0];
+  assert.deepEqual([s.n, s.min, s.now, s.d, s.kn], ['Reposoir', 12, 5, 90, 15]);
+});
+
+test('webhook injoignable -> rouge, QA du run conservee', () => {
+  const r = lancer({ vent: venteSamedi('Bellevue') }, { env: { TRMNL_WEBHOOK_URL: 'https://hors-simulation.test/x' } });
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /ECHEC webhook TRMNL/);
+  assert.match(r.archive, /,ms\n/);
+  assert.match(r.qa, /,ms\n/);
+});
+
+test('secret du webhook absent -> rouge, sauf DRY_RUN', () => {
+  const r = lancer({}, { env: { TRMNL_WEBHOOK_URL: '' } });
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /ECHEC : pas de TRMNL_WEBHOOK_URL/);
+  assert.equal(lancer({}, { env: { TRMNL_WEBHOOK_URL: '', DRY_RUN: '1' } }).code, 0);
+});
+
+test('glyphe sur la mesure brute : 8,6 kn reste ○ (seuil 11, marge 2)', () => {
+  assert.equal(lancer({ mesure_kn: 8.6 }, HOOK).payload.mesure.g, '○');
+  assert.equal(lancer({ mesure_kn: 9.2 }, HOOK).payload.mesure.g, '◐');
 });
 
 test('contrat : valeurs lues par le markup, fenetre 09-18 h', () => {
@@ -255,7 +288,7 @@ test('contrat : neige jointe en saison neige, nulle en saison vent ou si absente
   assert.equal(r.payload.neige, null);
 });
 
-test('contrat : reco sous le seuil -> g vide, ok faux', () => {
+test('contrat : reco sous le seuil -> glyphe ○, ok faux', () => {
   const p = lancer({}, HOOK).payload;
   assert.equal(p.reco.ok, false);
   assert.equal(p.reco.g, '○');

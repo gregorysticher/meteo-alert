@@ -111,7 +111,7 @@ function mesureEcran(classement, cfg) {
     n: c.spot.court,
     now,
     h: /^\d{12}$/.test(date ?? '') ? local(versDate(date)).court : null,
-    g: etatMesure(now, !!c.f, cfg.seuil_kn, cfg.marge_mesure_kn),
+    g: etatMesure(c.mesure?.kn ?? null, !!c.f, cfg.seuil_kn, cfg.marge_mesure_kn),
   };
 }
 
@@ -132,11 +132,14 @@ async function neigeEcran(saison) {
 // CONTRAT : docs/contrat-trmnl.md. Ajouter des champs, jamais en retirer ni en
 // changer le sens sans prevenir le markup (DASHBOARD 392375).
 async function versTrmnl(classement, cfg, emission, reco, maintenant) {
-  if (!TRMNL) return 'pas de TRMNL_WEBHOOK_URL';
   if (TEST) return 'TEST : webhook TRMNL non touche';
+  if (!TRMNL && !DRY_RUN) {
+    process.exitCode = 1;          // ecran fige sans le dire
+    return 'ECHEC : pas de TRMNL_WEBHOOK_URL';
+  }
   // kn = moyenne CORRIGEE du biais, comme l'eligibilite (fenetre()).
   // j = date locale AAAA-MM-JJ du debut de fenetre. reco = spot a afficher
-  // (choisirReco) ; l'ancien markup l'ignore.
+  // (choisirReco).
   const spots = classement.slice(0, 6).map(({ spot, f, mesure }) => ({
     n: spot.court, min: spot.route_min,
     now: mesure?.kn != null ? +mesure.kn.toFixed(0) : null,
@@ -345,7 +348,13 @@ if (QA_ONLY) {
     ? `${reco.n} ${reco.j} ${reco.de}-${reco.a} ${reco.kn} kn ` +
       `(${reco.ok ? 'tient le seuil' : 'meilleure moyenne, sous le seuil'})`
     : 'aucune heure exploitable (hors saison ou hors creneaux)'));
-  console.log(await versTrmnl(classement, cfg, emission, reco, maintenant));
+  // Webhook injoignable : run rouge, mais la QA du run ne doit pas etre perdue.
+  try {
+    console.log(await versTrmnl(classement, cfg, emission, reco, maintenant));
+  } catch (err) {
+    console.error(`ECHEC webhook TRMNL : ${err.message}`);
+    process.exitCode = 1;
+  }
   if (!TEST) {
     console.log(`Archive QA : ${await archiver(emission, cfg.spots, parSpot)}`);
     // Second avis, archive seulement : apres les alertes, et sa panne ne les
