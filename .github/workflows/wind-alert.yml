@@ -40,10 +40,23 @@ jobs:
 
       # Regle d'affichage TRMNL (choisirReco) sur donnees simulees : hors
       # saison, aucun run reel ne l'exerce. Un test en echec bloque le run.
+      # Secours seulement : un cron en retard n'ajoute rien si un run recent a
+      # deja ecrit, et chaque run de plus grossit la QA (cron-garde.mjs).
+      - name: Garde du cron de secours
+        id: garde
+        env:
+          EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          DEPOT: ${{ github.repository }}
+          GARDE_H: ${{ vars.GARDE_CRON_VENT_H }}
+        run: node cron-garde.mjs
+
       - name: Tests
-        run: node --test test/reco.test.mjs test/qa.test.mjs test/wind-e2e.test.mjs test/worker.test.mjs
+        if: steps.garde.outputs.passer != 'true'
+        run: node --test test/reco.test.mjs test/qa.test.mjs test/wind-e2e.test.mjs test/worker.test.mjs test/garde.test.mjs
 
       - name: Previsions, alertes et QA
+        if: steps.garde.outputs.passer != 'true'
         # shell: bash explicite = -o pipefail. Sans lui, "| tee" masque le
         # code de sortie du script et un echec passe en vert (doc GitHub :
         # shell non specifie = "bash -e {0}", sans pipefail).
@@ -60,7 +73,7 @@ jobs:
       # MEME si le script a echoue (always) — sinon une alerte partie avant
       # l'echec n'est pas memorisee dans alerted.json et repart en doublon.
       - name: Commit des donnees
-        if: always()
+        if: always() && steps.garde.outputs.passer != 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -82,7 +95,7 @@ jobs:
       # avant, sinon les pushes echoueraient un jour sans prevenir. Apres le
       # commit : les donnees du run sont deja poussees.
       - name: Taille des fichiers de donnees
-        if: always()
+        if: always() && steps.garde.outputs.passer != 'true'
         run: |
           gros=$(find data -type f -size +45M)
           if [ -n "$gros" ]; then

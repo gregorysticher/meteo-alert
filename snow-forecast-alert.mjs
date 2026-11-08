@@ -23,6 +23,10 @@
 //                          seuil de test ne doit pas toucher aux vrais épisodes
 //   HAUSSE_CM=5          → nouvelle alerte si le cumul monte d'autant (variable
 //                          de dépôt HAUSSE_NEIGE_CM)
+//   MARGE_CM=2           → annulation seulement sous seuil - marge (variable
+//                          de dépôt MARGE_ANNUL_NEIGE_CM ; 0 = sous le seuil)
+//   PROLONGE_MIN_CM=2    → neige minimale sur les jours ajoutés pour une
+//                          prolongation (variable PROLONGE_MIN_NEIGE_CM)
 //   IGNORER_SAISON=true  → force l'analyse hors saison (test en été)
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
@@ -37,7 +41,13 @@ const ALT = 2022;
 const LIEU = "Les Collines";
 
 const SEUIL_CM = Number(process.env.SEUIL_CM) || 20;  // cumul sur l'épisode
-const HAUSSE_CM = Number(process.env.HAUSSE_CM) || 5;
+const nombreEnv = (nom, defaut) => {
+  const v = process.env[nom];
+  return v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Number(v) : defaut;
+};
+const HAUSSE_CM = nombreEnv("HAUSSE_CM", 5);
+const MARGE_CM = nombreEnv("MARGE_CM", 2);
+const PROLONGE_MIN_CM = nombreEnv("PROLONGE_MIN_CM", 2);
 const SEUIL_FORCE = Boolean(process.env.SEUIL_FORCE);
 const MIN_JOUR_CM = 1;                                // ignore les traces
 const JOURS_PASSES = 7;                               // épisode en cours
@@ -105,12 +115,21 @@ const periode = (e) =>
   e.debut === e.fin ? label(e.debut) : `${label(e.debut)} → ${label(e.fin)}`;
 
 function notification({ type, episode: e, record: r }) {
+  if (type === "decale") {
+    const detail = e.jours.map((j) => `${label(j.d)} ${Math.round(j.v)} cm`).join("\n");
+    return {
+      titre: `Neige décalée — ${LIEU}`,
+      corps: `${Math.round(e.total)} cm cumulés · ${periode(e)}\n` +
+        `(annoncé avant : ${periode(r)}, ${Math.round(r.total)} cm)\n${detail}`,
+      priorite: "high",
+    };
+  }
   if (type === "annule") {
     const reste = e ? `${Math.round(e.total)} cm prévus désormais` : "plus rien de prévu";
     return {
       titre: `Annulé — neige ${LIEU}`,
       corps: `L'épisode annoncé (${periode(r)}, ${Math.round(r.total)} cm) ` +
-        `repasse sous le seuil de ${SEUIL_CM} cm : ${reste}.`,
+        `ne tient plus (seuil ${SEUIL_CM} cm) : ${reste}.`,
       priorite: "default",
     };
   }
@@ -224,9 +243,13 @@ async function main() {
   }
 
   const avant = chargerEtat();
-  let decisions = decider(episodes, avant, { jour, seuil: SEUIL_CM, hausse: HAUSSE_CM });
+  const inconnus = new Set(dates.filter((_, i) => typeof neige[i] !== "number" || !Number.isFinite(neige[i])));
+  let decisions = decider(episodes, avant, {
+    jour, seuil: SEUIL_CM, hausse: HAUSSE_CM, marge: MARGE_CM,
+    prolongeMin: PROLONGE_MIN_CM, memoire: JOURS_PASSES, inconnus,
+  });
   if (SEUIL_FORCE) {
-    decisions = decisions.filter((d) => d.type !== "annule");
+    decisions = decisions.filter((d) => d.type !== "annule" && d.type !== "decale");
     console.log("Seuil forcé : ni annulation ni état écrit.");
   }
   const aEnvoyer = decisions.filter((d) => d.type);

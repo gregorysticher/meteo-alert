@@ -8,7 +8,9 @@
 //   dir        { nomDuPoint: degres }, 90 par defaut
 //   air        degres, temperature de l'air (prevue et mesuree)
 //   eau        degres, ou null si Alplakes ne repond pas
-//   arome      'ok' | 503 | 'vide'
+//   arome      'ok' | 503 | 'vide' | 'mph' | 'fige'
+//   arome_strict  true : URL AROME verifiee (modele, unite) ; sinon erreur HTTP 400
+//   emission_age_h  age du dernier run MeteoSuisse (1 par defaut)
 //   air_prev   false : la prevision d'air manque
 //   ntfy       statut HTTP de ntfy (200 par defaut)
 // }
@@ -29,7 +31,7 @@ const POINTS = [
   [1, 2, '', 'Cologny'], [2, 2, '', 'Bellevue'], [3, 2, '', 'Coppet'],
   [4, 1, 'CGI', 'CGI'], [5, 1, 'PRE', 'PRE'], [6, 1, 'BOU', 'BOU'], [7, 1, 'CHB', 'CHB'],
 ];
-const emission = new VraieDate(NOW - 36e5).toISOString().slice(0, 13).replace(/[-T]/g, '') + '00';
+const emission = new VraieDate(NOW - (M.emission_age_h ?? 1) * 36e5).toISOString().slice(0, 13).replace(/[-T]/g, '') + '00';
 const PARAMS = ['fu3010h0', 'fu3010h1', 'fu3q10h0', 'dkl010h0', 'tre200h0'];
 
 function serieCsv(param) {
@@ -53,7 +55,7 @@ function arome() {
   const time = Array.from({ length: 72 }, (_, i) =>
     new VraieDate(debut + i * 36e5).toISOString().slice(0, 16));
   return Array.from({ length: 8 }, () => ({
-    hourly_units: { wind_speed_10m: 'kn' },
+    hourly_units: { wind_speed_10m: M.arome === 'mph' ? 'mp/h' : 'kn' },
     hourly: {
       time,
       wind_speed_10m: time.map((_, i) => (i < 55 ? 30 : null)),
@@ -98,10 +100,15 @@ globalThis.fetch = async (url, opts = {}) => {
   }
   if (u.includes('meta.json')) {
     if (M.arome === 503) return reponse({}, 503);
-    return reponse({ last_run_initialisation_time: Math.floor((NOW - 3 * 36e5) / 1000) });
+    const age = M.arome === 'fige' ? 30 : 3;
+    return reponse({ last_run_initialisation_time: Math.floor((NOW - age * 36e5) / 1000) });
   }
   if (u.includes('open-meteo')) {
     if (M.arome === 'vide') return reponse([]);
+    if (M.arome_strict && !(u.includes('models=meteofrance_arome_france_hd') &&
+        u.includes('wind_speed_unit=kn') && u.includes('timezone=GMT'))) {
+      return reponse({ error: true }, 400);
+    }
     return reponse(arome());
   }
   throw new Error('URL non simulee : ' + u);

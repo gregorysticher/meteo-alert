@@ -11,25 +11,29 @@
 //   data/forecasts/AAAA-MM.csv  archive brute des previsions, un fichier par
 //                       mois d'EMISSION (limite GitHub : 50 Mo avertissement,
 //                       100 Mo refus ; un fichier unique y serait arrive en 2027)
-//   data/qa.csv         appariements prevision <-> mesure
+//   data/qa/AAAA-MM.csv appariements prevision <-> mesure, par mois d'ECHEANCE
+//                       (croit avec le carre du nombre de runs par jour)
 //   data/mesures.csv    mesures horaires brutes par station
 //   data/alertes.csv    alertes envoyees
 //   data/alertes_qa.csv verdict de chaque alerte une fois la fenetre passee
 //   data/gradient.csv   air mesure - eau (Alplakes), par spot et par heure :
-//                       se joint a qa.csv sur (spot, echeance = ts) pour voir si
-//                       le biais depend du gradient (spec B6)
+//                       se joint a data/qa/ sur (spot, echeance = ts) pour voir si
+//                       le biais depend du gradient (spec B6). Une ligne de
+//                       gradient pour toutes les emissions de cette heure, et les
+//                       spots d'une meme station partagent l'air : grouper par
+//                       echeance et par station, sinon le n est gonfle.
 //
-// Colonne modele (archive et qa.csv) : ms = MeteoSuisse, celui des alertes ;
+// Colonne modele (archive et data/qa/) : ms = MeteoSuisse, celui des alertes ;
 // arome = second avis, archive seulement. Le biais qui corrige les alertes
 // (biaisParEcheance) ne lit QUE ms : AROME ne doit pas changer une alerte.
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { mesures, tempLac } from './wind-sources.mjs';
 
 const DIR = 'data';
 const ARCHIVES = DIR + '/forecasts';
-const QA = DIR + '/qa.csv';
+const QA_DIR = DIR + '/qa';
 const MESURES = DIR + '/mesures.csv';
 const ALERTES = DIR + '/alertes.csv';
 const ALERTES_QA = DIR + '/alertes_qa.csv';
@@ -47,11 +51,14 @@ const ENT_ALERTES_QA =
   'envoye_le,etage,spot,debut,fin,prevu_kn,mesure_moy_kn,mesure_max_kn,' +
   'n_mesures,verdict';
 
+// Seul un fichier ABSENT vaut vide. Toute autre erreur doit remonter : ajouter()
+// reecrirait sinon le fichier avec le seul nouveau contenu.
 async function lire(path) {
   try {
     return await readFile(path, 'utf8');
-  } catch {
-    return '';
+  } catch (err) {
+    if (err.code === 'ENOENT') return '';
+    throw err;
   }
 }
 
@@ -64,6 +71,27 @@ async function ajouter(path, entete, lignes) {
     : entete + '\n' + lignes.join('\n') + '\n';
   await writeFile(path, corps);
   return lignes.length;
+}
+
+/** Fichier QA d'une echeance AAAAMMJJHHMM : son mois, en UTC. */
+export function fichierQa(echeance) {
+  return `${QA_DIR}/${echeance.slice(0, 4)}-${echeance.slice(4, 6)}.csv`;
+}
+
+/** Toutes les lignes QA, tous mois confondus, sans entete ni CR. */
+async function lignesQa() {
+  let noms;
+  try {
+    noms = await readdir(QA_DIR);
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  const parties = [];
+  for (const n of noms.filter((x) => x.endsWith('.csv')).sort()) {
+    parties.push((await lire(`${QA_DIR}/${n}`)).split('\n').slice(1));
+  }
+  return parties.flat().map((l) => l.trimEnd()).filter(Boolean);
 }
 
 /** Horodatage MeteoSuisse AAAAMMJJHHMM -> Date UTC. */
@@ -188,6 +216,10 @@ export async function journaliserGradient(spots) {
       (air - eau).toFixed(1)].join(','));
   }
   if (!eaux) throw new Error('temperature du lac indisponible pour tous les spots');
+  if (!lignes.length) throw new Error('temperature de l\'air absente pour tous les spots');
+  if (eaux < aFaire.length) {
+    console.log(`Gradient : lac muet pour ${aFaire.length - eaux} spot(s) sur ${aFaire.length}.`);
+  }
   return ajouter(GRADIENT, ENT_GRADIENT, lignes);
 }
 
@@ -204,8 +236,10 @@ export async function apparier(spots) {
   const codes = new Set(spots.map((s) => s.station));
   const m = await mesures(codes);
 
+  // Tout ce qui vise cette echeance est dans le fichier de son mois.
+  const fichier = fichierQa(cible);
   const vu = new Set();
-  for (const l of (await lire(QA)).split('\n').slice(1)) {
+  for (const l of (await lire(fichier)).split('\n').slice(1)) {
     const c = l.trimEnd().split(',');
     if (c.length > 8) vu.add(c[0] + '|' + c[1] + '|' + c[3] + '|' + c[8]);
   }
@@ -225,18 +259,18 @@ export async function apparier(spots) {
     lignes.push([emission, spot, station, echeance, lead.toFixed(1),
       fc.toFixed(1), mes.kn.toFixed(1), (fc - mes.kn).toFixed(1), modele].join(','));
   }
-  return ajouter(QA, ENT_QA, lignes);
+  return ajouter(fichier, ENT_QA, lignes);
 }
 
 /**
- * Biais moyen par classe d'echeance (6 h), calcule sur qa.csv, MeteoSuisse seul.
+ * Biais moyen par classe d'echeance (6 h), calcule sur data/qa/, MeteoSuisse seul.
  * Negatif = la prevision sous-estime. C'est ce qui permet de corriger une
  * pre-alerte a J-5, ou l'ecart atteint 2 noeuds.
  */
 export async function biaisParEcheance() {
   const par = new Map();
-  for (const l of (await lire(QA)).split('\n').slice(1)) {
-    const c = l.trimEnd().split(',');
+  for (const l of await lignesQa()) {
+    const c = l.split(',');
     if (c.length < 9 || c[8] !== MODELE_ALERTES) continue;
     const lead = Math.round(parseFloat(c[4]) / 6) * 6;
     const err = parseFloat(c[7]);
@@ -336,20 +370,46 @@ function stat(errs) {
 }
 
 export async function rapport() {
-  const lignes = (await lire(QA)).split('\n').slice(1)
-    .filter((l) => l.split(',').length > 8);
+  const lignes = (await lignesQa()).filter((l) => l.split(',').length > 8);
   if (!lignes.length) return 'QA : aucun appariement pour l\'instant.';
 
   const parModele = new Map();
   for (const l of lignes) {
-    const m = l.trimEnd().split(',')[8];
+    const m = l.split(',')[8];
     if (!parModele.has(m)) parModele.set(m, []);
     parModele.get(m).push(l);
   }
   // MeteoSuisse d'abord (celui des alertes), puis les seconds avis.
-  return [...parModele]
-    .sort(([a], [b]) => (b === MODELE_ALERTES) - (a === MODELE_ALERTES) || a.localeCompare(b))
-    .map(([m, ls]) => rapportModele(m, ls)).join('\n\n');
+  const tries = [...parModele]
+    .sort(([a], [b]) => (b === MODELE_ALERTES) - (a === MODELE_ALERTES) || a.localeCompare(b));
+  const blocs = tries.map(([m, ls]) => rapportModele(m, ls));
+  if (tries.length > 1) blocs.push(comparaison(tries));
+  return blocs.join('\n\n');
+}
+
+// Comparaison des modeles par spot sur la zone commune 12-36 h (spec B5, etape 2).
+function comparaison(tries) {
+  const parSpot = new Map();
+  for (const [m, ls] of tries) {
+    for (const l of ls) {
+      const c = l.split(',');
+      const lead = parseFloat(c[4]);
+      const err = parseFloat(c[7]);
+      if (!(lead >= 12 && lead <= 36) || !Number.isFinite(err)) continue;
+      if (!parSpot.has(c[1])) parSpot.set(c[1], new Map());
+      if (!parSpot.get(c[1]).has(m)) parSpot.get(c[1]).set(m, []);
+      parSpot.get(c[1]).get(m).push(err);
+    }
+  }
+  const out = ['Erreur absolue par spot, 12-36 h :'];
+  for (const [spot, parM] of [...parSpot].sort()) {
+    const cols = tries.map(([m]) => {
+      const errs = parM.get(m);
+      return `${m} ${errs ? stat(errs).mae.toFixed(1) + ' kn (n=' + errs.length + ')' : '—'}`;
+    });
+    out.push(`  ${spot.padEnd(13)} ${cols.join('  ')}`);
+  }
+  return out.join('\n');
 }
 
 function rapportModele(modele, lignes) {
@@ -376,7 +436,8 @@ function rapportModele(modele, lignes) {
   }
   out.push('', 'Par echeance (classes de 6 h) :');
   for (const [lead, errs] of [...parLead].sort((a, b) => a[0] - b[0])) {
-    if (lead % 24 && lead > 24) continue;       // allege : 1 point par jour
+    // Allege MeteoSuisse (9 j) : 1 point par jour. AROME (51 h) : tout.
+    if (modele === MODELE_ALERTES && lead % 24 && lead > 24) continue;
     const s = stat(errs);
     out.push(`  ${String(lead).padStart(3)} h  n=${String(s.n).padStart(4)}  ` +
       `biais ${s.biais >= 0 ? '+' : ''}${s.biais.toFixed(1)} kn  ` +

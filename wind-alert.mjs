@@ -175,6 +175,11 @@ if (QA_ONLY) {
 } else {
   const maintenant = new Date();
   const { emission, parSpot } = await previsions(cfg.spots);
+  // Source figee : tout continue, mais sur de vieilles previsions, sans le dire.
+  if ((maintenant - versDate(emission)) / 36e5 > 24) {
+    console.error(`ECHEC : run MeteoSuisse de plus de 24 h (${emission})`);
+    process.exitCode = 1;
+  }
   const biais = await biaisParEcheance();
   console.log(`Run MeteoSuisse ${emission} — seuil ${cfg.seuil_kn} kn / ` +
     `${cfg.min_heures} h — biais sur ${biais.size} echeances` +
@@ -283,10 +288,13 @@ if (QA_ONLY) {
       const t = local(versDate(debut));
       const b = conf.correction_biais ? biais : new Map();
       if (jourTient(classement, cfg, b, maintenant, t.iso)) continue;
+      // Pic du jour annule, pas de toute la prevision : dimanche peut souffler.
+      const duJour = c.lignes.filter((l) => local(versDate(l.date)).iso === t.iso);
+      const pic = duJour.length ? Math.max(...duJour.map((l) => l.kn)).toFixed(0) : '?';
       const envoye = await notifier(TOPIC, `Annule — ${c.court} ${t.label}`,
         `La fenetre annoncee a ${c.court} ne tient plus, et aucun autre spot ` +
         `ne tient ce jour-la.\n` +
-        `Pic revu a ${c.pic} kn. Inutile de bloquer le creneau.`,
+        `Pic revu a ${pic} kn ce jour-la. Inutile de bloquer le creneau.`,
         { priorite: 'default', tags: ['wind', 'annul'] });
       if (!envoye) continue;
       vus.ids.push(annul);

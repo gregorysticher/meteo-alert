@@ -9,7 +9,8 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  archiver, apparier, biaisParEcheance, fichierArchive, lignesArchive, rapport,
+  archiver, apparier, biaisParEcheance, fichierArchive, fichierQa, lignesArchive, rapport,
+  journaliserGradient,
 } from '../wind-qa.mjs';
 
 const SPOTS = [{ key: 'reposoir', station: 'GVE' }, { key: 'coppet', station: 'CGI' }];
@@ -71,6 +72,8 @@ test('lecture : mois de l\'echeance et precedent, y compris au passage d\'annee'
   await archiver('202701010000', SPOTS, parSpot('202701010500'));
   const l = await lignesArchive('202701010500');
   assert.equal(l.length, 4);
+  assert.equal(l.filter((x) => x.startsWith('20261228')).length, 2, 'decembre lu');
+  assert.equal(l.filter((x) => x.startsWith('20270101')).length, 2, 'janvier lu');
   assert.ok(l.every((x) => !x.startsWith('emission')));
   assert.ok(l.every((x) => !x.startsWith('20261128')));
   // Mois precedent absent : pas d'erreur.
@@ -89,7 +92,7 @@ test('appariement a cheval sur deux mois (vraie heure courante)', async () => {
   await archiver(cle(new Date(maintenant - 6 * 36e5)), SPOTS, parSpot(cible, 12));
   assert.equal(await apparier(SPOTS), 4);
   assert.equal(await apparier(SPOTS), 0, 'idempotent');
-  const qa = readFileSync('data/qa.csv', 'utf8').trim().split('\n');
+  const qa = readFileSync(fichierQa(cible), 'utf8').trim().split('\n');
   assert.equal(qa[0], 'emission,spot,station,echeance,lead_h,prevu_kn,mesure_kn,erreur_kn,modele');
   assert.match(qa.join('\n'), /,10\.0,8\.0,2\.0,ms/);
   assert.match(qa.join('\n'), /,12\.0,8\.0,4\.0,ms/);
@@ -129,15 +132,83 @@ test('deux modeles sur la meme heure : deux appariements distincts', async () =>
   mock.restoreAll();
 });
 
+test('apparier : ms deja apparie, arome toujours a faire (cle avec le modele)', async () => {
+  simulerMesures(8);
+  const maintenant = new Date();
+  maintenant.setUTCMinutes(0, 0, 0);
+  const cle = (d) => d.toISOString().slice(0, 16).replace(/[-:T]/g, '');
+  const emission = cle(new Date(maintenant - 6 * 36e5));
+  const cible = cle(maintenant);
+  await archiver(emission, SPOTS, parSpot(cible, 10));
+  assert.equal(await apparier(SPOTS), 2);
+  await archiver(emission, SPOTS, parSpot(cible, 20), 'arome');
+  assert.equal(await apparier(SPOTS), 2);
+  mock.restoreAll();
+});
+
+test('QA par mois d\'echeance : le biais et le rapport lisent tous les mois', async () => {
+  const entete = 'emission,spot,station,echeance,lead_h,prevu_kn,mesure_kn,erreur_kn,modele\n';
+  const rangs = (mois, err) => Array.from({ length: 20 },
+    () => `${mois}010500,reposoir,GVE,${mois}011100,6.0,10.0,12.0,${err},ms`).join('\n');
+  mkdirSync('data/qa', { recursive: true });
+  writeFileSync('data/qa/2026-11.csv', entete + rangs('202611', '-1.0') + '\n');
+  writeFileSync('data/qa/2026-12.csv', entete + rangs('202612', '-3.0') + '\n');
+  assert.equal((await biaisParEcheance()).get(6), -2);
+  assert.match(await rapport(), /ms — 40 appariements/);
+});
+
+test('fichierQa : le mois de l\'echeance, passage d\'annee compris', () => {
+  assert.equal(fichierQa('202701010500'), 'data/qa/2027-01.csv');
+  assert.equal(fichierQa('202612312300'), 'data/qa/2026-12.csv');
+});
+
+test('rapport : comparaison 12-36 h par spot, AROME sur toutes ses echeances', async () => {
+  const entete = 'emission,spot,station,echeance,lead_h,prevu_kn,mesure_kn,erreur_kn,modele\n';
+  const rang = (lead, err, m) => `202611010500,reposoir,GVE,202611011100,${lead},10.0,12.0,${err},${m}`;
+  mkdirSync('data/qa', { recursive: true });
+  writeFileSync('data/qa/2026-11.csv', entete + [
+    rang('24.0', '-2.0', 'ms'), rang('30.0', '-4.0', 'ms'), rang('6.0', '-9.0', 'ms'),
+    rang('24.0', '1.0', 'arome'), rang('30.0', '-1.0', 'arome'), rang('48.0', '-9.0', 'arome'),
+  ].join('\n') + '\n');
+  const r = await rapport();
+  assert.match(r, /reposoir +ms 3\.0 kn \(n=2\) +arome 1\.0 kn \(n=2\)/);
+  const bloc = r.slice(r.indexOf('previsions arome'));
+  assert.match(bloc, /30 h/, 'AROME garde ses echeances intermediaires');
+  assert.doesNotMatch(r.slice(0, r.indexOf('previsions arome')), /30 h/, 'MeteoSuisse allege');
+});
+
+test('gradient : idempotent par heure, rouge si l\'air manque partout', async () => {
+  const lac = [{ key: 'reposoir', station: 'GVE', lac: 'geneva', lat: 46, lon: 6 }];
+  const monde = (entete, ligne) => mock.method(globalThis, 'fetch', async (url) =>
+    (String(url).includes('alplakes')
+      ? new Response(JSON.stringify({ variables: { temperature: { data: [12] } } }))
+      : new Response(`${entete}\n${ligne}\n`)));
+  const f = monde('Station/Location;Date;tre200s0;fu3010z0', 'GVE;202611081000;8.0;10');
+  assert.equal(await journaliserGradient(lac), 1);
+  const n = f.mock.callCount();
+  assert.equal(await journaliserGradient(lac), 0);
+  assert.equal(f.mock.callCount(), n, 'aucun appel au second passage');
+  mock.restoreAll();
+  rmSync('data', { recursive: true, force: true });
+  monde('Station/Location;Date;fu3010z0', 'GVE;202611081000;10');
+  await assert.rejects(journaliserGradient(lac), /air absente/);
+  mock.restoreAll();
+});
+
+test('erreur de lecture autre que « absent » : remonte au lieu d\'ecraser', async () => {
+  mkdirSync('data/forecasts/2026-11.csv', { recursive: true });   // un dossier : EISDIR
+  await assert.rejects(archiver('202611080500', SPOTS, parSpot('202611081000')));
+});
+
 test('AROME ne change PAS le biais qui corrige les alertes', async () => {
   const entete = 'emission,spot,station,echeance,lead_h,prevu_kn,mesure_kn,erreur_kn,modele\n';
   const rangs = (modele, err, n) => Array.from({ length: n },
     (_, i) => `2026110${(i % 8) + 1}0500,reposoir,GVE,2026110${(i % 8) + 1}1100,6.0,10.0,12.0,${err},${modele}`);
-  mkdirSync('data', { recursive: true });
-  writeFileSync('data/qa.csv', entete + rangs('ms', -2.0, 40).join('\n') + '\n');
+  mkdirSync('data/qa', { recursive: true });
+  writeFileSync('data/qa/2026-11.csv', entete + rangs('ms', -2.0, 40).join('\n') + '\n');
   const avant = await biaisParEcheance();
   assert.equal(avant.get(6), -2);
-  writeFileSync('data/qa.csv', entete +
+  writeFileSync('data/qa/2026-11.csv', entete +
     [...rangs('ms', -2.0, 40), ...rangs('arome', 9.0, 400)].join('\n') + '\n');
   assert.deepEqual([...(await biaisParEcheance())], [...avant]);
 });
@@ -145,10 +216,18 @@ test('AROME ne change PAS le biais qui corrige les alertes', async () => {
 test('sous 30 points MeteoSuisse, pas de biais, meme avec beaucoup d\'AROME', async () => {
   const entete = 'emission,spot,station,echeance,lead_h,prevu_kn,mesure_kn,erreur_kn,modele\n';
   const rang = (m) => `202611010500,reposoir,GVE,202611011100,6.0,10.0,12.0,5.0,${m}`;
-  mkdirSync('data', { recursive: true });
-  writeFileSync('data/qa.csv', entete +
+  mkdirSync('data/qa', { recursive: true });
+  writeFileSync('data/qa/2026-11.csv', entete +
     [...Array(5).fill(rang('ms')), ...Array(100).fill(rang('arome'))].join('\n') + '\n');
   assert.equal((await biaisParEcheance()).size, 0);
+});
+
+test('fichier QA en CRLF : le biais reconnait le modele', async () => {
+  const rang = '202611010500,reposoir,GVE,202611011100,6.0,10.0,12.0,-2.0,ms\r\n';
+  mkdirSync('data/qa', { recursive: true });
+  writeFileSync('data/qa/2026-11.csv',
+    'emission,spot,station,echeance,lead_h,prevu_kn,mesure_kn,erreur_kn,modele\r\n' + rang.repeat(40));
+  assert.equal((await biaisParEcheance()).get(6), -2);
 });
 
 test('fichier en CRLF (clone Windows) : modele et idempotence restent justes', async () => {

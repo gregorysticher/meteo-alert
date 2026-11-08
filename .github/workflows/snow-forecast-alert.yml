@@ -48,6 +48,8 @@ jobs:
           # Surcharge manuelle : le script n'annule rien et n'écrit pas d'état.
           SEUIL_FORCE: ${{ inputs.seuil_cm }}
           HAUSSE_CM: ${{ vars.HAUSSE_NEIGE_CM }}
+          MARGE_CM: ${{ vars.MARGE_ANNUL_NEIGE_CM }}
+          PROLONGE_MIN_CM: ${{ vars.PROLONGE_MIN_NEIGE_CM }}
         run: node snow-forecast-alert.mjs
 
       - name: Commit l'état si modifié

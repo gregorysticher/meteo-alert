@@ -36,7 +36,7 @@ function lancer(monde, { vus = [], env = {} } = {}) {
       code: r.status, out: r.stdout + r.stderr,
       notifs: lit('ntfy.log').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)),
       vus: JSON.parse(lit('alerted.json')),
-      archive: lit('data/forecasts/2027-05.csv'), qa: lit('data/qa.csv'), gradient: lit('data/gradient.csv'),
+      archive: lit('data/forecasts/2027-05.csv'), qa: lit('data/qa/2027-05.csv'), gradient: lit('data/gradient.csv'),
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -71,6 +71,13 @@ test('B7.1 : le meme spot tient encore -> ni annulation ni doublon de pre-alerte
   assert.ok(titres(r).some((t) => t.startsWith('Confirme — Reposoir')));
 });
 
+test('B7.1 : samedi tombe, seul dimanche tient -> annulation de samedi, pic du jour', () => {
+  const r = lancer({ vent: { Bellevue: { '2027-05-09': 25 } } }, { vus: [PRE] });
+  const annul = r.notifs.find((n) => n.title.startsWith('Annule'));
+  assert.ok(annul, titres(r).join(' | '));
+  assert.match(annul.message, /Pic revu a 3 kn ce jour-la/);
+});
+
 test('annulation : ntfy en panne -> run rouge, rien memorise, nouvel essai possible', () => {
   const r = lancer({ ntfy: 500 }, { vus: [PRE] });
   assert.equal(r.code, 1, r.out);
@@ -101,6 +108,27 @@ test('B5 : AROME en panne -> run rouge, MAIS alertes parties et archive MeteoSui
     assert.match(r.archive, /,ms\n/);
     assert.doesNotMatch(r.archive, /,arome/);
   }
+});
+
+test('B5 : la requete AROME demande le bon modele, en noeuds', () => {
+  const r = lancer({ arome_strict: true });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.archive, /,arome/);
+});
+
+test('B5 : unite inattendue ou run fige -> rouge, rien d\'archive pour AROME', () => {
+  for (const arome of ['mph', 'fige']) {
+    const r = lancer({ arome });
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /ECHEC archive AROME/);
+    assert.doesNotMatch(r.archive, /,arome/);
+  }
+});
+
+test('run MeteoSuisse de plus de 24 h -> rouge', () => {
+  const r = lancer({ emission_age_h: 30 });
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /run MeteoSuisse de plus de 24 h/);
 });
 
 test('B5 : l\'appariement separe les modeles', () => {

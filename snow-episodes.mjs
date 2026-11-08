@@ -1,28 +1,36 @@
 // snow-episodes.mjs — épisodes de neige et décision d'alerte. Fonctions pures
 // (aucun accès réseau ni fichier) : testées dans test/snow-episodes.test.mjs.
 //
-// RÈGLES (spec B4.3, validées le 08/11/2026) :
-//   nouvelle  épisode >= seuil jamais alerté, pas encore fini
-//   hausse    cumul >= cumul de la dernière alerte + `hausse` cm
-//   prolonge  épisode plus long (en jours) que lors de la dernière alerte
-//   annule    un épisode alerté repasse sous le seuil avant sa fin
-// Un épisode annulé qui repasse au-dessus du seuil redevient une « nouvelle ».
+// RÈGLES (spec B4.3, validées le 08/11/2026, précisées après la revue QA) :
+//   nouvelle  cumul >= seuil, jamais alerté, et encore `hausse` cm à venir :
+//             de la neige déjà tombée n'est pas « annoncée »
+//   hausse    cumul >= cumul de la dernière alerte + `hausse`, et autant à venir
+//   prolonge  plus de jours que lors de la dernière alerte, et au moins
+//             `prolongeMin` cm sur les jours ajoutés à venir : une révision du
+//             passé ou une queue de traces n'est pas une prolongation
+//   annule    cumul < seuil - `marge`, épisode pas commencé (comme le vent) :
+//             la marge évite la rafale alerte/annulation autour du seuil
+//   decale    annulation et nouvelle dans le même run : un seul message
+// Un épisode annulé qui repasse au seuil redevient une « nouvelle ».
 //
-// Un enregistrement d'état = { debut, fin, total, duree, annule } :
-//   debut/fin    plage suivie, élargie à chaque run : elle ne rétrécit jamais,
-//                pour reconnaître l'épisode si la prévision le scinde ou le décale ;
-//   total/duree  valeurs de la DERNIÈRE ALERTE, référence des règles ci-dessus.
+// Un enregistrement d'état = { debut, fin, total, duree, annule } : les valeurs
+// de la DERNIÈRE ALERTE. La plage ne bouge qu'à l'envoi d'une alerte. Le cumul
+// courant est la somme des épisodes qui chevauchent cette plage : si la prévision
+// scinde l'épisode, ou si une seconde chute arrive dans la plage, tout compte.
 //
 // Les épisodes viennent d'une série qui inclut les jours passés (past_days) :
-// sans eux, le cumul baisserait tout seul à mesure que l'épisode avance et
-// déclencherait de fausses annulations.
+// sans eux, le cumul baisserait tout seul à mesure que l'épisode avance.
 
 const JOUR_MS = 864e5;
 
-export const duree = (e) =>
-  Math.round((Date.parse(`${e.fin}T00:00:00Z`) - Date.parse(`${e.debut}T00:00:00Z`)) / JOUR_MS) + 1;
+const versJours = (iso) => Date.parse(`${iso}T00:00:00Z`) / JOUR_MS;
+
+export const duree = (e) => versJours(e.fin) - versJours(e.debut) + 1;
 
 const chevauche = (a, b) => a.debut <= b.fin && b.debut <= a.fin;
+
+const reculer = (iso, jours) =>
+  new Date((versJours(iso) - jours) * JOUR_MS).toISOString().slice(0, 10);
 
 // Jours consécutifs avec au moins minJour cm, dans l'ordre chronologique.
 export function episodes(dates, neige, { minJour, retenir = () => true }) {
@@ -48,66 +56,92 @@ export function episodes(dates, neige, { minJour, retenir = () => true }) {
   return out;
 }
 
-const reference = (e, base = {}) => ({
-  debut: base.debut && base.debut < e.debut ? base.debut : e.debut,
-  fin: base.fin && base.fin > e.fin ? base.fin : e.fin,
+// Plusieurs épisodes vus comme un seul : plage et cumul d'ensemble.
+function agreger(liste) {
+  if (!liste.length) return null;
+  return {
+    debut: liste[0].debut,
+    fin: liste.at(-1).fin,
+    total: liste.reduce((a, e) => a + e.total, 0),
+    jours: liste.flatMap((e) => e.jours),
+  };
+}
+
+const aVenir = (e, jour) =>
+  (e?.jours ?? []).filter((j) => j.d >= jour).reduce((a, j) => a + j.v, 0);
+
+const reference = (e) => ({
+  debut: e.debut,
+  fin: e.fin,
   total: Math.round(e.total * 10) / 10,
   duree: duree(e),
   annule: false,
 });
 
 // eps : tous les épisodes de la série, y compris ceux déjà finis.
+// opts : { jour, seuil, hausse, marge, prolongeMin, memoire, inconnus }
+//   memoire  jours de passé dans la série : un épisode reste suivi tant que ses
+//            jours y figurent, sinon il reviendrait comme une « nouvelle »
+//   inconnus Set des dates sans valeur exploitable : pas d'annulation à l'aveugle
 // Renvoie une liste de décisions { type, episode, record, apres } :
-//   type    'nouvelle' | 'hausse' | 'prolonge' | 'annule' | null (rien à envoyer)
+//   type    'nouvelle' | 'hausse' | 'prolonge' | 'annule' | 'decale' | null
 //   record  état actuel (null pour une nouvelle)
 //   apres   état une fois la décision appliquée (null = oublier l'épisode)
 // Si l'envoi échoue, l'appelant garde `record` : l'alerte repart au run suivant.
-export function decider(eps, records, { jour, seuil, hausse }) {
+export function decider(eps, records, opts) {
+  const { jour, seuil, hausse, marge = 0, prolongeMin = 0, memoire = 0, inconnus = new Set() } = opts;
+  const minAVenir = Math.min(hausse, seuil);
   const decisions = [];
   const lies = new Set();
-  const principaux = new Set();
 
   for (const r of [...records].sort((a, b) => a.debut.localeCompare(b.debut))) {
-    const candidats = eps.filter((e) => chevauche(e, r));
-    candidats.forEach((e) => lies.add(e));
-    const c = candidats.reduce((m, e) => (!m || e.total > m.total ? e : m), null);
-
-    if (!c || c.total < seuil) {
-      if (r.fin < jour) decisions.push({ type: null, episode: c, record: r, apres: null });
-      else if (r.annule) decisions.push({ type: null, episode: c, record: r, apres: r });
-      else decisions.push({ type: 'annule', episode: c, record: r, apres: { ...r, annule: true } });
-      continue;
-    }
-
+    const touches = eps.filter((e) => chevauche(e, r));
     // Deux épisodes alertés que la prévision a fusionnés : un seul suivi.
-    if (principaux.has(c)) {
-      decisions.push({ type: null, episode: c, record: r, apres: null });
+    if (touches.some((e) => lies.has(e))) {
+      decisions.push({ type: null, episode: null, record: r, apres: null });
       continue;
     }
-    principaux.add(c);
+    touches.forEach((e) => lies.add(e));
+    const c = agreger(touches);
+    const venir = aVenir(c, jour);
+    const commence = touches.some((e) => e.debut < jour);
+    const finDeMemoire = r.fin < reculer(jour, memoire);
 
-    const elargi = {
-      ...r,
-      debut: c.debut < r.debut ? c.debut : r.debut,
-      fin: c.fin > r.fin ? c.fin : r.fin,
-    };
-    if (c.fin < jour) {
-      // Épisode tombé et fini : plus rien à annoncer, jamais d'annulation.
-      decisions.push({ type: null, episode: c, record: r, apres: elargi.fin < jour ? null : elargi });
-    } else if (r.annule) {
-      decisions.push({ type: 'nouvelle', episode: c, record: r, apres: reference(c, r) });
-    } else if (c.total >= r.total + hausse) {
-      decisions.push({ type: 'hausse', episode: c, record: r, apres: reference(c, r) });
-    } else if (duree(c) > r.duree) {
-      decisions.push({ type: 'prolonge', episode: c, record: r, apres: reference(c, r) });
+    let type = null;
+    if (r.annule) {
+      if (c && c.total >= seuil && venir >= minAVenir) type = 'nouvelle';
+    } else if (c && c.total >= r.total + hausse && venir >= hausse) {
+      type = 'hausse';
+    } else if (c && duree(c) > r.duree) {
+      const ajoutes = c.jours.filter((j) => j.d >= jour && (j.d < r.debut || j.d > r.fin));
+      if (ajoutes.reduce((a, j) => a + j.v, 0) >= prolongeMin && ajoutes.length) type = 'prolonge';
+    } else if ((c?.total ?? 0) < seuil - marge && !commence && r.fin >= jour) {
+      const plage = [...inconnus].some((d) => d >= r.debut && d <= r.fin);
+      if (!plage) type = 'annule';
+    }
+
+    if (type === 'annule') {
+      decisions.push({ type, episode: c, record: r, apres: { ...r, annule: true } });
+    } else if (type) {
+      decisions.push({ type, episode: c, record: r, apres: reference(c) });
     } else {
-      decisions.push({ type: null, episode: c, record: r, apres: elargi });
+      decisions.push({ type: null, episode: c, record: r, apres: finDeMemoire ? null : r });
     }
   }
 
   for (const e of eps) {
-    if (lies.has(e) || e.total < seuil || e.fin < jour) continue;
+    if (lies.has(e) || e.total < seuil || aVenir(e, jour) < minAVenir) continue;
     decisions.push({ type: 'nouvelle', episode: e, record: null, apres: reference(e) });
+  }
+
+  // Annonce déplacée sans chevauchement : un seul message plutôt que
+  // « Annulé » et « Neige annoncée » ensemble.
+  const a = decisions.findIndex((d) => d.type === 'annule');
+  const n = decisions.findIndex((d) => d.type === 'nouvelle' && !d.record);
+  if (a >= 0 && n >= 0) {
+    const fusion = { type: 'decale', episode: decisions[n].episode,
+      record: decisions[a].record, apres: decisions[n].apres };
+    return [...decisions.filter((_, i) => i !== a && i !== n), fusion];
   }
   return decisions;
 }

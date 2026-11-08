@@ -34,6 +34,7 @@ function lancer(script, mock, env = {}, etat = null) {
     return {
       code: r.status, out: r.stdout + r.stderr, fichiers: readdirSync(dir),
       etat: existsSync(fichierEtat) ? readFileSync(fichierEtat, 'utf8') : null,
+      journal: existsSync(join(dir, 'data/neige.csv')) ? readFileSync(join(dir, 'data/neige.csv'), 'utf8') : '',
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -156,8 +157,39 @@ test('annoncée : HAUSSE_CM abaissé -> +2 cm suffit', () => {
   assert.match(r.out, /ntfy → Neige revue à la hausse/);
 });
 test('annoncée : un jour de plus -> « prolongé »', () => {
-  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 1, 0]), REEL, etatDe(1, 2, 12));
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 3, 0]), REEL, etatDe(1, 2, 12));
   assert.match(r.out, /ntfy → Épisode de neige prolongé/);
+});
+test('annoncée : requête avec le bon modèle et les jours passés', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0]));
+  assert.match(r.out, /models=meteoswiss_icon_seamless/);
+  assert.match(r.out, /past_days=7/);
+  assert.match(r.out, /forecast_days=5/);
+});
+test('annoncée : le journal ne reçoit que les jours à venir', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([1, 2, 0, 0, 0], 'cm', [9, 9]), { ...REEL, SEUIL_CM: '999' });
+  assert.equal(r.code, 0, r.out);
+  const lignes = r.journal.trim().split('\n').slice(1);
+  assert.equal(lignes.length, 5);
+  assert.ok(lignes.every((l) => l.split(',')[2] >= jourLocal()), r.journal);
+});
+test('annoncée : annonce déplacée -> un seul message « décalée »', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 7, 5]), REEL, etatDe(0, 1, 12));
+  assert.match(r.out, /ntfy → Neige décalée/);
+  assert.doesNotMatch(r.out, /ntfy → (Annulé|Neige annoncée)/);
+});
+test('annoncée : neige tombée, trace aujourd\'hui, premier run -> pas d\'alerte', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([1.2, 0, 0, 0, 0], 'cm', [20]), REEL);
+  assert.equal(r.code, 0, r.out);
+  assert.doesNotMatch(r.out, /ntfy →/);
+});
+test('annoncée : variables de marge et de prolongation lues', () => {
+  const m = prev([0, 4, 5, 0, 0]);                 // 9 cm, seuil 10
+  assert.doesNotMatch(lancer('snow-forecast-alert.mjs', m, REEL, etatDe(1, 2, 12)).out, /ntfy →/);
+  assert.match(lancer('snow-forecast-alert.mjs', m, { ...REEL, MARGE_CM: '0' }, etatDe(1, 2, 12)).out, /ntfy → Annulé/);
+  const p = prev([0, 7, 5, 1, 0]);
+  assert.doesNotMatch(lancer('snow-forecast-alert.mjs', p, REEL, etatDe(1, 2, 12)).out, /ntfy →/);
+  assert.match(lancer('snow-forecast-alert.mjs', p, { ...REEL, PROLONGE_MIN_CM: '1' }, etatDe(1, 2, 12)).out, /prolongé/);
 });
 test('annoncée : sous le seuil -> annulation unique', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 3, 2, 0, 0]), REEL, etatDe(1, 2, 12));

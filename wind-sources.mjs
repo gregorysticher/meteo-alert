@@ -173,6 +173,10 @@ export async function previsionsArome(spots) {
   if (!resMeta.ok) throw new Error('meta AROME -> HTTP ' + resMeta.status);
   const init = (await resMeta.json()).last_run_initialisation_time;
   if (!Number.isFinite(init)) throw new Error('meta AROME sans heure de run');
+  // Source figee : l'archive n'ecrirait plus rien, en vert.
+  if (Date.now() / 1000 - init > 24 * 3600) {
+    throw new Error(`run AROME de plus de 24 h (${new Date(init * 1000).toISOString()})`);
+  }
   const emission = new Date(init * 1000).toISOString().slice(0, 16).replace(/[-:T]/g, '');
 
   const url = 'https://api.open-meteo.com/v1/forecast' +
@@ -244,7 +248,11 @@ export async function mesures(codes) {
 
 // ---- temperature de surface du lac --------------------------------------
 
-/** Non bloquant : renvoie null en cas d'echec, le reste continue. */
+/**
+ * Non bloquant : renvoie null en cas d'echec, le reste continue.
+ * Simulation au pas de 3 h : la valeur est celle du pas suivant, jusqu'a 3 h apres
+ * l'instant demande. Unite verifiee le 08/11/2026 (degC, profondeur 0,17 m).
+ */
 export async function tempLac(lac, lat, lon) {
   if (!lac) return null;
   const f = (d) =>

@@ -3,7 +3,7 @@ main = "src/index.mjs"
 compatibility_date = "2026-11-01"
 
 # Mêmes horaires que le cron GitHub de chaque workflow (UTC). Toute modification
-# se répercute dans TACHES (src/index.mjs) : test/worker.test.mjs le vérifie.
+# se répercute dans TACHES (src/taches.mjs) : test/worker.test.mjs le vérifie.
 [triggers]
 crons = ["17 1,5,9,13,17,21 * * *", "23 4,15 * * *", "47 5,16 * * *"]
 

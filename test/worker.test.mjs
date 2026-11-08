@@ -5,7 +5,8 @@
 import { test, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import worker, { TACHES, declencher } from '../worker/src/index.mjs';
+import worker from '../worker/src/index.mjs';
+import { TACHES, declencher } from '../worker/src/taches.mjs';
 
 afterEach(() => mock.restoreAll());
 
@@ -53,6 +54,25 @@ test('chaque declenchement est un VRAI run : jamais de DRY_RUN', () => {
     }
     assert.ok(['0', 'false'].includes(inputs.dry_run), workflow);
   }
+});
+
+test('les workflows transmettent vraiment l\'entree au script', () => {
+  const wind = readFileSync('.github/workflows/wind-alert.yml', 'utf8');
+  assert.ok(wind.includes("DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || '0' }}"));
+  assert.ok(readFileSync('wind-alert.mjs', 'utf8').includes("process.env.DRY_RUN === '1'"));
+  assert.equal(TACHES[WIND].inputs.dry_run, '0');
+  for (const f of ['snow-forecast-alert', 'snow-fresh-alert']) {
+    const yml = readFileSync(`.github/workflows/${f}.yml`, 'utf8');
+    assert.ok(yml.includes('DRY_RUN: ${{ inputs.dry_run }}'), f);
+    assert.match(yml, /dry_run:\n(.*\n){1,2}\s+type: boolean/, f);
+    assert.ok(readFileSync(`${f}.mjs`, 'utf8').includes('process.env.DRY_RUN === "true"'), f);
+  }
+  const annonce = readFileSync('.github/workflows/snow-forecast-alert.yml', 'utf8');
+  for (const v of ['HAUSSE_CM: ${{ vars.HAUSSE_NEIGE_CM }}', 'MARGE_CM: ${{ vars.MARGE_ANNUL_NEIGE_CM }}',
+    'PROLONGE_MIN_CM: ${{ vars.PROLONGE_MIN_NEIGE_CM }}', 'SEUIL_FORCE: ${{ inputs.seuil_cm }}']) {
+    assert.ok(annonce.includes(v), v);
+  }
+  assert.ok(wind.includes('-size +45M'), 'garde de taille des fichiers');
 });
 
 test('crons alignes : wrangler.toml = TACHES = cron de chaque workflow', () => {
