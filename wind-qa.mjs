@@ -8,25 +8,33 @@
 // est de mesurer l'ecart dans la duree, par spot et par echeance.
 //
 // Fichiers, commites par le workflow :
-//   data/forecasts.csv  archive brute des previsions
+//   data/forecasts/AAAA-MM.csv  archive brute des previsions, un fichier par
+//                       mois d'EMISSION (limite GitHub : 50 Mo avertissement,
+//                       100 Mo refus ; un fichier unique y serait arrive en 2027)
 //   data/qa.csv         appariements prevision <-> mesure
 //   data/mesures.csv    mesures horaires brutes par station
 //   data/alertes.csv    alertes envoyees
 //   data/alertes_qa.csv verdict de chaque alerte une fois la fenetre passee
+//
+// Colonne modele (archive et qa.csv) : ms = MeteoSuisse, celui des alertes ;
+// arome = second avis, archive seulement. Le biais qui corrige les alertes
+// (biaisParEcheance) ne lit QUE ms : AROME ne doit pas changer une alerte.
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { mesures } from './wind-sources.mjs';
 
 const DIR = 'data';
-const ARCHIVE = DIR + '/forecasts.csv';
+const ARCHIVES = DIR + '/forecasts';
 const QA = DIR + '/qa.csv';
 const MESURES = DIR + '/mesures.csv';
 const ALERTES = DIR + '/alertes.csv';
 const ALERTES_QA = DIR + '/alertes_qa.csv';
 
-const ENT_ARCHIVE = 'emission,spot,station,echeance,kn,q10,rafale,dir';
+const ENT_ARCHIVE = 'emission,spot,station,echeance,kn,q10,rafale,dir,modele';
 const ENT_QA =
-  'emission,spot,station,echeance,lead_h,prevu_kn,mesure_kn,erreur_kn';
+  'emission,spot,station,echeance,lead_h,prevu_kn,mesure_kn,erreur_kn,modele';
+export const MODELE_ALERTES = 'ms';
 const ENT_MESURES = 'ts,station,kn,rafale,dir';
 const ENT_ALERTES =
   'envoye_le,etage,spot,station,debut,fin,prevu_kn,corrige_kn,lead_h';
@@ -44,7 +52,7 @@ async function lire(path) {
 
 async function ajouter(path, entete, lignes) {
   if (!lignes.length) return 0;
-  await mkdir(DIR, { recursive: true });
+  await mkdir(dirname(path), { recursive: true });
   const existant = await lire(path);
   const corps = existant.trim()
     ? existant.trimEnd() + '\n' + lignes.join('\n') + '\n'
@@ -69,16 +77,49 @@ export function versCle(d) {
 
 // ---- 1. archive des previsions -------------------------------------------
 
-export async function archiver(emission, spots, parSpot) {
+/** Fichier d'archive d'une emission AAAAMMJJHHMM : son mois, en UTC. */
+export function fichierArchive(emission) {
+  return `${ARCHIVES}/${emission.slice(0, 4)}-${emission.slice(4, 6)}.csv`;
+}
+
+const nombre = (v) => (v === null || v === undefined ? '' : v.toFixed(1));
+
+/**
+ * Ajoute une emission a l'archive de son mois. Idempotent par emission et par
+ * modele : deux runs sur la meme emission (dispatch, cron de secours apres le
+ * declencheur externe) n'ecrivent qu'une fois. Renvoie le nombre de lignes.
+ */
+export async function archiver(emission, spots, parSpot, modele = MODELE_ALERTES) {
+  const fichier = fichierArchive(emission);
+  const fin = ',' + modele;
+  const deja = (await lire(fichier)).split('\n')
+    .some((l) => l.startsWith(emission + ',') && l.trimEnd().endsWith(fin));
+  if (deja) return 0;
+
   const lignes = [];
   for (const s of spots) {
     for (const l of parSpot.get(s.key) || []) {
       lignes.push([emission, s.key, s.station, l.date,
-        l.kn.toFixed(1), l.q10.toFixed(1), l.rafale.toFixed(1),
-        l.dir === null ? '' : Math.round(l.dir)].join(','));
+        l.kn.toFixed(1), nombre(l.q10), nombre(l.rafale),
+        l.dir === null ? '' : Math.round(l.dir), modele].join(','));
     }
   }
-  return ajouter(ARCHIVE, ENT_ARCHIVE, lignes);
+  return ajouter(fichier, ENT_ARCHIVE, lignes);
+}
+
+/**
+ * Lignes d'archive pouvant viser l'echeance donnee : mois de l'echeance et mois
+ * precedent (emissions partitionnees par mois, horizon < 1 mois). Un mois
+ * absent est simplement vide. Pas d'entete dans le resultat.
+ */
+export async function lignesArchive(echeance) {
+  const d = versDate(echeance);
+  const avant = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
+  const lignes = [];
+  for (const m of [versCle(avant), echeance]) {
+    lignes.push(...(await lire(fichierArchive(m))).split('\n').slice(1));
+  }
+  return lignes.filter((l) => l.trim());
 }
 
 // ---- 2. mesures brutes ----------------------------------------------------
@@ -112,48 +153,50 @@ export async function journaliserMesures(spots) {
 // ---- 3. appariement prevision <-> mesure ---------------------------------
 
 export async function apparier(spots) {
-  const archive = await lire(ARCHIVE);
-  if (!archive.trim()) return 0;
-
-  const codes = new Set(spots.map((s) => s.station));
-  const m = await mesures(codes);
   const now = new Date();
   now.setUTCMinutes(0, 0, 0);
   const cible = versCle(now);
 
+  const archive = await lignesArchive(cible);
+  if (!archive.length) return 0;
+
+  const codes = new Set(spots.map((s) => s.station));
+  const m = await mesures(codes);
+
   const vu = new Set();
   for (const l of (await lire(QA)).split('\n').slice(1)) {
-    const c = l.split(',');
-    if (c.length > 3) vu.add(c[0] + '|' + c[1] + '|' + c[3]);
+    const c = l.trimEnd().split(',');
+    if (c.length > 8) vu.add(c[0] + '|' + c[1] + '|' + c[3] + '|' + c[8]);
   }
 
   const lignes = [];
-  for (const l of archive.split('\n').slice(1)) {
-    const c = l.split(',');
-    if (c.length < 5) continue;
+  for (const l of archive) {
+    const c = l.trimEnd().split(',');
+    if (c.length < 9) continue;
     const [emission, spot, station, echeance, kn] = c;
+    const modele = c[8];
     if (echeance !== cible) continue;
-    if (vu.has(emission + '|' + spot + '|' + echeance)) continue;
+    if (vu.has(emission + '|' + spot + '|' + echeance + '|' + modele)) continue;
     const mes = m.get(station);
     if (!mes || mes.kn === null) continue;
     const lead = (versDate(echeance) - versDate(emission)) / 36e5;
     const fc = parseFloat(kn);
     lignes.push([emission, spot, station, echeance, lead.toFixed(1),
-      fc.toFixed(1), mes.kn.toFixed(1), (fc - mes.kn).toFixed(1)].join(','));
+      fc.toFixed(1), mes.kn.toFixed(1), (fc - mes.kn).toFixed(1), modele].join(','));
   }
   return ajouter(QA, ENT_QA, lignes);
 }
 
 /**
- * Biais moyen par classe d'echeance (6 h), calcule sur qa.csv.
+ * Biais moyen par classe d'echeance (6 h), calcule sur qa.csv, MeteoSuisse seul.
  * Negatif = la prevision sous-estime. C'est ce qui permet de corriger une
  * pre-alerte a J-5, ou l'ecart atteint 2 noeuds.
  */
 export async function biaisParEcheance() {
   const par = new Map();
   for (const l of (await lire(QA)).split('\n').slice(1)) {
-    const c = l.split(',');
-    if (c.length < 8) continue;
+    const c = l.trimEnd().split(',');
+    if (c.length < 9 || c[8] !== MODELE_ALERTES) continue;
     const lead = Math.round(parseFloat(c[4]) / 6) * 6;
     const err = parseFloat(c[7]);
     if (!Number.isFinite(err)) continue;
@@ -253,9 +296,22 @@ function stat(errs) {
 
 export async function rapport() {
   const lignes = (await lire(QA)).split('\n').slice(1)
-    .filter((l) => l.split(',').length > 7);
+    .filter((l) => l.split(',').length > 8);
   if (!lignes.length) return 'QA : aucun appariement pour l\'instant.';
 
+  const parModele = new Map();
+  for (const l of lignes) {
+    const m = l.trimEnd().split(',')[8];
+    if (!parModele.has(m)) parModele.set(m, []);
+    parModele.get(m).push(l);
+  }
+  // MeteoSuisse d'abord (celui des alertes), puis les seconds avis.
+  return [...parModele]
+    .sort(([a], [b]) => (b === MODELE_ALERTES) - (a === MODELE_ALERTES) || a.localeCompare(b))
+    .map(([m, ls]) => rapportModele(m, ls)).join('\n\n');
+}
+
+function rapportModele(modele, lignes) {
   const parSpot = new Map();
   const parLead = new Map();
   for (const l of lignes) {
@@ -269,7 +325,7 @@ export async function rapport() {
     parLead.get(lead).push(err);
   }
 
-  const out = ['QA previsions — ' + lignes.length + ' appariements', '',
+  const out = [`QA previsions ${modele} — ${lignes.length} appariements`, '',
     'Par spot :'];
   for (const [spot, errs] of [...parSpot].sort()) {
     const s = stat(errs);

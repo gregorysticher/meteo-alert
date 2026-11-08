@@ -40,7 +40,7 @@ jobs:
       # Regle d'affichage TRMNL (choisirReco) sur donnees simulees : hors
       # saison, aucun run reel ne l'exerce. Un test en echec bloque le run.
       - name: Tests
-        run: node --test test/reco.test.mjs
+        run: node --test test/reco.test.mjs test/qa.test.mjs
 
       - name: Previsions, alertes et QA
         # shell: bash explicite = -o pipefail. Sans lui, "| tee" masque le
@@ -76,3 +76,15 @@ jobs:
           done
           echo "::error::push des donnees QA impossible apres 3 essais"
           exit 1
+
+      # GitHub avertit a 50 Mo et refuse a 100 Mo par fichier. Run rouge bien
+      # avant, sinon les pushes echoueraient un jour sans prevenir. Apres le
+      # commit : les donnees du run sont deja poussees.
+      - name: Taille des fichiers de donnees
+        if: always()
+        run: |
+          gros=$(find data -type f -size +45M)
+          if [ -n "$gros" ]; then
+            echo "::error::fichiers de donnees au-dessus de 45 Mo : $gros"
+            exit 1
+          fi
