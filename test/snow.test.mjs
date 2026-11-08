@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, readdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,9 +19,11 @@ const MOCK = join(RACINE, 'test', 'helpers', 'mock-fetch.mjs');
 // cwd = dossier temporaire vide : un script qui écrirait malgré DRY_RUN le
 // ferait là (le test « aucun fichier écrit » le voit), jamais dans le vrai
 // journal du dépôt.
-function lancer(script, mock, env = {}) {
+function lancer(script, mock, env = {}, etat = null) {
   const dir = mkdtempSync(join(tmpdir(), 'neige-run-'));
+  const fichierEtat = join(dir, 'snow-forecast-alerted.json');
   try {
+    if (etat !== null) writeFileSync(fichierEtat, etat);
     const r = spawnSync(process.execPath,
       ['--import', 'file:///' + MOCK.replace(/\\/g, '/'), join(RACINE, script)], {
         cwd: dir, encoding: 'utf8',
@@ -29,7 +31,10 @@ function lancer(script, mock, env = {}) {
           SEUIL_CM: '10', NTFY_TOPIC_NEIGE: '',
           MOCK_FETCH: typeof mock === 'string' ? mock : JSON.stringify(mock), ...env },
       });
-    return { code: r.status, out: r.stdout + r.stderr, fichiers: readdirSync(dir) };
+    return {
+      code: r.status, out: r.stdout + r.stderr, fichiers: readdirSync(dir),
+      etat: existsSync(fichierEtat) ? readFileSync(fichierEtat, 'utf8') : null,
+    };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -65,10 +70,19 @@ test('journal : prévisions, mesures dédoublonnées, rapport J-1', () => {
 
 // ---- alerte annoncée (Open-Meteo) ----------------------------------------
 
-const prev = (neige, unite = 'cm') => ({ body: {
+// passes = valeurs des jours precedents, du plus ancien a hier (past_days).
+const prev = (neige, unite = 'cm', passes = []) => ({ body: {
   daily_units: { snowfall_sum: unite },
-  daily: { time: neige.map((_, i) => jourLocal(i)), snowfall_sum: neige },
+  daily: {
+    time: [...passes.map((_, i) => jourLocal(i - passes.length)), ...neige.map((_, i) => jourLocal(i))],
+    snowfall_sum: [...passes, ...neige],
+  },
 } });
+
+const REEL = { DRY_RUN: 'false', NTFY_TOPIC_NEIGE: 'x' };
+const etatDe = (debut, fin, total, annule = false) => JSON.stringify({ episodes: [
+  { debut: jourLocal(debut), fin: jourLocal(fin), total, duree: fin - debut + 1, annule },
+] });
 
 test('annoncée : HTTP 400 -> rouge', () => {
   const r = lancer('snow-forecast-alert.mjs', { status: 400, body: { error: true, reason: 'invalid String value' } });
@@ -105,6 +119,85 @@ test('annoncée : rien de prévu -> vert, rien à notifier', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0.2, 0, 0]));
   assert.equal(r.code, 0, r.out);
   assert.match(r.out, /À notifier : 0/);
+});
+
+test('annoncée : valeurs nulles dans le passé seul -> vert', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0], 'cm', [null, null]));
+  assert.equal(r.code, 0, r.out);
+});
+test('annoncée : passé renseigné mais avenir tout à null -> rouge', () => {
+  assert.equal(lancer('snow-forecast-alert.mjs', prev([null, null], 'cm', [5, 5])).code, 1);
+});
+test('annoncée : envoi réel d\'une nouvelle alerte, état écrit, second run muet', () => {
+  const m = prev([0, 7, 5, 0, 0]);
+  const r = lancer('snow-forecast-alert.mjs', m, REEL);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /Neige annoncée/);
+  const e = JSON.parse(r.etat);
+  assert.deepEqual([e.episodes[0].debut, e.episodes[0].total, e.episodes[0].duree],
+    [jourLocal(1), 12, 2]);
+  const r2 = lancer('snow-forecast-alert.mjs', m, REEL, r.etat);
+  assert.match(r2.out, /À notifier : 0/);
+  assert.doesNotMatch(r2.out, /ntfy →/);
+  assert.equal(r2.etat, r.etat, 'état inchangé : pas de commit inutile');
+});
+test('annoncée : +5 cm -> « revue à la hausse »', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 10, 7, 0, 0]), REEL, etatDe(1, 2, 12));
+  assert.match(r.out, /ntfy → Neige revue à la hausse/);
+  assert.equal(JSON.parse(r.etat).episodes[0].total, 17);
+});
+test('annoncée : +2 cm -> rien', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 8, 6, 0, 0]), REEL, etatDe(1, 2, 12));
+  assert.match(r.out, /À notifier : 0/);
+});
+test('annoncée : HAUSSE_CM abaissé -> +2 cm suffit', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 8, 6, 0, 0]),
+    { ...REEL, HAUSSE_CM: '2' }, etatDe(1, 2, 12));
+  assert.match(r.out, /ntfy → Neige revue à la hausse/);
+});
+test('annoncée : un jour de plus -> « prolongé »', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 1, 0]), REEL, etatDe(1, 2, 12));
+  assert.match(r.out, /ntfy → Épisode de neige prolongé/);
+});
+test('annoncée : sous le seuil -> annulation unique', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 3, 2, 0, 0]), REEL, etatDe(1, 2, 12));
+  assert.match(r.out, /ntfy → Annulé — neige/);
+  assert.equal(JSON.parse(r.etat).episodes[0].annule, true);
+  const r2 = lancer('snow-forecast-alert.mjs', prev([0, 3, 2, 0, 0]), REEL, r.etat);
+  assert.doesNotMatch(r2.out, /ntfy →/);
+});
+test('annoncée : épisode en cours, jours passés comptés -> pas de fausse annulation', () => {
+  // Alerte hier sur hier + aujourd'hui (12 cm), aujourd'hui n'en attend plus que 4.
+  const r = lancer('snow-forecast-alert.mjs', prev([4, 0, 0, 0, 0], 'cm', [8]), REEL, etatDe(-1, 0, 12));
+  assert.equal(r.code, 0, r.out);
+  assert.doesNotMatch(r.out, /ntfy →/);
+});
+test('annoncée : ntfy en panne -> rouge, état conservé, l\'alerte repartira', () => {
+  const etat = etatDe(1, 2, 12);
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 3, 2, 0, 0]),
+    { ...REEL, MOCK_NTFY_STATUS: '500' }, etat);
+  assert.equal(r.code, 1, r.out);
+  assert.equal(r.etat, etat);
+});
+test('annoncée : seuil forcé -> ni annulation ni état écrit', () => {
+  const etat = etatDe(1, 2, 12);
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 3, 2, 0, 0]),
+    { ...REEL, SEUIL_CM: '999', SEUIL_FORCE: '999' }, etat);
+  assert.equal(r.code, 0, r.out);
+  assert.doesNotMatch(r.out, /ntfy →/);
+  assert.equal(r.etat, etat);
+});
+test('annoncée : état illisible -> rouge, alerte quand même', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), REEL, '{pas du json');
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /ntfy → Neige annoncée/);
+});
+test('annoncée : DRY_RUN avec décisions -> rien envoyé, état intact', () => {
+  const etat = etatDe(1, 2, 12);
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 3, 2, 0, 0]), {}, etat);
+  assert.match(r.out, /\[annule\]/);
+  assert.doesNotMatch(r.out, /ntfy →/);
+  assert.equal(r.etat, etat);
 });
 
 // ---- neige fraîche (SLF) ---------------------------------------------------

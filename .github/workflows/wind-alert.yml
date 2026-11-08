@@ -18,6 +18,7 @@ on:
     # fenetre, pas par l'heure du run : l'heure exacte n'est pas critique.
     # Historique : "15 */2" (12 creneaux) ne livrait que 4 runs/jour, partis
     # avec 4 a 7 h de retard. 6 creneaux espaces de 4 h : a suivre (TODO).
+    # Secours du declencheur Cloudflare (worker/), meme horaire.
     - cron: "17 1,5,9,13,17,21 * * *"
 
 permissions:
@@ -40,7 +41,7 @@ jobs:
       # Regle d'affichage TRMNL (choisirReco) sur donnees simulees : hors
       # saison, aucun run reel ne l'exerce. Un test en echec bloque le run.
       - name: Tests
-        run: node --test test/reco.test.mjs test/qa.test.mjs test/wind-e2e.test.mjs
+        run: node --test test/reco.test.mjs test/qa.test.mjs test/wind-e2e.test.mjs test/worker.test.mjs
 
       - name: Previsions, alertes et QA
         # shell: bash explicite = -o pipefail. Sans lui, "| tee" masque le

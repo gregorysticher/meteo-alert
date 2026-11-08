@@ -7,20 +7,28 @@
 // (HTTP 400, "invalid String value") et a laissé l'alerte aveugle du 15/10 au
 // 07/11/2026.
 //
-// Un "épisode" = jours consécutifs avec de la neige prévue. L'alerte se
-// déclenche sur le cumul de l'épisode, pas sur une seule journée.
+// Un "épisode" = jours consécutifs avec de la neige, jours passés compris
+// (past_days), sinon le cumul baisserait tout seul à mesure que l'épisode
+// avance. L'alerte se déclenche sur le cumul de l'épisode, pas sur une seule
+// journée. Règles d'envoi (nouvelle, hausse, prolongation, annulation) :
+// snow-episodes.mjs.
 //
 // Saison : 15 octobre → 15 avril.
 //
 // Env requis  : NTFY_TOPIC_NEIGE
 // Env optionnel :
 //   DRY_RUN=true         → analyse sans notifier ni écrire
-//   SEUIL_CM=10          → abaisse le seuil (test)
+//   SEUIL_CM=10          → seuil en cm (variable de dépôt SEUIL_NEIGE_CM)
+//   SEUIL_FORCE=<cm>     → surcharge manuelle : ni annulation ni état écrit, un
+//                          seuil de test ne doit pas toucher aux vrais épisodes
+//   HAUSSE_CM=5          → nouvelle alerte si le cumul monte d'autant (variable
+//                          de dépôt HAUSSE_NEIGE_CM)
 //   IGNORER_SAISON=true  → force l'analyse hors saison (test en été)
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
 import { journaliserPrevision } from "./snow-qa.mjs";
+import { episodes as decouper, decider } from "./snow-episodes.mjs";
 
 // ══════ PARAMÈTRES ══════
 const LAT = 46.1913556421;
@@ -29,7 +37,10 @@ const ALT = 2022;
 const LIEU = "Les Collines";
 
 const SEUIL_CM = Number(process.env.SEUIL_CM) || 20;  // cumul sur l'épisode
+const HAUSSE_CM = Number(process.env.HAUSSE_CM) || 5;
+const SEUIL_FORCE = Boolean(process.env.SEUIL_FORCE);
 const MIN_JOUR_CM = 1;                                // ignore les traces
+const JOURS_PASSES = 7;                               // épisode en cours
 
 const SAISON_DEBUT = 1015;
 const SAISON_FIN = 415;
@@ -69,28 +80,62 @@ function label(jourISO) {
 }
 
 function chargerEtat() {
-  if (!existsSync(ETAT_FILE)) return { alerted: [] };
+  if (!existsSync(ETAT_FILE)) return [];
   try {
     const e = JSON.parse(readFileSync(ETAT_FILE, "utf-8"));
-    return { alerted: Array.isArray(e.alerted) ? e.alerted : [] };
-  } catch {
-    return { alerted: [] };
+    return Array.isArray(e.episodes) ? e.episodes : [];
+  } catch (err) {
+    // On continue (au pire une alerte en double, jamais une alerte perdue),
+    // mais le run est rouge : un état illisible ne doit pas passer inaperçu.
+    console.error(`État illisible (${ETAT_FILE}) : ${err.message}`);
+    process.exitCode = 1;
+    return [];
   }
 }
 
-function sauverEtat(alerted, jour) {
-  const propre = alerted.filter((id) => id.slice(0, 10) >= jour).slice(-30);
+function sauverEtat(episodes) {
   writeFileSync(
     ETAT_FILE,
-    JSON.stringify({ alerted: propre, updatedAt: new Date().toISOString() }, null, 2) + "\n"
+    JSON.stringify({ episodes, updatedAt: new Date().toISOString() }, null, 2) + "\n"
   );
-  console.log(`${ETAT_FILE} mis à jour (${propre.length} entrée(s)).`);
+  console.log(`${ETAT_FILE} mis à jour (${episodes.length} épisode(s) suivi(s)).`);
+}
+
+const periode = (e) =>
+  e.debut === e.fin ? label(e.debut) : `${label(e.debut)} → ${label(e.fin)}`;
+
+function notification({ type, episode: e, record: r }) {
+  if (type === "annule") {
+    const reste = e ? `${Math.round(e.total)} cm prévus désormais` : "plus rien de prévu";
+    return {
+      titre: `Annulé — neige ${LIEU}`,
+      corps: `L'épisode annoncé (${periode(r)}, ${Math.round(r.total)} cm) ` +
+        `repasse sous le seuil de ${SEUIL_CM} cm : ${reste}.`,
+      priorite: "default",
+    };
+  }
+  const detail = e.jours.map((j) => `${label(j.d)} ${Math.round(j.v)} cm`).join("\n");
+  const titres = {
+    nouvelle: `Neige annoncée — ${LIEU}`,
+    hausse: `Neige revue à la hausse — ${LIEU}`,
+    prolonge: `Épisode de neige prolongé — ${LIEU}`,
+  };
+  const avant = {
+    nouvelle: "",
+    hausse: ` (${Math.round(r?.total)} cm à la dernière alerte)`,
+    prolonge: ` (${r?.duree} j à la dernière alerte)`,
+  };
+  return {
+    titre: titres[type],
+    corps: `${Math.round(e.total)} cm cumulés${avant[type]} · ${periode(e)}\n${detail}`,
+    priorite: "high",
+  };
 }
 
 // ══════ MAIN ══════
 async function main() {
   const jour = aujourdhuiLocal();
-  console.log(`${LIEU} (${ALT} m) · seuil ${SEUIL_CM} cm cumulés`);
+  console.log(`${LIEU} (${ALT} m) · seuil ${SEUIL_CM} cm cumulés · hausse ${HAUSSE_CM} cm`);
   console.log(`Date locale : ${jour}\n`);
 
   if (!enSaison(jour) && !IGNORER_SAISON) {
@@ -105,7 +150,8 @@ async function main() {
     "&daily=snowfall_sum,temperature_2m_max" +
     "&models=meteoswiss_icon_seamless" +
     `&timezone=${encodeURIComponent(TZ)}` +
-    "&forecast_days=5";   // ICON-CH2 plafonne à 120 h
+    "&forecast_days=5" +  // ICON-CH2 plafonne à 120 h
+    `&past_days=${JOURS_PASSES}`;
 
   console.log(`Requête : ${url}\n`);
 
@@ -141,12 +187,16 @@ async function main() {
 
   const dates = data.daily?.time || [];
   const neige = data.daily?.snowfall_sum || [];
+  // À venir seulement : c'est ce qui prouve que l'alerte voit quelque chose.
   // Réponse 200 mais vide, ou sans aucune valeur de neige exploitable :
   // l'alerte serait aveugle, le run doit être rouge.
-  const valides = neige.filter((v) => typeof v === "number" && Number.isFinite(v));
-  if (dates.length === 0 || neige.length !== dates.length || valides.length === 0) {
+  const iFutur = dates.flatMap((d, i) => (d >= jour ? [i] : []));
+  const datesFutur = iFutur.map((i) => dates[i]);
+  const neigeFutur = iFutur.map((i) => neige[i]);
+  const valides = neigeFutur.filter((v) => typeof v === "number" && Number.isFinite(v));
+  if (datesFutur.length === 0 || neige.length !== dates.length || valides.length === 0) {
     console.log(
-      `Données journalières inexploitables (${dates.length} jours, ` +
+      `Données journalières inexploitables (${datesFutur.length} jours à venir, ` +
       `${valides.length} valeurs de neige) — aucune alerte.`
     );
     process.exitCode = 1;
@@ -154,81 +204,57 @@ async function main() {
   }
 
   console.log("\nPrévisions journalières :");
-  for (let i = 0; i < dates.length; i++) {
-    console.log(`  ${label(dates[i])} · ${neige[i]} cm`);
+  for (let i = 0; i < datesFutur.length; i++) {
+    console.log(`  ${label(datesFutur[i])} · ${neigeFutur[i]} cm`);
   }
   if (!DRY_RUN) {
-    console.log(`Journal neige : ${journaliserPrevision(jour, dates, neige)} ligne(s) ajoutée(s).`);
+    console.log(`Journal neige : ${journaliserPrevision(jour, datesFutur, neigeFutur)} ligne(s) ajoutée(s).`);
   }
 
-  // Regroupement en épisodes de jours consécutifs enneigés
-  const episodes = [];
-  let cur = null;
-  for (let i = 0; i < dates.length; i++) {
-    const v = neige[i];
-    // Valeur absente ou aberrante (cf. remarque Open-Meteo sur le niveau sol)
-    const valide = typeof v === "number" && Number.isFinite(v) && v >= 0;
-    const jourRetenu = enSaison(dates[i]) || IGNORER_SAISON;
-    if (valide && v >= MIN_JOUR_CM && jourRetenu) {
-      if (cur) {
-        cur.fin = dates[i];
-        cur.total += v;
-        cur.jours.push({ d: dates[i], v });
-      } else {
-        cur = { debut: dates[i], fin: dates[i], total: v, jours: [{ d: dates[i], v }] };
-      }
-    } else if (cur) {
-      episodes.push(cur);
-      cur = null;
-    }
-  }
-  if (cur) episodes.push(cur);
+  const episodes = decouper(dates, neige, {
+    minJour: MIN_JOUR_CM,
+    retenir: (d) => enSaison(d) || IGNORER_SAISON,
+  });
 
   console.log(`\nÉpisodes neigeux détectés : ${episodes.length}`);
-
-  const retenus = episodes.filter((e) => e.total >= SEUIL_CM);
   for (const e of episodes) {
     const marque = e.total >= SEUIL_CM ? "✓" : "✗";
-    console.log(
-      `  ${marque} ${label(e.debut)}${e.debut !== e.fin ? " → " + label(e.fin) : ""} · ${Math.round(e.total)} cm`
-    );
+    const fini = e.fin < jour ? " (fini)" : "";
+    console.log(`  ${marque} ${periode(e)} · ${Math.round(e.total)} cm${fini}`);
   }
 
-  const etat = chargerEtat();
-  const nouveaux = retenus.filter(
-    (e) => !etat.alerted.includes(`${e.debut}|${e.fin}|${Math.round(e.total)}`)
-  );
+  const avant = chargerEtat();
+  let decisions = decider(episodes, avant, { jour, seuil: SEUIL_CM, hausse: HAUSSE_CM });
+  if (SEUIL_FORCE) {
+    decisions = decisions.filter((d) => d.type !== "annule");
+    console.log("Seuil forcé : ni annulation ni état écrit.");
+  }
+  const aEnvoyer = decisions.filter((d) => d.type);
 
-  console.log(`\nÀ notifier : ${nouveaux.length}`);
+  console.log(`\nÀ notifier : ${aEnvoyer.length}`);
+  for (const d of aEnvoyer) console.log(`  [${d.type}] ${notification(d).corps.split("\n")[0]}`);
 
   if (DRY_RUN) {
     console.log("\n*** DRY_RUN — aucune notif envoyée, aucun état écrit ***");
     return;
   }
 
-  let envoyes = 0;
-  for (const e of nouveaux) {
-    const periode =
-      e.debut === e.fin ? label(e.debut) : `${label(e.debut)} → ${label(e.fin)}`;
-    const detail = e.jours
-      .map((j) => `${label(j.d)} ${Math.round(j.v)} cm`)
-      .join("\n");
-
-    // Mémorisé seulement si l'envoi a réussi, sinon l'épisode serait
-    // considéré comme notifié sans que rien ne soit parti.
-    const ok = await notifier(
-      NTFY_TOPIC,
-      `Neige annoncée — ${LIEU}`,
-      `${Math.round(e.total)} cm cumulés · ${periode}\n${detail}`,
-      { priorite: "high", tags: ["snowflake"] }
-    );
-    if (ok) {
-      etat.alerted.push(`${e.debut}|${e.fin}|${Math.round(e.total)}`);
-      envoyes++;
+  // Sans envoi réussi, on garde l'état d'avant : l'alerte repartira au run suivant.
+  const apres = [];
+  for (const d of decisions) {
+    let garde = d.apres;
+    if (d.type) {
+      const n = notification(d);
+      const ok = await notifier(NTFY_TOPIC, n.titre, n.corps, {
+        priorite: n.priorite,
+        tags: d.type === "annule" ? ["snowflake", "annul"] : ["snowflake"],
+      });
+      if (!ok) garde = d.record;
     }
+    if (garde) apres.push(garde);
   }
 
-  if (envoyes > 0) sauverEtat(etat.alerted, jour);
+  if (!SEUIL_FORCE && JSON.stringify(apres) !== JSON.stringify(avant)) sauverEtat(apres);
 }
 
 main()

@@ -37,7 +37,7 @@ jobs:
       # Chemins d'échec (API refusée, muette, vide) sur fetch simulé :
       # un test en échec bloque le run, il apparaît en rouge.
       - name: Tests
-        run: node --test test/snow.test.mjs
+        run: node --test test/snow.test.mjs test/snow-episodes.test.mjs
 
       - name: Vérifier les chutes annoncées
         env:
@@ -45,6 +45,9 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           # Priorité : input manuel > variable de dépôt > défaut du script (20)
           SEUIL_CM: ${{ inputs.seuil_cm || vars.SEUIL_NEIGE_CM }}
+          # Surcharge manuelle : le script n'annule rien et n'écrit pas d'état.
+          SEUIL_FORCE: ${{ inputs.seuil_cm }}
+          HAUSSE_CM: ${{ vars.HAUSSE_NEIGE_CM }}
         run: node snow-forecast-alert.mjs
 
       - name: Commit l'état si modifié
@@ -60,7 +63,7 @@ jobs:
             echo "Rien à committer."
             exit 0
           fi
-          git commit -m "chore: chute annoncée notifiée / journal neige [skip ci]"
+          git commit -m "chore: alerte neige annoncée / journal neige [skip ci]"
           # wind-alert pousse aussi dans le dépôt : rebase avant push, 3 essais.
           for i in 1 2 3; do
             git pull --rebase --autostash && git push && exit 0
