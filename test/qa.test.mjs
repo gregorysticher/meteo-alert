@@ -96,6 +96,15 @@ test('appariement a cheval sur deux mois (vraie heure courante)', async () => {
   mock.restoreAll();
 });
 
+test('volume reel : deux mois de 400 000 lignes passent (run du 08/11 rouge sans cela)', async () => {
+  mkdirSync('data/forecasts', { recursive: true });
+  const rang = '202611080500,reposoir,GVE,202611081000,10.0,8.0,15.0,90,ms\n';
+  const entete = 'emission,spot,station,echeance,kn,q10,rafale,dir,modele\n';
+  writeFileSync('data/forecasts/2026-10.csv', entete + rang.repeat(400000));
+  writeFileSync('data/forecasts/2026-11.csv', entete + rang.repeat(400000));
+  assert.equal((await lignesArchive('202611081000')).length, 800000);
+});
+
 test('apparier : archive absente -> 0, sans appeler les mesures', async () => {
   const f = mock.method(globalThis, 'fetch', async () => { throw new Error('ne doit pas etre appele'); });
   assert.equal(await apparier(SPOTS), 0);

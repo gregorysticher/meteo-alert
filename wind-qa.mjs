@@ -115,11 +115,13 @@ export async function archiver(emission, spots, parSpot, modele = MODELE_ALERTES
 export async function lignesArchive(echeance) {
   const d = versDate(echeance);
   const avant = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
-  const lignes = [];
+  // Pas de push(...lignes) : l'etalement depasse la pile au volume reel (un
+  // mois d'archive fait des centaines de milliers de lignes).
+  const parties = [];
   for (const m of [versCle(avant), echeance]) {
-    lignes.push(...(await lire(fichierArchive(m))).split('\n').slice(1));
+    parties.push((await lire(fichierArchive(m))).split('\n').slice(1));
   }
-  return lignes.filter((l) => l.trim());
+  return parties.flat().filter((l) => l.trim());
 }
 
 // ---- 2. mesures brutes ----------------------------------------------------
