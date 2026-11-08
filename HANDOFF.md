@@ -82,7 +82,8 @@ Seul **DASHBOARD** est affiché ; il fusionne (Plugin Merge) les autres.
 | Météo Carouge | 394232 | Polling Open-Meteo | `M` | Prévisions, 7 jours, pluie, UV, phénomènes |
 | Neige Les Collines | 395305 | Polling Open-Meteo (16 j) | `S` | Chutes, hauteur au sol |
 | Vent Wingfoil | 471074 | Webhook (alimenté par `wind-alert`) | `W` | Spots vent |
-| Wind Forecast | 392131 | Recette lecture seule | — | Obsolète, « Degraded », à retirer |
+
+Wind Forecast (392131), recette obsolète, a été désinstallé le 2026-11-08.
 
 E-mails de santé TRMNL activés sur les 5 plugins actifs (07/11/2026).
 

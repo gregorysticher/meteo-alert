@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-07
+Dernière mise à jour : 2026-11-08
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 À lire au début de chaque session, à mettre à jour à chaque fin de séance
@@ -22,9 +22,6 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 - [ ] **Valider le design spec** [`docs/spec-2026-11-07.md`](docs/spec-2026-11-07.md)
       (partie A à relire, décisions B3 à B7), éventuellement avec la
       session Cowork.
-- [ ] **Retirer le plugin TRMNL « Wind Forecast »** (392131) : *Remove
-      plugin* sur trmnl.com/plugin_settings/392131/edit. Refusé à Claude par
-      le classifieur de sécurité. Spec B1.
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
 - [ ] **WindLive** : leur `robots.txt` interdit `/api/`. Décider si on leur
@@ -63,6 +60,8 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-08 — Plugin TRMNL « Wind Forecast » (392131) désinstallé ; playlist
+      et DASHBOARD intacts (spec B1).
 - [x] 2026-11-07 — Revue QA indépendante + contre-vérification : 14 puis 6
       constats ; importants tous corrigés et testés (37 tests), mineurs au
       spec B7. Détail :
