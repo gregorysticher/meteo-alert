@@ -20,6 +20,9 @@ faite, fais-la d'abord.
   qui est impossible (secrets du dépôt, matériel).
 - Le markup TRMNL s'édite dans l'interface TRMNL via Chrome, jamais dans
   `../trmnl-markup` (copie écrite par `trmnl-sync[bot]`, lecture seule).
+- Le payload TRMNL est un contrat public, consommé par DASHBOARD 392375 : ne retirer
+  aucun champ sans prévenir. Description : `docs/contrat-trmnl.md`. Pas de calcul ni de
+  copie en Liquid : le markup rend, `meteo-alert` décide.
 - Couleur inversée (`label--filled`) = uniquement ce que Greg doit regarder.
 - Sonde en lecture seule, puis `DRY_RUN`, avant toute mise en production.
   Un échec doit rendre le run rouge.

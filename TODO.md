@@ -19,13 +19,11 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
       Échéance : avant le 2027-04-15.
-- [ ] **Contrat de données TRMNL** : webhook gardé (recommandation de Claude) ou
-      polling ? Sur un oui, Claude écrit le contrat dans `meteo-alert`, inscrit les
-      lignes dans les deux `CLAUDE.md` et corrige les 7 écarts relevés
-      le 2026-11-08 (`data/latest.json` n'existe pas).
-- [ ] **Cumul neige à l'écran (B4.2)** : variante A (« 6 cm · cumul 23 cm ») ou B
-      (« 23 cm · Mar 10 → Jeu 12 »), maquettes envoyées le 2026-11-08. À décider
-      aussi : le calcul en Liquid sur le plugin Neige, source distincte de l'alerte.
+- [ ] **Cumul neige à l'écran (B4.2)** : le plugin Neige n'utilise pas le modèle de
+      l'alerte (pas de `models`, 16 jours) ; le cumul viendra donc de `meteo-alert`.
+      Choisir l'affichage : variante A (« 6 cm · cumul 23 cm ») ou B (« 23 cm · Mar 10
+      → Jeu 12 »), maquettes du 2026-11-08. À décider aussi : la ligne neige continue-t-elle
+      à annoncer les chutes au-delà de l'horizon de l'alerte (24 cm le 17/11 aujourd'hui) ?
 - [ ] **Guest Mode du TRMNL X** : disponible (firmware 1.8.18 installé). Recréer
       Wind Forecast (config au spec B1, Open-Meteo) ou faire un écran vent alimenté
       par `meteo-alert` ?
@@ -77,6 +75,10 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-08 — Contrat TRMNL écrit (`docs/contrat-trmnl.md`), webhook conservé. Le
+      markup ne décide plus rien sur le vent : saison, spot mesuré, état et fin de
+      fenêtre viennent du payload. Heure de fin corrigée dans l'alerte ntfy, qui
+      annonçait une heure de moins.
 - [x] 2026-11-08 — Décisions du spec appliquées : `data/forecasts/` et `data/qa/` par
       mois, AROME archivé (B5.1), gradient journalisé et affiché (B6), annulation
       vent seulement si aucun spot ne tient (B7.1), `lead_min_h` 0 (B7.2), alerte

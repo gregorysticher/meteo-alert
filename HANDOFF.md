@@ -75,6 +75,9 @@ TRMNL écraserait le commit. Le markup s'édite dans l'interface TRMNL (voir §6
 
 ### Plugins TRMNL
 
+Contrat du payload vent : [`docs/contrat-trmnl.md`](docs/contrat-trmnl.md). Le markup
+rend, `meteo-alert` décide.
+
 Seul **DASHBOARD** est affiché ; il fusionne (Plugin Merge) les autres.
 
 | Plugin | ID | Stratégie | Variable Liquid | Rôle |
@@ -191,9 +194,7 @@ apparaît à l'écran : « Reposoir · Dim 10–14 h » (« Auj. » si aujourd'h
 - `wind-select.mjs` (fonctions pures) : `local()` expose `iso` ;
   `fenetre()` ; `meilleure()` (niveau 3, mêmes filtres sans seuil) ;
   `choisirReco()`.
-- Payload : `j` et `kn` corrigé du biais par spot ; objet `reco` racine
-  `{ n, min, j, de, a, fin, kn, raf, ok }`, `fin` = epoch UTC (s) de fin du
-  dernier créneau horaire, `ok` = tient le seuil. `reco` nul hors saison.
+- Payload : décrit dans [`docs/contrat-trmnl.md`](docs/contrat-trmnl.md), qui fait foi.
 - Markup : lit `W.reco`, `label--filled` si `ok`, actif tant que
   `now_s < W.reco.fin` (plus de fenêtre « passée » le vendredi soir).
 - « Tenir » = la **prochaine** fenêtre (une fenêtre commencée compte sur
