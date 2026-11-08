@@ -115,6 +115,12 @@ test('QA 5 : la veille revisee de 0,8 a 1,2 cm n\'est pas une prolongation', () 
   const d = decider([ep(LU, [1.2, 7, 5])], [rec(MA, ME, 12)], OPT);
   assert.deepEqual(types(d), [null]);
 });
+test('jour passe de 3 cm ajoute par revision : pas une prolongation', () => {
+  assert.deepEqual(types(decider([ep(LU, [3, 7, 5])], [rec(MA, ME, 12)], OPT)), [null]);
+});
+test('hausse superieure au seuil : la nouvelle se juge sur le seuil', () => {
+  assert.deepEqual(types(decider([ep(ME, [12])], [], { ...OPT, hausse: 15 })), ['nouvelle']);
+});
 test('decale sans s\'allonger : rien, la plage annoncee ne bouge pas', () => {
   const d = decider([ep(JE, [7, 5])], [rec(ME, JE, 12)], OPT);
   assert.deepEqual(types(d), [null]);
@@ -164,6 +170,14 @@ test('annule puis repasse au seuil -> nouvelle, reference remise a zero', () => 
 });
 test('annule : repasse entre seuil - marge et seuil -> reste annule, muet', () => {
   assert.deepEqual(types(decider([ep(ME, [5, 4])], [rec(ME, JE, 12, true)], OPT)), [null]);
+});
+test('CV A : effondrement avec un jour de plus -> annulation, pas de prolongation', () => {
+  assert.deepEqual(types(decider([ep(ME, [1, 1.5])], [rec(ME, ME, 15)], OPT)), ['annule']);
+  assert.deepEqual(types(decider([ep(ME, [1, 3])], [rec(ME, ME, 15)], OPT)), ['annule']);
+  assert.deepEqual(types(decider([ep(ME, [8, 6])], [rec(ME, ME, 15)], OPT)), ['prolonge']);
+});
+test('CV B : une trace tombee ne bloque pas l\'annulation d\'une chute a venir', () => {
+  assert.deepEqual(types(decider([ep(LU, [1.2, 1.1, 2])], [rec(LU, ME, 17)], OPT)), ['annule']);
 });
 test('QA 4a : neige en cours sous le seuil -> jamais d\'annulation', () => {
   // Alerte 12 cm (8+4). 6 cm tombes hier, 1 cm prevu : 7 cm tombent bel et bien.

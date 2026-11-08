@@ -191,6 +191,32 @@ test('annoncée : variables de marge et de prolongation lues', () => {
   assert.doesNotMatch(lancer('snow-forecast-alert.mjs', p, REEL, etatDe(1, 2, 12)).out, /ntfy →/);
   assert.match(lancer('snow-forecast-alert.mjs', p, { ...REEL, PROLONGE_MIN_CM: '1' }, etatDe(1, 2, 12)).out, /prolongé/);
 });
+test('annoncée : réglages absurdes -> rouge, défauts appliqués', () => {
+  const m = prev([0, 7, 5, 0, 0]);
+  for (const env of [{ HAUSSE_CM: '0' }, { MARGE_CM: '10' }, { MARGE_CM: '-1' }, { PROLONGE_MIN_CM: '-1' }]) {
+    const r = lancer('snow-forecast-alert.mjs', m, { ...REEL, ...env }, etatDe(1, 2, 12));
+    assert.equal(r.code, 1, JSON.stringify(env));
+    assert.match(r.out, /Variable invalide/);
+    assert.doesNotMatch(r.out, /ntfy →/);
+  }
+});
+test('annoncée : valeur inconnue dans la plage -> pas d\'annulation à l\'aveugle', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 2, 0, 0, 0], 'cm', [null]), REEL, etatDe(-1, 1, 12));
+  assert.equal(r.code, 0, r.out);
+  assert.doesNotMatch(r.out, /ntfy →/);
+});
+test('annoncée : épisode fini gardé en mémoire tant qu\'il est dans la série', () => {
+  const etat = etatDe(-3, -3, 20);
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0], 'cm', [20, 0, 0]), REEL, etat);
+  assert.equal(r.etat, etat, 'état inchangé');
+});
+test('annoncée : seuil forcé -> pas de « décalée » non plus', () => {
+  const etat = etatDe(0, 1, 12);
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 7, 5]),
+    { ...REEL, SEUIL_FORCE: '10' }, etat);
+  assert.doesNotMatch(r.out, /décalée/);
+  assert.equal(r.etat, etat);
+});
 test('annoncée : sous le seuil -> annulation unique', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 3, 2, 0, 0]), REEL, etatDe(1, 2, 12));
   assert.match(r.out, /ntfy → Annulé — neige/);

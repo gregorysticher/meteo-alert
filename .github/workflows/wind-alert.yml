@@ -74,6 +74,8 @@ jobs:
       # l'echec n'est pas memorisee dans alerted.json et repart en doublon.
       - name: Commit des donnees
         if: always() && steps.garde.outputs.passer != 'true'
+        env:
+          MARQUE: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == '1' && ' [dry]' || '' }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -81,7 +83,7 @@ jobs:
           for f in data alerted.json; do
             if [ -e "$f" ]; then git add "$f"; fi
           done
-          git diff --staged --quiet || git commit -m "data: wind $(date -u +%FT%TZ)"
+          git diff --staged --quiet || git commit -m "data: wind $(date -u +%FT%TZ)$MARQUE"
           # Un push perdu = donnees QA perdues : 3 essais, puis run rouge.
           for i in 1 2 3; do
             git pull --rebase --autostash && git push && exit 0

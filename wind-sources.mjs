@@ -264,7 +264,9 @@ export async function tempLac(lac, lat, lon) {
     const res = await fetch(url);
     if (!res.ok) return null;
     const j = await res.json();
-    const d = j && j.variables && j.variables.temperature && j.variables.temperature.data;
+    const temp = j && j.variables && j.variables.temperature;
+    if (temp && temp.unit && temp.unit !== 'degC') return null;
+    const d = temp && temp.data;
     const v = Array.isArray(d) ? d.find((x) => typeof x === 'number') : null;
     return typeof v === 'number' ? v : null;
   } catch {

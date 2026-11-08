@@ -1,6 +1,6 @@
 # Transmission — Weather station (TRMNL + meteo-alert)
 
-État au **2026-11-07** (fin de séance). À lire en premier dans toute nouvelle session, avec
+État au **2026-11-08** (fin de séance). À lire en premier dans toute nouvelle session, avec
 [`TODO.md`](TODO.md). **Nouvelle session : commencer par le §0.**
 
 ---
@@ -19,9 +19,9 @@ sollicite Greg que pour ce qu'elle ne peut pas faire (marqué **Greg**), une
 chose à la fois, en une phrase.
 
 1. **Dépôts.** Si la session ne tourne pas déjà dans `meteo-alert`, cloner les
-   deux dépôts côte à côte dans `C:\dev\weather-station\` :
-   `meteo-alert` (public) et `trmnl-markup` (privé, lecture seule ; nécessite
-   l'étape 2). Lire ensuite `CLAUDE.md`, ce fichier et `TODO.md` depuis le clone.
+   dépôts côte à côte dans `C:\dev\weather-station\` :
+   `meteo-alert` (public), `trmnl-markup` (privé, lecture seule ; nécessite
+   l'étape 2), `trmnl-watch` et `trmnl-watchdog` (privés). Lire ensuite `CLAUDE.md`, ce fichier et `TODO.md` depuis le clone.
 2. **GitHub CLI.** Si `gh` manque : `winget install --id GitHub.cli`. Puis
    `gh auth login --web` : **Greg** valide le code affiché dans son navigateur.
    Vérifier avec `gh auth status`. `gh` remplace le connecteur GitHub des
@@ -67,6 +67,8 @@ code.claude.com/docs/en/remote-control et code.claude.com/docs/en/chrome.
 |---|---|---|
 | `gregorysticher/meteo-alert` | public | Alertes vent et neige, boucle QA, producteur du webhook vent TRMNL |
 | `gregorysticher/trmnl-markup` | privé | Copie du markup TRMNL. `src/full.liquid` est écrit par `trmnl-sync[bot]` à chaque sauvegarde dans TRMNL |
+| `gregorysticher/trmnl-watch` | privé | Veille hebdomadaire (lundi) : arrivée des special functions sur le TRMNL X. A sonné le 02/11/2026 à juste titre, à couper (TODO) |
+| `gregorysticher/trmnl-watchdog` | privé | Santé et fraîcheur de Netatmo 396948 seul, via le MCP TRMNL, 3 runs/jour, ntfy sur transition. `degraded` collant depuis le 03/08/2026, données fraîches |
 
 **Ne jamais éditer `trmnl-markup` directement** : la sauvegarde suivante dans
 TRMNL écraserait le commit. Le markup s'édite dans l'interface TRMNL (voir §6).
@@ -87,6 +89,10 @@ Wind Forecast (392131), recette obsolète, a été désinstallé le 2026-11-08.
 
 E-mails de santé TRMNL activés sur les 5 plugins actifs (07/11/2026).
 
+Appareil : TRMNL X, firmware 1.8.18 (special functions disponibles via le menu de
+l'appareil, *Special...*). Guest Mode libre. Le handoff Cowork qui les disait
+indisponibles et citait 392131 ou le Col de Cou est périmé.
+
 ### Notifications
 
 ntfy, sujets dans les secrets `NTFY_TOPIC_VENT` et `NTFY_TOPIC_NEIGE`. Envoi via
@@ -103,6 +109,20 @@ l'envoi a réussi).
 | `snow-forecast-alert.yml` | `23 4,15 * * *` | Open-Meteo `meteoswiss_icon_seamless` 5 j, cumul par épisode ≥ `vars.SEUIL_NEIGE_CM` (10) |
 | `snow-fresh-alert.yml` | `47 5,16 * * *` | SLF IMIS ILI2 (HN_1D) ≥ `vars.SEUIL_NEIGE_FRAICHE_CM` (10) ; journal et rapport prévision/mesure (`data/neige.csv`) |
 | `probe-windlive.yml` | manuel | Sonde de découverte WindLive (lecture seule) |
+
+**Déclencheur Cloudflare** (`worker/`, pas encore déployé) : appelle
+`workflow_dispatch` aux mêmes heures, cron GitHub gardé en secours. Le cron de
+`wind-alert` saute si un vrai run a écrit depuis moins de `vars.GARDE_CRON_VENT_H`
+heures (`cron-garde.mjs`, 3 h ; 4,5 h une fois le Worker actif).
+
+**Variables neige** : `SEUIL_NEIGE_CM` (10), `HAUSSE_NEIGE_CM` (5),
+`MARGE_ANNUL_NEIGE_CM` (2), `PROLONGE_MIN_NEIGE_CM` (2). Règles dans
+`snow-episodes.mjs` ; état dans `snow-forecast-alerted.json`.
+
+**Données QA** (`wind-qa.mjs`) : `data/forecasts/AAAA-MM.csv` par mois d'émission,
+`data/qa/AAAA-MM.csv` par mois d'échéance, colonne `modele` (`ms`, `arome`) ; le biais
+des alertes ne lit que `ms`. `data/gradient.csv` : air mesuré − eau, se joint à
+`data/qa/` sur (spot, échéance = ts). Run rouge si un fichier dépasse 45 Mo.
 
 Tous les workflows jouent leurs tests (`test/`) avant le script ; un échec
 (test, API, push) rend le run rouge. Lire le **log**, pas seulement le statut.

@@ -19,14 +19,18 @@ export function aSauter(evenement, dernierCommit, maintenant, gardeH = GARDE_DEF
   return Number.isFinite(age) && age >= 0 && age < gardeH;
 }
 
+export const MARQUE_DRY = '[dry]';
+
 export async function dernierCommitDonnees(depot, jeton) {
-  // data/forecasts seul : les alertes neige commitent aussi dans data/.
+  // data/forecasts seul : les alertes neige commitent aussi dans data/. Un
+  // dry-run archive sans alerter : il ne doit pas faire sauter le cron suivant.
   const res = await fetch(
-    `https://api.github.com/repos/${depot}/commits?path=data/forecasts&per_page=1`,
+    `https://api.github.com/repos/${depot}/commits?path=data/forecasts&per_page=10`,
     { headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${jeton}`,
       'User-Agent': 'meteo-alert-garde' } });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json())[0]?.commit?.committer?.date ?? null;
+  const vrai = (await res.json()).find((c) => !c.commit?.message?.includes(MARQUE_DRY));
+  return vrai?.commit?.committer?.date ?? null;
 }
 
 async function principal() {

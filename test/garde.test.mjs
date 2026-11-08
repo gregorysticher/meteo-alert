@@ -31,10 +31,17 @@ test('lit les commits de data/forecasts, pas ceux de la neige', async () => {
   let url;
   mock.method(globalThis, 'fetch', async (u) => {
     url = u;
-    return new Response(JSON.stringify([{ commit: { committer: { date: '2026-11-08T10:00:00Z' } } }]));
+    return new Response(JSON.stringify([{ commit: { message: 'data: wind', committer: { date: '2026-11-08T10:00:00Z' } } }]));
   });
   assert.equal(await dernierCommitDonnees('a/b', 'x'), '2026-11-08T10:00:00Z');
-  assert.match(url, /repos\/a\/b\/commits\?path=data\/forecasts&per_page=1/);
+  assert.match(url, /repos\/a\/b\/commits\?path=data\/forecasts/);
+});
+test('un dry-run n\'arme pas la garde : on remonte au dernier vrai run', async () => {
+  mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify([
+    { commit: { message: 'data: wind 2026-11-08T11:00:00Z [dry]', committer: { date: '2026-11-08T11:00:00Z' } } },
+    { commit: { message: 'data: wind 2026-11-08T05:00:00Z', committer: { date: '2026-11-08T05:00:00Z' } } },
+  ])));
+  assert.equal(await dernierCommitDonnees('a/b', 'x'), '2026-11-08T05:00:00Z');
 });
 
 test('script : API muette -> sortie passer=false, code 0', () => {
@@ -50,6 +57,16 @@ test('script : API muette -> sortie passer=false, code 0', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('workflow : la garde recoit le vrai evenement, sa duree, et le commit reste en always', () => {
+  const yml = readFileSync('.github/workflows/wind-alert.yml', 'utf8');
+  assert.ok(yml.includes('EVENT: ${{ github.event_name }}'), 'sinon le Worker sauterait aussi');
+  assert.ok(yml.includes('GARDE_H: ${{ vars.GARDE_CRON_VENT_H }}'));
+  const commit = yml.slice(yml.indexOf('- name: Commit des donnees')).split('\n')[1];
+  assert.ok(commit.includes('always()'), 'alerted.json perdu sinon sur un run rouge');
+  assert.ok(yml.includes("inputs.dry_run == '1' && ' [dry]'"));
+  assert.ok(yml.includes('$(date -u +%FT%TZ)$MARQUE'));
 });
 
 test('workflow : toutes les etapes du run respectent la garde', () => {

@@ -49,6 +49,22 @@ const HAUSSE_CM = nombreEnv("HAUSSE_CM", 5);
 const MARGE_CM = nombreEnv("MARGE_CM", 2);
 const PROLONGE_MIN_CM = nombreEnv("PROLONGE_MIN_CM", 2);
 const SEUIL_FORCE = Boolean(process.env.SEUIL_FORCE);
+
+// Réglage absurde : le script tourne avec les défauts, mais le run est rouge.
+function reglages() {
+  const r = { hausse: HAUSSE_CM, marge: MARGE_CM, prolongeMin: PROLONGE_MIN_CM };
+  const refuser = (msg, cle, defaut) => {
+    console.error(`Variable invalide : ${msg} — défaut ${defaut} utilisé.`);
+    process.exitCode = 1;
+    r[cle] = defaut;
+  };
+  if (r.hausse <= 0) refuser(`HAUSSE_CM = ${r.hausse}`, "hausse", 5);
+  if (r.prolongeMin < 0) refuser(`PROLONGE_MIN_CM = ${r.prolongeMin}`, "prolongeMin", 2);
+  if (!SEUIL_FORCE && (r.marge < 0 || r.marge >= SEUIL_CM)) {
+    refuser(`MARGE_CM = ${r.marge}, seuil ${SEUIL_CM}`, "marge", Math.min(2, SEUIL_CM / 2));
+  }
+  return r;
+}
 const MIN_JOUR_CM = 1;                                // ignore les traces
 const JOURS_PASSES = 7;                               // épisode en cours
 
@@ -245,8 +261,7 @@ async function main() {
   const avant = chargerEtat();
   const inconnus = new Set(dates.filter((_, i) => typeof neige[i] !== "number" || !Number.isFinite(neige[i])));
   let decisions = decider(episodes, avant, {
-    jour, seuil: SEUIL_CM, hausse: HAUSSE_CM, marge: MARGE_CM,
-    prolongeMin: PROLONGE_MIN_CM, memoire: JOURS_PASSES, inconnus,
+    jour, seuil: SEUIL_CM, ...reglages(), memoire: JOURS_PASSES, inconnus,
   });
   if (SEUIL_FORCE) {
     decisions = decisions.filter((d) => d.type !== "annule" && d.type !== "decale");

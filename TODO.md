@@ -19,9 +19,28 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
       Échéance : avant le 2027-04-15.
-- [ ] **Valider le design spec** [`docs/spec-2026-11-07.md`](docs/spec-2026-11-07.md)
-      (partie A à relire, décisions B3 à B7), éventuellement avec la
-      session Cowork.
+- [ ] **Contrat de données TRMNL** : webhook gardé (recommandation de Claude) ou
+      polling ? Sur un oui, Claude écrit le contrat dans `meteo-alert`, inscrit les
+      lignes dans les deux `CLAUDE.md` et corrige les 7 écarts relevés
+      le 2026-11-08 (`data/latest.json` n'existe pas).
+- [ ] **Cumul neige à l'écran (B4.2)** : variante A (« 6 cm · cumul 23 cm ») ou B
+      (« 23 cm · Mar 10 → Jeu 12 »), maquettes envoyées le 2026-11-08. À décider
+      aussi : le calcul en Liquid sur le plugin Neige, source distincte de l'alerte.
+- [ ] **Guest Mode du TRMNL X** : disponible (firmware 1.8.18 installé). Recréer
+      Wind Forecast (config au spec B1, Open-Meteo) ou faire un écran vent alimenté
+      par `meteo-alert` ?
+- [ ] **Veille TRMNL X à couper** : elle a rempli son rôle mais renvoie sa
+      notification chaque lundi. `gh workflow disable` refusé à Claude par le
+      classifieur ; le demander explicitement ou lancer
+      `gh workflow disable veille-trmnl-x.yml -R gregorysticher/trmnl-watch`.
+- [ ] **Déclencheur Cloudflare (B3)** : créer le compte, puis le jeton GitHub
+      fine-grained, une étape à la fois avec Claude. Worker écrit et testé dans
+      `worker/`, pas encore déployé.
+- [ ] **Netatmo « degraded » depuis le 2026-08-03**, données pourtant fraîches : dire à
+      Claude s'il remet à zéro (*Reset Health*).
+- [ ] **Alerte neige, réglages ajoutés après la revue QA** : marge d'annulation de
+      2 cm et 2 cm minimum pour une prolongation (variables de dépôt, 0 = règle
+      littérale). À confirmer ou à changer.
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
 - [ ] **WindLive** : leur `robots.txt` interdit `/api/`. Décider si on leur
@@ -36,30 +55,35 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 - [ ] Contrôler le premier vrai `W.reco` à l'écran à l'ouverture de la
       saison (2027-04-15) : jour, heures, inversion.
-- [ ] 2026-11-14 : compter les runs `wind-alert` livrés par jour sur les 6
-      créneaux fixes. En dessous de 4, revoir (spec B3).
-- [ ] Selon la décision B5 : archiver AROME HD en second avis (QA seule).
+- [ ] 2026-11-14 : compter les commits `data: wind` par jour (pas les runs : la garde
+      en saute). En dessous de 4, revoir (spec B3).
+- [ ] Après déploiement du Worker : `GARDE_CRON_VENT_H` à 4,5 (pas avant : la cadence
+      tomberait). Vérifier un vrai run sauté dans les logs.
+- [ ] Début de saison B5 : après 4 à 6 semaines d'archive AROME, comparer les modèles
+      (rapport « Erreur absolue par spot, 12-36 h »).
+- [ ] Neige : après 3 ou 4 épisodes, trancher l'alignement (B4.1) et regarder la
+      fréquence des révisions du passé (`snowfall_sum`) et des oscillations.
 
 ### Dette technique
 
-- [ ] Retard de 6 à 7 h des runs planifiés GitHub : l'alerte neige du matin
-      arrive vers midi. Proposition : déclencheur externe (spec B3).
-      Non prioritaire.
-
-### Améliorations
-
-- [ ] AROME 1,3 km en second avis vent : sonde faite (horizon ~48 h),
-      plan en 3 étapes dans le spec B5, en attente de décision.
-- [ ] Gradient air-eau : en réalité **pas calculé** (seule la température de
-      l'eau est affichée). Usage à décider (spec B6).
-- [ ] Neige : le journal prévision/mesure tourne (`data/neige.csv`).
-      Trancher l'alignement après 3 ou 4 épisodes ; cumul d'épisode à
-      l'écran et anti-spam du cumul à décider (spec B4).
+- [ ] `trmnl-watch` : une vérification en échec reste verte, et aucune mémoire entre
+      deux runs. `trmnl-watch` et `trmnl-watchdog` : actions en v4 (Node 20), push du
+      watchdog sans nouvel essai.
+- [ ] Vent et Météo sans watchdog : seulement les e-mails de santé TRMNL.
+- [ ] Taille du dépôt : ~300 Mo/an estimés une fois compressés ; prévoir de compresser
+      ou d'élaguer les vieux mois de `data/forecasts/`.
 
 ---
 
 ## Fait récemment
 
+- [x] 2026-11-08 — Décisions du spec appliquées : `data/forecasts/` et `data/qa/` par
+      mois, AROME archivé (B5.1), gradient journalisé et affiché (B6), annulation
+      vent seulement si aucun spot ne tient (B7.1), `lead_min_h` 0 (B7.2), alerte
+      neige avec hausse, prolongation, annulation (B4.3). QA indépendante et
+      contre-vérification ; tests joués par les workflows, runs réels lus.
+- [x] 2026-11-08 — `trmnl-markup`, `trmnl-watch` et `trmnl-watchdog` gérés dans cette
+      session. Bug Netatmo « à 0 » non reproduit, secret `NTFY_TOPIC` déjà en place.
 - [x] 2026-11-08 — Plugin TRMNL « Wind Forecast » (392131) désinstallé ; playlist
       et DASHBOARD intacts (spec B1).
 - [x] 2026-11-07 — Revue QA indépendante + contre-vérification : 14 puis 6

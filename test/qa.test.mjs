@@ -197,7 +197,7 @@ test('gradient : idempotent par heure, rouge si l\'air manque partout', async ()
 
 test('erreur de lecture autre que « absent » : remonte au lieu d\'ecraser', async () => {
   mkdirSync('data/forecasts/2026-11.csv', { recursive: true });   // un dossier : EISDIR
-  await assert.rejects(archiver('202611080500', SPOTS, parSpot('202611081000')));
+  await assert.rejects(lignesArchive('202611081000'));
 });
 
 test('AROME ne change PAS le biais qui corrige les alertes', async () => {

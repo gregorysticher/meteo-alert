@@ -8,8 +8,11 @@
 //   prolonge  plus de jours que lors de la dernière alerte, et au moins
 //             `prolongeMin` cm sur les jours ajoutés à venir : une révision du
 //             passé ou une queue de traces n'est pas une prolongation
-//   annule    cumul < seuil - `marge`, épisode pas commencé (comme le vent) :
-//             la marge évite la rafale alerte/annulation autour du seuil
+//   annule    cumul < seuil - `marge`, sauf si au moins `hausse` cm sont déjà
+//             tombés (la chute a eu lieu, comme le vent une fois la fenêtre
+//             ouverte) ou si le début de l'annonce est sorti de la série (on ne
+//             sait plus ce qui est tombé). La marge évite la rafale
+//             alerte/annulation autour du seuil
 //   decale    annulation et nouvelle dans le même run : un seul message
 // Un épisode annulé qui repasse au seuil redevient une « nouvelle ».
 //
@@ -104,7 +107,8 @@ export function decider(eps, records, opts) {
     touches.forEach((e) => lies.add(e));
     const c = agreger(touches);
     const venir = aVenir(c, jour);
-    const commence = touches.some((e) => e.debut < jour);
+    const tombe = (c?.jours ?? []).filter((j) => j.d < jour).reduce((a, j) => a + j.v, 0);
+    const effondre = (c?.total ?? 0) < seuil - marge;
     const finDeMemoire = r.fin < reculer(jour, memoire);
 
     let type = null;
@@ -112,10 +116,10 @@ export function decider(eps, records, opts) {
       if (c && c.total >= seuil && venir >= minAVenir) type = 'nouvelle';
     } else if (c && c.total >= r.total + hausse && venir >= hausse) {
       type = 'hausse';
-    } else if (c && duree(c) > r.duree) {
+    } else if (c && !effondre && duree(c) > r.duree) {
       const ajoutes = c.jours.filter((j) => j.d >= jour && (j.d < r.debut || j.d > r.fin));
       if (ajoutes.reduce((a, j) => a + j.v, 0) >= prolongeMin && ajoutes.length) type = 'prolonge';
-    } else if ((c?.total ?? 0) < seuil - marge && !commence && r.fin >= jour) {
+    } else if (effondre && tombe < hausse && r.fin >= jour && r.debut >= reculer(jour, memoire)) {
       const plage = [...inconnus].some((d) => d >= r.debut && d <= r.fin);
       if (!plage) type = 'annule';
     }

@@ -461,7 +461,7 @@ export async function rapportAlertes() {
   }
   const par = new Map();
   for (const l of lignes) {
-    const c = l.split(',');
+    const c = l.trimEnd().split(',');
     const etage = c[1];
     if (!par.has(etage)) par.set(etage, []);
     par.get(etage).push({ prevu: parseFloat(c[5]), mes: parseFloat(c[6]),
