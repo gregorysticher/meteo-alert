@@ -40,7 +40,7 @@ jobs:
       # Regle d'affichage TRMNL (choisirReco) sur donnees simulees : hors
       # saison, aucun run reel ne l'exerce. Un test en echec bloque le run.
       - name: Tests
-        run: node --test test/reco.test.mjs test/qa.test.mjs
+        run: node --test test/reco.test.mjs test/qa.test.mjs test/wind-e2e.test.mjs
 
       - name: Previsions, alertes et QA
         # shell: bash explicite = -o pipefail. Sans lui, "| tee" masque le

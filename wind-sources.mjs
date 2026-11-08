@@ -1,5 +1,6 @@
-// wind-sources.mjs — acces MeteoSuisse (mesures + previsions) et Alplakes (lac).
-// Source: MeteoSwiss / Eawag Alplakes.
+// wind-sources.mjs — acces MeteoSuisse (mesures + previsions), Alplakes (lac) et
+// Open-Meteo (AROME, second avis archive pour la QA, aucune alerte n'en depend).
+// Source: MeteoSwiss / Eawag Alplakes / Open-Meteo (Meteo-France).
 //
 // Schemas verifies en production le 29/08/2026 :
 //   VQHA80      Station/Location;Date;...;dkl010z0;fu3010z0;fu3010z1
@@ -19,6 +20,9 @@ const POINTS =
 const MESURES =
   'https://data.geo.admin.ch/ch.meteoschweiz.messwerte-aktuell/VQHA80.csv';
 const ALPLAKES = 'https://alplakes-api.eawag.ch';
+const AROME_MODELE = 'meteofrance_arome_france_hd';
+const AROME_META =
+  `https://api.open-meteo.com/data/${AROME_MODELE}/static/meta.json`;
 
 export const KMH_KN = 1 / 1.852;
 
@@ -27,6 +31,11 @@ export const PARAMS = {
   rafale: 'fu3010h1',
   q10: 'fu3q10h0',
   dir: 'dkl010h0',
+};
+
+// Facultatifs : leur panne rend le run rouge mais ne bloque pas les alertes.
+export const PARAMS_OPTION = {
+  air: 'tre200h0',    // temperature de l'air a 2 m, degres C
 };
 
 async function texte(url) {
@@ -116,6 +125,15 @@ export async function previsions(spots) {
     series[label] = r.data;
     if (!emission) emission = r.emission;
   }
+  for (const [label, param] of Object.entries(PARAMS_OPTION)) {
+    try {
+      series[label] = (await serie(param, ids)).data;
+    } catch (err) {
+      console.error(`ECHEC prevision ${param} : ${err.message}`);
+      process.exitCode = 1;
+      series[label] = new Map();
+    }
+  }
 
   const parSpot = new Map();
   for (const s of spots) {
@@ -132,11 +150,60 @@ export async function previsions(spots) {
         rafale: (g('rafale') || 0) * KMH_KN,
         q10: (g('q10') || 0) * KMH_KN,
         dir: g('dir') === undefined ? null : g('dir'),
+        air: g('air') === undefined ? null : g('air'),
       });
     }
     out.sort((a, b) => a.date.localeCompare(b.date));
     parSpot.set(s.key, out);
   }
+  return { emission, parSpot };
+}
+
+// ---- AROME (second avis) -------------------------------------------------
+
+/**
+ * AROME 1,3 km via Open-Meteo, meme forme que previsions(). Schema verifie le
+ * 08/11/2026 sur les 8 spots : nœuds, rafales et direction, horizon ~51 h.
+ * emission = heure d'initialisation du run (meta.json) ; les heures anterieures,
+ * qu'Open-Meteo renvoie aussi, sont ecartees : ce ne sont pas des previsions.
+ * Leve une erreur si la reponse est inexploitable.
+ */
+export async function previsionsArome(spots) {
+  const resMeta = await fetch(AROME_META);
+  if (!resMeta.ok) throw new Error('meta AROME -> HTTP ' + resMeta.status);
+  const init = (await resMeta.json()).last_run_initialisation_time;
+  if (!Number.isFinite(init)) throw new Error('meta AROME sans heure de run');
+  const emission = new Date(init * 1000).toISOString().slice(0, 16).replace(/[-:T]/g, '');
+
+  const url = 'https://api.open-meteo.com/v1/forecast' +
+    `?latitude=${spots.map((s) => s.lat).join(',')}` +
+    `&longitude=${spots.map((s) => s.lon).join(',')}` +
+    '&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m' +
+    `&models=${AROME_MODELE}&wind_speed_unit=kn&timezone=GMT&forecast_days=3`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('AROME -> HTTP ' + res.status);
+  const reponses = [].concat(await res.json());
+  if (reponses.length !== spots.length) {
+    throw new Error(`AROME : ${reponses.length} reponses pour ${spots.length} spots`);
+  }
+
+  const parSpot = new Map();
+  spots.forEach((s, i) => {
+    const { hourly: h, hourly_units: u } = reponses[i];
+    if (u?.wind_speed_10m !== 'kn') {
+      throw new Error(`AROME : unite ${u?.wind_speed_10m} au lieu de kn (${s.key})`);
+    }
+    const out = [];
+    h.time.forEach((t, j) => {
+      const date = t.replace(/[-:T]/g, '');
+      const kn = h.wind_speed_10m[j];
+      if (date < emission || typeof kn !== 'number') return;
+      out.push({ date, kn, q10: null, rafale: h.wind_gusts_10m[j] ?? null,
+        dir: h.wind_direction_10m[j] ?? null });
+    });
+    if (!out.length) throw new Error(`AROME : aucune prevision pour ${s.key}`);
+    parSpot.set(s.key, out);
+  });
   return { emission, parSpot };
 }
 
@@ -149,6 +216,7 @@ export async function mesures(codes) {
   const iMoy = e.indexOf('fu3010z0');
   const iRaf = e.indexOf('fu3010z1');
   const iDir = e.indexOf('dkl010z0');
+  const iAir = e.indexOf('tre200s0');
   if (iMoy < 0) throw new Error('Colonne fu3010z0 absente de VQHA80');
 
   const out = new Map();
@@ -167,6 +235,7 @@ export async function mesures(codes) {
       kn: m === null ? null : m * KMH_KN,
       rafale: r === null ? null : r * KMH_KN,
       dir: n(iDir),
+      air: iAir < 0 ? null : n(iAir),
       date: c[iDate],
     });
   }

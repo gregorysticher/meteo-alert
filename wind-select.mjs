@@ -185,6 +185,27 @@ export function choisirAlerte(classement, cfg, e, biais, maintenant, dejaJour = 
   return null;
 }
 
+// Annulation d'une pre-alerte (spec B7.1) : seulement si AUCUN spot ne tient
+// ce jour-la au seuil plein. Sinon la confirmation de l'autre spot suffit :
+// recevoir « Annule Reposoir » et « Confirme Cologny » ensemble deroute.
+export function jourTient(classement, cfg, biais, maintenant, iso) {
+  return classement.some((c) =>
+    fenetres(c.lignes, c.spot, cfg, cfg.seuil_kn, biais, maintenant)
+      .some((w) => w[0].t.iso === iso));
+}
+
+// Ligne « eau » de l'alerte (spec B6, information seule : le gradient ne change
+// aucun seuil). Air = moyenne prevue sur la fenetre ; eau = lac maintenant.
+export function ligneEau(f, eau) {
+  if (eau === null) return null;
+  const airs = f.map((h) => h.air).filter(Number.isFinite);
+  if (!airs.length) return `Eau ${eau.toFixed(1)}°C`;
+  const air = airs.reduce((a, b) => a + b, 0) / airs.length;
+  const g = air - eau;
+  return `Eau ${eau.toFixed(1)}°C, air ${air.toFixed(1)}°C ` +
+    `(air − eau ${g >= 0 ? '+' : ''}${g.toFixed(1)}°C)`;
+}
+
 // Anti-spam : une alerte par etage et par JOUR local (key = null : tous
 // spots confondus ; key donne : ce spot seulement). Le debut de fenetre
 // glisse d'un run a l'autre (heure ecoulee, prevision revue) : un id compare

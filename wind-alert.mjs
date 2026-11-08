@@ -6,8 +6,9 @@
 // ALERTES EN 3 ETAGES CONTIGUS (aucune fenetre ne passe entre deux tranches) :
 //   pre   34 a 168 h  "Potentiel"   seuil abaisse — signal, pas promesse
 //   conf   9 a  34 h  "Confirme"    seuil plein
-//   jour 0.5 a   9 h  "Aujourd'hui" rappel
-// Plus une annulation si une pre-alerte tombe a l'eau.
+//   jour   0 a   9 h  "Aujourd'hui" rappel
+// Plus une annulation si une pre-alerte tombe a l'eau et qu'aucun autre spot ne
+// tient ce jour-la.
 //
 // CORRECTION DE BIAIS : le QA mesure que la prevision sous-estime le vent,
 // d'autant plus que l'echeance est longue (~ -2 kn a J-5). On remonte donc la
@@ -23,14 +24,15 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { notifier, sortieSiEchecs } from './notify.mjs';
-import { previsions, mesures, tempLac } from './wind-sources.mjs';
+import { previsions, previsionsArome, mesures, tempLac } from './wind-sources.mjs';
 import {
   archiver, apparier, rapport, versDate, versCle,
   journaliserMesures, journaliserAlerte, evaluerAlertes, rapportAlertes,
-  biaisParEcheance,
+  biaisParEcheance, journaliserGradient,
 } from './wind-qa.mjs';
 import {
-  local, fenetre, fenetres, moyenne, choisirReco, choisirAlerte, dejaEnvoye,
+  local, fenetre, moyenne, choisirReco, choisirAlerte, dejaEnvoye, jourTient,
+  ligneEau,
 } from './wind-select.mjs';
 
 const CONFIG = 'wind/spots.json';
@@ -77,7 +79,8 @@ function message(etage, spot, f, cfg, eau, autres) {
   if (ratio > cfg.ratio_rafale_max) {
     lignes.push(`⚠ rafales ×${ratio.toFixed(1)} — mauvais pour le jibe`);
   }
-  if (eau !== null) lignes.push(`Eau ${eau.toFixed(1)}°C`);
+  const lEau = ligneEau(f, eau);
+  if (lEau) lignes.push(lEau);
 
   const c = spot.club;
   if (c) {
@@ -158,6 +161,12 @@ if (TEST) cfg.seuil_kn = SEUIL_TEST;
 
 if (QA_ONLY) {
   await journaliserMesures(cfg.spots);
+  try {
+    console.log(`Gradient air-eau : ${await journaliserGradient(cfg.spots)}`);
+  } catch (err) {
+    console.error(`ECHEC journal gradient : ${err.message}`);
+    process.exitCode = 1;
+  }
   console.log(`Appariements : ${await apparier(cfg.spots)}`);
   console.log(`Alertes evaluees : ${await evaluerAlertes(cfg)}`);
   console.log('\n' + await rapport());
@@ -269,14 +278,14 @@ if (QA_ONLY) {
       if (dejaEnvoye(vus.ids, 'conf', key, local(versDate(debut)).iso)) continue;
       const c = classement.find((x) => x.spot.key === key);
       if (!c) continue;
-      // Tient encore = une fenetre au seuil plein le MEME jour sur ce spot
-      // (elle peut avoir glisse d'une heure ou deux sans etre annulee).
+      // Tient encore = une fenetre au seuil plein le MEME jour, sur N'IMPORTE
+      // quel spot (elle peut aussi avoir glisse d'une heure ou deux).
       const t = local(versDate(debut));
-      const tient = fenetres(c.lignes, c.spot, cfg, cfg.seuil_kn, biais, maintenant)
-        .some((w) => w[0].t.iso === t.iso);
-      if (tient) continue;
+      const b = conf.correction_biais ? biais : new Map();
+      if (jourTient(classement, cfg, b, maintenant, t.iso)) continue;
       const envoye = await notifier(TOPIC, `Annule — ${c.court} ${t.label}`,
-        `La fenetre annoncee a ${c.court} ne tient plus.\n` +
+        `La fenetre annoncee a ${c.court} ne tient plus, et aucun autre spot ` +
+        `ne tient ce jour-la.\n` +
         `Pic revu a ${c.pic} kn. Inutile de bloquer le creneau.`,
         { priorite: 'default', tags: ['wind', 'annul'] });
       if (!envoye) continue;
@@ -295,12 +304,28 @@ if (QA_ONLY) {
   console.log(await versTrmnl(classement, cfg, emission, reco));
   if (!TEST) {
     console.log(`Archive QA : ${await archiver(emission, cfg.spots, parSpot)}`);
+    // Second avis, archive seulement : apres les alertes, et sa panne ne les
+    // touche pas, mais elle se voit (run rouge).
+    try {
+      const a = await previsionsArome(cfg.spots);
+      console.log(`Archive AROME ${a.emission} : ` +
+        await archiver(a.emission, cfg.spots, a.parSpot, 'arome'));
+    } catch (err) {
+      console.error(`ECHEC archive AROME : ${err.message}`);
+      process.exitCode = 1;
+    }
     console.log(`Mesures : ${await journaliserMesures(cfg.spots)}`);
+    try {
+      console.log(`Gradient air-eau : ${await journaliserGradient(cfg.spots)}`);
+    } catch (err) {
+      console.error(`ECHEC journal gradient : ${err.message}`);
+      process.exitCode = 1;
+    }
     console.log(`Appariements : ${await apparier(cfg.spots)}`);
     console.log(`Alertes evaluees : ${await evaluerAlertes(cfg)}`);
     console.log('\n' + await rapport());
     console.log('\n' + await rapportAlertes());
   }
-  console.log('\nSource: MeteoSwiss / Eawag Alplakes');
+  console.log('\nSource: MeteoSwiss / Eawag Alplakes / Open-Meteo (Meteo-France)');
   sortieSiEchecs();
 }

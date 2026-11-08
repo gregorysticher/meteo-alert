@@ -15,6 +15,9 @@
 //   data/mesures.csv    mesures horaires brutes par station
 //   data/alertes.csv    alertes envoyees
 //   data/alertes_qa.csv verdict de chaque alerte une fois la fenetre passee
+//   data/gradient.csv   air mesure - eau (Alplakes), par spot et par heure :
+//                       se joint a qa.csv sur (spot, echeance = ts) pour voir si
+//                       le biais depend du gradient (spec B6)
 //
 // Colonne modele (archive et qa.csv) : ms = MeteoSuisse, celui des alertes ;
 // arome = second avis, archive seulement. Le biais qui corrige les alertes
@@ -22,7 +25,7 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { mesures } from './wind-sources.mjs';
+import { mesures, tempLac } from './wind-sources.mjs';
 
 const DIR = 'data';
 const ARCHIVES = DIR + '/forecasts';
@@ -30,12 +33,14 @@ const QA = DIR + '/qa.csv';
 const MESURES = DIR + '/mesures.csv';
 const ALERTES = DIR + '/alertes.csv';
 const ALERTES_QA = DIR + '/alertes_qa.csv';
+const GRADIENT = DIR + '/gradient.csv';
 
 const ENT_ARCHIVE = 'emission,spot,station,echeance,kn,q10,rafale,dir,modele';
 const ENT_QA =
   'emission,spot,station,echeance,lead_h,prevu_kn,mesure_kn,erreur_kn,modele';
 export const MODELE_ALERTES = 'ms';
 const ENT_MESURES = 'ts,station,kn,rafale,dir';
+const ENT_GRADIENT = 'ts,spot,station,air_c,eau_c,gradient_c';
 const ENT_ALERTES =
   'envoye_le,etage,spot,station,debut,fin,prevu_kn,corrige_kn,lead_h';
 const ENT_ALERTES_QA =
@@ -150,6 +155,40 @@ export async function journaliserMesures(spots) {
       v.dir === null ? '' : Math.round(v.dir)].join(','));
   }
   return ajouter(MESURES, ENT_MESURES, lignes);
+}
+
+/**
+ * Gradient air - eau du moment, par spot sur un lac. Idempotent par heure. Une
+ * station sans thermometre (PRE) saute simplement son spot. Leve une erreur si
+ * le lac ne repond pour AUCUN spot : le journal serait aveugle sans le dire.
+ */
+export async function journaliserGradient(spots) {
+  const now = new Date();
+  now.setUTCMinutes(0, 0, 0);
+  const ts = versCle(now);
+
+  const vu = new Set();
+  for (const l of (await lire(GRADIENT)).split('\n').slice(1)) {
+    const c = l.split(',');
+    if (c.length > 1) vu.add(c[0] + '|' + c[1]);
+  }
+  const aFaire = spots.filter((s) => s.lac && !vu.has(ts + '|' + s.key));
+  if (!aFaire.length) return 0;
+
+  const m = await mesures(new Set(aFaire.map((s) => s.station)));
+  const lignes = [];
+  let eaux = 0;
+  for (const s of aFaire) {
+    const eau = await tempLac(s.lac, s.lat, s.lon);
+    if (eau === null) continue;
+    eaux++;
+    const air = m.get(s.station)?.air ?? null;
+    if (air === null) continue;
+    lignes.push([ts, s.key, s.station, air.toFixed(1), eau.toFixed(1),
+      (air - eau).toFixed(1)].join(','));
+  }
+  if (!eaux) throw new Error('temperature du lac indisponible pour tous les spots');
+  return ajouter(GRADIENT, ENT_GRADIENT, lignes);
 }
 
 // ---- 3. appariement prevision <-> mesure ---------------------------------
