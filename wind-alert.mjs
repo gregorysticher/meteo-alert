@@ -32,7 +32,7 @@ import {
 } from './wind-qa.mjs';
 import {
   local, fenetre, moyenne, choisirReco, choisirAlerte, dejaEnvoye, jourTient,
-  ligneEau,
+  ligneEau, finLocale, etatMesure, dansSaison,
 } from './wind-select.mjs';
 
 const CONFIG = 'wind/spots.json';
@@ -59,7 +59,7 @@ function message(etage, spot, f, cfg, eau, autres) {
     lignes.push(`Test d'acheminement — seuil abaisse a ${cfg.seuil_kn} kn.`,
       'Donnees reelles, mais ce n\'est pas une vraie alerte.', '');
   }
-  lignes.push(`${f[0].t.label} → ${f[f.length - 1].t.court}`);
+  lignes.push(`${f[0].t.label} → ${finLocale(f)}`);
   if (etage === 'pre') {
     lignes.push(lead >= 48
       ? `Dans ${Math.round(lead / 24)} j — a confirmer`
@@ -101,7 +101,23 @@ function message(etage, spot, f, cfg, eau, autres) {
 
 // ---- sortie TRMNL ---------------------------------------------------------
 
-async function versTrmnl(classement, cfg, emission, reco) {
+// Spot mesure a l'ecran quand aucune fenetre n'est affichee.
+function mesureEcran(classement, cfg) {
+  const c = classement.find((x) => x.spot.key === cfg.spot_prioritaire);
+  if (!c) return null;
+  const now = c.mesure?.kn != null ? +c.mesure.kn.toFixed(0) : null;
+  const date = c.mesure?.date;
+  return {
+    n: c.spot.court,
+    now,
+    h: /^\d{12}$/.test(date ?? '') ? local(versDate(date)).court : null,
+    g: etatMesure(now, !!c.f, cfg.seuil_kn, cfg.marge_mesure_kn),
+  };
+}
+
+// CONTRAT : docs/contrat-trmnl.md. Ajouter des champs, jamais en retirer ni en
+// changer le sens sans prevenir le markup (DASHBOARD 392375).
+async function versTrmnl(classement, cfg, emission, reco, maintenant) {
   if (!TRMNL) return 'pas de TRMNL_WEBHOOK_URL';
   if (TEST) return 'TEST : webhook TRMNL non touche';
   // kn = moyenne CORRIGEE du biais, comme l'eligibilite (fenetre()).
@@ -113,13 +129,18 @@ async function versTrmnl(classement, cfg, emission, reco) {
     d: mesure?.dir != null ? Math.round(mesure.dir) : null,
     j: f ? f[0].t.iso : null,
     de: f ? f[0].t.court : null,
-    a: f ? f[f.length - 1].t.court : null,
+    a: f ? finLocale(f) : null,
     kn: f ? +moyenne(f, 'corrige').toFixed(0) : null,
     raf: f ? +Math.max(...f.map((l) => l.rafale)).toFixed(0) : null,
     e: f ? 2 : null,
   }));
   const corps = JSON.stringify({
-    merge_variables: { maj: emission, seuil: cfg.seuil_kn, spots, reco },
+    merge_variables: {
+      maj: emission, seuil: cfg.seuil_kn,
+      saison: dansSaison(maintenant, cfg.saison) ? 'vent' : 'neige',
+      mesure: mesureEcran(classement, cfg),
+      spots, reco,
+    },
   });
   if (corps.length > 5000) {
     // Payload refuse = ecran fige sans le dire : le run doit etre rouge.
@@ -217,7 +238,7 @@ if (QA_ONLY) {
   console.log('|---|---|---|---|---|---|');
   for (const c of classement) {
     console.log(`| ${c.spot.nom} | ${c.spot.route_min}′ ` +
-      `| ${c.f ? c.f[0].t.court + '-' + c.f.at(-1).t.court : '—'} ` +
+      `| ${c.f ? c.f[0].t.court + '-' + finLocale(c.f) : '—'} ` +
       `| ${c.f ? moyenne(c.f).toFixed(1) : '—'} | ${c.pic} ` +
       `| ${c.mesure?.kn != null ? c.mesure.kn.toFixed(1) : '—'} |`);
   }
@@ -309,7 +330,7 @@ if (QA_ONLY) {
     ? `${reco.n} ${reco.j} ${reco.de}-${reco.a} ${reco.kn} kn ` +
       `(${reco.ok ? 'tient le seuil' : 'meilleure moyenne, sous le seuil'})`
     : 'aucune heure exploitable (hors saison ou hors creneaux)'));
-  console.log(await versTrmnl(classement, cfg, emission, reco));
+  console.log(await versTrmnl(classement, cfg, emission, reco, maintenant));
   if (!TEST) {
     console.log(`Archive QA : ${await archiver(emission, cfg.spots, parSpot)}`);
     // Second avis, archive seulement : apres les alertes, et sa panne ne les

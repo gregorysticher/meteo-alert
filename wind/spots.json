@@ -8,6 +8,8 @@
   "creneaux": { "6": [9, 18], "0": [9, 18], "2": [8, 13] },
   "_doc_spot_prioritaire": "Affichage TRMNL (reco) : ce spot passe en premier s'il tient le seuil, sinon le plus proche qui tient, sinon la meilleure moyenne (affichage normal).",
   "spot_prioritaire": "reposoir",
+  "_doc_marge_mesure": "Ecran : glyphe ◐ si la mesure au spot prioritaire est a moins de cette marge du seuil.",
+  "marge_mesure_kn": 2,
 
   "_doc_alertes": "lead_h = heures entre l'envoi et le debut de la fenetre. Les tranches se touchent : 0-9 / 9-34 / 34-168. Une fenetre ne peut donc jamais passer entre deux etages. marge_kn = tolerance SOUS le seuil : a longue echeance on alerte plus large, la confirmation tranchera.",
   "alertes": {

@@ -70,6 +70,10 @@ const reponse = (corps, status = 200) =>
 
 globalThis.fetch = async (url, opts = {}) => {
   const u = String(url);
+  if (u.includes('trmnl.test')) {
+    appendFileSync(process.env.MOCK_TRMNL_LOG, opts.body + '\n');
+    return reponse({}, 200);
+  }
   if (u.includes('ntfy.sh')) {
     appendFileSync(process.env.MOCK_NTFY_LOG, opts.body + '\n');
     return reponse({}, M.ntfy ?? 200);

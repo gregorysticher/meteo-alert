@@ -83,7 +83,7 @@ test('1. le Reposoir tient -> Reposoir, inverse', () => {
   assert.equal(r.ok, true);
   assert.equal(r.j, SAM);
   assert.equal(r.de, '10:00');
-  assert.equal(r.a, '13:00');
+  assert.equal(r.a, '14:00');
   assert.equal(r.kn, 14);
   // fin = samedi 14:00 locale = 12:00 UTC, posterieure au vendredi soir
   assert.equal(r.fin, Date.parse('2027-05-15T12:00:00Z') / 1000);
@@ -115,7 +115,7 @@ test('2. un autre spot tient -> le plus PROCHE qui tient, pas le plus vente', ()
   assert.equal(r.ok, true);
   assert.equal(r.j, DIM);
   assert.equal(r.de, '13:00');
-  assert.equal(r.a, '16:00');
+  assert.equal(r.a, '17:00');
 });
 
 test('2b. egalite de route_min (Cologny/Vengeron 15) -> ordre de la config', () => {
@@ -138,7 +138,7 @@ test('3. seul le mardi tient -> le mardi passe devant un week-end mort', () => {
   assert.equal(r.ok, true);
   assert.equal(r.j, MAR);
   assert.equal(r.de, '08:00');
-  assert.equal(r.a, '11:00');
+  assert.equal(r.a, '12:00');
 });
 
 test('4. aucun spot ne tient -> meilleure moyenne, affichage normal', () => {
@@ -154,7 +154,7 @@ test('4. aucun spot ne tient -> meilleure moyenne, affichage normal', () => {
   assert.equal(r.ok, false);
   assert.equal(r.j, DIM);
   assert.equal(r.de, '10:00');
-  assert.equal(r.a, '12:00');
+  assert.equal(r.a, '13:00');
   assert.equal(r.kn, 10);
 });
 
@@ -286,4 +286,13 @@ test('spots.json coherent', () => {
   assert.equal(jour.lead_max_h, conf.lead_min_h, 'tranches jour/conf non contigues');
   assert.equal(conf.lead_max_h, pre.lead_min_h, 'tranches conf/pre non contigues');
   for (const s of cfg.spots) assert.ok(Number.isFinite(s.route_min), s.key);
+});
+
+test('etatMesure : ● si fenetre, ◐ pres du seuil, ○ sinon, mesure absente comprise', async () => {
+  const { etatMesure } = await import('../wind-select.mjs');
+  assert.equal(etatMesure(3, true, 11, 2), '●');
+  assert.equal(etatMesure(9, false, 11, 2), '◐');
+  assert.equal(etatMesure(8, false, 11, 2), '○');
+  assert.equal(etatMesure(null, false, 11, 2), '○');
+  assert.equal(etatMesure(0, false, 2, 2), '◐', '0 kn est une vraie mesure');
 });

@@ -57,6 +57,18 @@ export const secteurOk = (deg, secteurs) =>
 export const moyenne = (f, champ = 'kn') =>
   f.reduce((a, b) => a + b[champ], 0) / f.length;
 
+// Vraie fin d'une fenetre, en heure locale : chaque ligne est l'heure qui COMMENCE
+// a sa date. Une fenetre 10-14 h a pour derniere ligne 13:00.
+export const finLocale = (f) => local(new Date(f.at(-1).d.getTime() + 36e5)).court;
+
+// Etat du spot mesure a l'ecran : ● une fenetre tient, ◐ la mesure est a moins de
+// `marge` du seuil, ○ sinon. Decide ici : le seuil n'existe qu'a un endroit.
+export function etatMesure(kn, aFenetre, seuil, marge) {
+  if (aFenetre) return '●';
+  if (kn !== null && kn !== undefined && kn >= seuil - marge) return '◐';
+  return '○';
+}
+
 // Heures exploitables : dans l'horizon, en saison, dans un creneau, bon
 // secteur. Le seuil n'est PAS ici : fenetres() l'ajoute, meilleure() s'en
 // passe. Chaque ligne = heure qui commence a sa date.
@@ -151,12 +163,13 @@ export function choisirReco(classement, cfg, biais, maintenant) {
     min: c.spot.route_min,
     j: f[0].t.iso,
     de: f[0].t.court,
-    a: f.at(-1).t.court,
+    a: finLocale(f),
     // fin du dernier creneau horaire, epoch UTC en secondes
     fin: Math.round(f.at(-1).d.getTime() / 1000) + 3600,
     kn: +moyenne(f, 'corrige').toFixed(0),
     raf: +Math.max(...f.map((l) => l.rafale)).toFixed(0),
     ok,
+    g: ok ? '●' : '○',
   };
 }
 

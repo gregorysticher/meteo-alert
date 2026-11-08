@@ -29,10 +29,12 @@ function lancer(monde, { vus = [], env = {}, fichiers = {} } = {}) {
     }
     const log = join(dir, 'ntfy.log');
     writeFileSync(log, '');
+    const logTrmnl = join(dir, 'trmnl.log');
+    writeFileSync(logTrmnl, '');
     const r = spawnSync(process.execPath, ['--import', MOCK, join(RACINE, 'wind-alert.mjs')], {
       cwd: dir, encoding: 'utf8',
       env: { ...process.env, DRY_RUN: '0', QA_ONLY: '0', SEUIL_TEST: '', TRMNL_WEBHOOK_URL: '',
-        NTFY_TOPIC_VENT: 'test', MOCK_NTFY_LOG: log,
+        NTFY_TOPIC_VENT: 'test', MOCK_NTFY_LOG: log, MOCK_TRMNL_LOG: logTrmnl,
         MOCK_WIND: JSON.stringify({ now: VENDREDI, ...monde }), ...env },
     });
     const lit = (f) => (existsSync(join(dir, f)) ? readFileSync(join(dir, f), 'utf8') : '');
@@ -40,6 +42,7 @@ function lancer(monde, { vus = [], env = {}, fichiers = {} } = {}) {
       code: r.status, out: r.stdout + r.stderr,
       notifs: lit('ntfy.log').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)),
       vus: JSON.parse(lit('alerted.json')),
+      payload: lit('trmnl.log').trim() ? JSON.parse(lit('trmnl.log')).merge_variables : null,
       archive: lit('data/forecasts/2027-05.csv'), qa: lit('data/qa/2027-05.csv'), gradient: lit('data/gradient.csv'),
     };
   } finally {
@@ -197,4 +200,56 @@ test('B7.2 : fenetre qui commence dans 20 min -> « Aujourd\'hui » part', () =>
   // Samedi 08:40 local (06:40 UTC), fenetre des 09:00.
   const r = lancer({ now: '2027-05-08T06:40:00Z', vent: venteSamedi('Bellevue') });
   assert.ok(titres(r).some((t) => t.startsWith('Aujourd\'hui — Reposoir')), titres(r).join(' | '));
+});
+
+// ---- contrat du payload TRMNL (docs/contrat-trmnl.md) --------------------------
+
+const HOOK = { env: { TRMNL_WEBHOOK_URL: 'https://trmnl.test/hook' } };
+const SPOT_CHAMPS = ['a', 'd', 'de', 'e', 'j', 'kn', 'min', 'n', 'now', 'raf'];
+
+test('contrat : aucun champ retire, en saison avec fenetre', () => {
+  const p = lancer({ vent: venteSamedi('Bellevue') }, HOOK).payload;
+  assert.deepEqual(Object.keys(p).sort(), ['maj', 'mesure', 'reco', 'saison', 'seuil', 'spots']);
+  assert.deepEqual(Object.keys(p.mesure).sort(), ['g', 'h', 'n', 'now']);
+  assert.deepEqual(Object.keys(p.reco).sort(), ['a', 'de', 'fin', 'g', 'j', 'kn', 'min', 'n', 'ok', 'raf']);
+  for (const s of p.spots) assert.deepEqual(Object.keys(s).sort(), SPOT_CHAMPS);
+});
+
+test('contrat : valeurs lues par le markup, fenetre 09-18 h', () => {
+  const p = lancer({ vent: venteSamedi('Bellevue') }, HOOK).payload;
+  assert.equal(p.saison, 'vent');
+  assert.equal(p.reco.n, 'Reposoir');
+  assert.equal(p.reco.de, '09:00');
+  assert.equal(p.reco.a, '18:00', 'la vraie fin, pas le debut de la derniere heure');
+  assert.equal(p.reco.g, '●');
+  assert.equal(p.reco.j, SAMEDI);
+  assert.equal(new Date(p.reco.fin * 1000).toISOString(), '2027-05-08T16:00:00.000Z');
+  assert.equal(p.spots[0].a, '18:00');
+  assert.equal(p.spots[0].e, 2);
+  assert.equal(p.mesure.g, '●');
+  assert.equal(p.maj, '202705070900');
+});
+
+test('contrat : mesure.h = heure locale de la mesure, pas celle de l\'emission', () => {
+  const p = lancer({}, HOOK).payload;
+  assert.deepEqual([p.mesure.n, p.mesure.now, p.mesure.h], ['Reposoir', 5, '02:00']);
+});
+
+test('contrat : hors saison -> saison neige, reco nulle, mesure toujours la', () => {
+  const p = lancer({ now: '2026-11-08T10:00:00Z' }, HOOK).payload;
+  assert.equal(p.saison, 'neige');
+  assert.equal(p.reco, null);
+  assert.equal(p.mesure.n, 'Reposoir');
+});
+
+test('contrat : reco sous le seuil -> g vide, ok faux', () => {
+  const p = lancer({}, HOOK).payload;
+  assert.equal(p.reco.ok, false);
+  assert.equal(p.reco.g, '○');
+});
+
+test('alerte : le message annonce la vraie fin de la fenetre', () => {
+  const r = lancer({ vent: venteSamedi('Bellevue') });
+  const conf = r.notifs.find((n) => n.title.startsWith('Confirme'));
+  assert.match(conf.message, /→ 18:00/);
 });
