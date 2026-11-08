@@ -200,10 +200,13 @@ export async function journaliserGradient(spots) {
     const c = l.split(',');
     if (c.length > 1) vu.add(c[0] + '|' + c[1]);
   }
-  const aFaire = spots.filter((s) => s.lac && !vu.has(ts + '|' + s.key));
+  const lacs = spots.filter((s) => s.lac);
+  const aFaire = lacs.filter((s) => !vu.has(ts + '|' + s.key));
   if (!aFaire.length) return 0;
 
-  const m = await mesures(new Set(aFaire.map((s) => s.station)));
+  // Toutes les stations : un spot sans thermometre (PRE) reste seul a faire lors
+  // d'un second run dans la meme heure, sans que l'air manque pour autant.
+  const m = await mesures(new Set(lacs.map((s) => s.station)));
   const lignes = [];
   let eaux = 0;
   for (const s of aFaire) {
@@ -216,7 +219,9 @@ export async function journaliserGradient(spots) {
       (air - eau).toFixed(1)].join(','));
   }
   if (!eaux) throw new Error('temperature du lac indisponible pour tous les spots');
-  if (!lignes.length) throw new Error('temperature de l\'air absente pour tous les spots');
+  if (!lacs.some((s) => (m.get(s.station)?.air ?? null) !== null)) {
+    throw new Error('temperature de l\'air absente pour tous les spots');
+  }
   if (eaux < aFaire.length) {
     console.log(`Gradient : lac muet pour ${aFaire.length - eaux} spot(s) sur ${aFaire.length}.`);
   }

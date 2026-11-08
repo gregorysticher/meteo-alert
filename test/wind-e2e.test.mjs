@@ -17,12 +17,16 @@ const MOCK = 'file:///' + join(RACINE, 'test', 'helpers', 'mock-wind.mjs').repla
 const VENDREDI = '2027-05-07T10:00:00Z';
 const SAMEDI = '2027-05-08';
 
-function lancer(monde, { vus = [], env = {} } = {}) {
+function lancer(monde, { vus = [], env = {}, fichiers = {} } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'wind-e2e-'));
   try {
     mkdirSync(join(dir, 'wind'));
     copyFileSync(join(RACINE, 'wind', 'spots.json'), join(dir, 'wind', 'spots.json'));
     writeFileSync(join(dir, 'alerted.json'), JSON.stringify(vus));
+    for (const [f, texte] of Object.entries(fichiers)) {
+      mkdirSync(dirname(join(dir, f)), { recursive: true });
+      writeFileSync(join(dir, f), texte);
+    }
     const log = join(dir, 'ntfy.log');
     writeFileSync(log, '');
     const r = spawnSync(process.execPath, ['--import', MOCK, join(RACINE, 'wind-alert.mjs')], {
@@ -155,6 +159,23 @@ test('B6 : gradient journalise par spot sur lac, station sans thermometre sautee
   assert.equal(l.length - 1, 6, r.gradient);     // 8 spots - Joux (pas de lac) - Preverenges (PRE)
   assert.match(r.gradient, /202705071000,reposoir,GVE,8\.0,12\.0,-4\.0/);
   assert.doesNotMatch(r.gradient, /joux|preverenges/);
+});
+
+test('B6 : second run dans la meme heure, seul le spot sans thermometre reste -> vert', () => {
+  // Reproduit le run rouge du 08/11 11:43.
+  const faits = ['cologny,GVE', 'reposoir,GVE', 'vengeron,GVE', 'coppet,CGI', 'nyon,CGI', 'bouveret,BOU']
+    .map((x) => `202705071000,${x},8.0,12.0,-4.0`).join('\n');
+  const r = lancer({ air: 8, eau: 12 }, { fichiers: {
+    'data/gradient.csv': `ts,spot,station,air_c,eau_c,gradient_c\n${faits}\n`,
+  } });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /Gradient air-eau : 0/);
+});
+
+test('B6 : air absent partout -> rouge', () => {
+  const r = lancer({ air_mesure: false, eau: 12 });
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /air absente/);
 });
 
 test('B6 : lac muet -> run rouge, alertes parties quand meme', () => {

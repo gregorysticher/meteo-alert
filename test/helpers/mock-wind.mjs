@@ -90,6 +90,10 @@ globalThis.fetch = async (url, opts = {}) => {
     return reponse(serieCsv(u.split('/').pop().replace('.csv', '')));
   }
   if (u.includes('VQHA80')) {
+    if (M.air_mesure === false) {
+      return reponse('Station/Location;Date;dkl010z0;fu3010z0;fu3010z1\n' +
+        ['GVE', 'CGI', 'BOU', 'CHB', 'PRE'].map((s) => `${s};202705080000;90;9.26;18.5`).join('\n') + '\n');
+    }
     return reponse('Station/Location;Date;tre200s0;dkl010z0;fu3010z0;fu3010z1\n' +
       ['GVE', 'CGI', 'BOU', 'CHB'].map((s) => `${s};202705080000;${M.air ?? 18};90;9.26;18.5`).join('\n') +
       '\nPRE;202705080000;-;90;9.26;18.5\n');
