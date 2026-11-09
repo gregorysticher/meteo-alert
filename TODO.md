@@ -27,8 +27,6 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 - [ ] **Guest Mode du TRMNL X** : disponible (firmware 1.8.18 installé). Recréer
       Wind Forecast (config au spec B1, Open-Meteo) ou faire un écran vent alimenté
       par `meteo-alert` ?
-- [ ] **Netatmo « degraded » depuis le 2026-08-03**, données pourtant fraîches : dire à
-      Claude s'il remet à zéro (*Reset Health*).
 - [ ] **Alerte neige, réglages ajoutés après la revue QA** : marge d'annulation de
       2 cm et 2 cm minimum pour une prolongation (variables de dépôt, 0 = règle
       littérale). À confirmer ou à changer.
@@ -77,6 +75,9 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-09 — Netatmo 396948 : *Reset Health* fait à la demande de Greg (« Plugin
+      health reset successfully », la page affichait « Auto-refresh stopped »). La
+      veille `trmnl-watchdog` peut envoyer une notification de transition.
 - [x] 2026-11-09 — Veille TRMNL X (`trmnl-watch`) coupée à la demande de Greg
       (`disabled_manually`). Réactivable par `gh workflow enable`.
 - [x] 2026-11-09 — Worker Cloudflare `meteo-alert-cron` déployé (3 crons). Jeton GitHub
