@@ -93,7 +93,10 @@ Wind Forecast (392131), recette obsolète, a été désinstallé le 2026-11-08.
 E-mails de santé TRMNL activés sur les 5 plugins actifs (07/11/2026).
 
 Appareil : TRMNL X, firmware 1.8.18 (special functions disponibles via le menu de
-l'appareil, *Special...*). Guest Mode libre. Le handoff Cowork qui les disait
+l'appareil, *Special...*). Depuis le 2026-11-09 : playlist en *Hold screen* sur le
+DASHBOARD, Vent Wingfoil (page détail) visible juste après, le reste masqué. Milieu deux
+fois ou droite → page détail, gauche → retour. Laissé sur la page détail, l'écran y
+reste. Guest Mode : Vent Wingfoil, 30 min. Le handoff Cowork qui les disait
 indisponibles et citait 392131 ou le Col de Cou est périmé.
 
 ### Notifications

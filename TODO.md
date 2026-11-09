@@ -20,10 +20,9 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
       Échéance : avant le 2027-04-15.
-- [ ] **Tester la page détail sur le TRMNL X** : toucher le milieu de la barre, *Special...*,
-      *Guest Mode*. Guest Mode réglé le 2026-11-09 sur Vent Wingfoil, 30 min (le minimum ;
-      Greg voulait 3 min). Vérifier que la page s'affiche, puis si *Next Screen* ramène
-      à la page principale avant les 30 min. Dire à Claude ce qu'il voit.
+- [ ] **Page détail en 2 touches, à surveiller quelques jours** : si l'écran quitte le
+      DASHBOARD tout seul ou si l'heure « last update » se fige, le dire à Claude (retour
+      possible : remasquer Vent Wingfoil et couper *Hold screen*).
 - [ ] **Synchronisation GitHub du plugin Vent Wingfoil** : dire à Claude s'il la
       connecte (dépôt `trmnl-markup`, dossier `vent-wingfoil`), pour versionner le markup
       comme celui du DASHBOARD.
@@ -72,6 +71,11 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-09 — Accès à la page détail testé par Greg sur le TRMNL X. Playlist : *Hold
+      screen* actif sur le DASHBOARD, Vent Wingfoil visible juste après (les autres
+      masqués). Milieu deux fois (*Next Screen*) ou droite → page détail ; gauche → retour
+      au DASHBOARD, qui reste à l'écran et se met à jour. Guest Mode (Vent Wingfoil, 30 min)
+      gardé en secours, 7 à 8 touches.
 - [x] 2026-11-09 — Page détail pour le Guest Mode (plugin Vent Wingfoil 471074) : vent et
       profil horaire en saison vent, neige seule en saison neige (règle de Greg). Payload :
       `profil`, `tz`, `fin` par spot. Relue par un agent indépendant, constats corrigés.
