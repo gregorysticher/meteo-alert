@@ -39,9 +39,8 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       saison (2027-04-15) : jour, heures, inversion.
 - [ ] 2026-11-14 : compter les commits `data: wind` par jour (pas les runs : la garde
       en saute). En dessous de 4, revoir (spec B3).
-- [ ] Worker Cloudflare : vérifier le premier vrai déclenchement (2026-11-09, 21:17 UTC,
-      `wind-alert` en `workflow_dispatch`), puis passer `GARDE_CRON_VENT_H` à 4,5 et
-      vérifier un vrai run sauté dans les logs.
+- [ ] Worker Cloudflare : vérifier dans les logs qu'un run du cron GitHub (en retard) est
+      bien sauté par la garde, maintenant à 4,5 h (passée le 2026-11-09).
 - [ ] Redéployer le Worker exige `wrangler login` (déconnecté après le déploiement) :
       `npx --yes wrangler@4.158.0 login --device --scopes account:read user:read
       workers:write workers_scripts:write workers_tail:read`, code valable 5 minutes.
@@ -68,6 +67,8 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-09 — Premier déclenchement du Worker vérifié : `wind-alert` lancé à 21:17:26
+      UTC pile (cron 21:17), run vert, TRMNL HTTP 200. `GARDE_CRON_VENT_H` passé à 4,5.
 - [x] 2026-11-09 — Accès à la page détail testé par Greg sur le TRMNL X. Playlist : *Hold
       screen* actif sur le DASHBOARD, Vent Wingfoil visible juste après (les autres
       masqués). Milieu deux fois (*Next Screen*) ou droite → page détail ; gauche → retour
