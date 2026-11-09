@@ -205,7 +205,7 @@ test('B7.2 : fenetre qui commence dans 20 min -> « Aujourd\'hui » part', () =>
 // ---- contrat du payload TRMNL (docs/contrat-trmnl.md) --------------------------
 
 const HOOK = {};
-const SPOT_CHAMPS = ['a', 'd', 'de', 'e', 'j', 'kn', 'min', 'n', 'now', 'raf'];
+const SPOT_CHAMPS = ['a', 'd', 'de', 'e', 'fin', 'j', 'kn', 'min', 'n', 'now', 'raf'];
 // On peut ajouter des champs, pas en retirer : inclusion, pas egalite.
 const contient = (obj, champs, nom) => {
   for (const c of champs) assert.ok(c in obj, `${nom}.${c} retire`);
@@ -213,9 +213,10 @@ const contient = (obj, champs, nom) => {
 
 test('contrat : aucun champ retire, en saison avec fenetre', () => {
   const p = lancer({ vent: venteSamedi('Bellevue') }, HOOK).payload;
-  contient(p, ['maj', 'mesure', 'neige', 'reco', 'saison', 'seuil', 'spots'], 'payload');
+  contient(p, ['maj', 'mesure', 'neige', 'profil', 'reco', 'saison', 'seuil', 'spots'], 'payload');
   contient(p.mesure, ['g', 'h', 'n', 'now'], 'mesure');
   contient(p.reco, ['a', 'de', 'fin', 'g', 'j', 'kn', 'min', 'n', 'ok', 'raf'], 'reco');
+  contient(p.profil, ['de', 'j', 'kn', 'n', 'ok'], 'profil');
   for (const s of p.spots) contient(s, SPOT_CHAMPS, 'spots');
 });
 
@@ -226,6 +227,27 @@ test('contrat : unites et sens des champs', () => {
   assert.ok(p.reco.raf >= 19 && p.reco.raf <= 20, `raf ${p.reco.raf}`);
   const s = p.spots[0];
   assert.deepEqual([s.n, s.min, s.now, s.d, s.kn], ['Reposoir', 12, 5, 90, 15]);
+});
+
+test('contrat : profil = spot et jour de la reco, 7 h a 21 h, ok decide par meteo-alert', () => {
+  const p = lancer({ vent: venteSamedi('Bellevue') }, HOOK).payload;
+  const pf = p.profil;
+  assert.deepEqual([pf.n, pf.j, pf.de], [p.reco.n, p.reco.j, 7]);
+  assert.equal(pf.kn.length, 15);
+  assert.equal(pf.ok.length, 15);
+  // Fenetre samedi 09:00-18:00 : les heures 9 a 17 tiennent, 7, 8 et 18 a 21 non.
+  assert.deepEqual(pf.ok, [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0]);
+  assert.equal(pf.kn[2], p.reco.kn);
+  assert.ok(pf.kn.every((v) => v === null || Number.isInteger(v)));
+  // fin des spots : meme sens que reco.fin (epoch UTC, fin de la derniere heure)
+  assert.equal(p.spots[0].fin, p.reco.fin);
+});
+
+test('contrat : hors saison, profil et fin des spots nuls', () => {
+  const p = lancer({ now: '2026-11-09T18:00:00Z' }, HOOK).payload;
+  assert.equal(p.reco, null);
+  assert.equal(p.profil, null);
+  assert.ok(p.spots.every((s) => s.fin === null));
 });
 
 test('webhook injoignable -> rouge, QA du run conservee', () => {

@@ -173,6 +173,28 @@ export function choisirReco(classement, cfg, biais, maintenant) {
   };
 }
 
+// Profil horaire de la page detail (Guest Mode) : le spot et le jour de la reco,
+// de PROFIL_HEURES[0] a PROFIL_HEURES[1] exclu, heure locale. kn = prevision
+// corrigee du biais, arrondie, null si l'heure manque. ok = 1 si l'heure est
+// exploitable (creneau, saison, secteur, horizon) ET au seuil plein : c'est la
+// regle de fenetre() sans la duree minimale. Decide ici, pas en Liquid.
+export const PROFIL_HEURES = [7, 22];
+export function profilReco(classement, cfg, biais, maintenant, reco) {
+  if (!reco) return null;
+  const c = classement.find((x) => x.spot.court === reco.n);
+  if (!c) return null;
+  const hs = heures(c.lignes, c.spot, cfg, biais, maintenant, true)
+    .filter((h) => h.t.iso === reco.j);
+  const [de, fin] = PROFIL_HEURES;
+  const kn = [], ok = [];
+  for (let heure = de; heure < fin; heure++) {
+    const h = hs.find((x) => x.t.heure === heure);       // jour du changement d'heure : la premiere
+    kn.push(h ? Math.max(0, Math.round(h.corrige)) : null);
+    ok.push(h && h.ok && h.corrige >= cfg.seuil_kn ? 1 : 0);
+  }
+  return { n: reco.n, j: reco.j, de, kn, ok };
+}
+
 // Etage d'alerte e = { lead_min_h, lead_max_h, marge_kn } : pour chaque spot
 // (du plus proche au plus loin), la premiere fenetre dont le debut tombe dans
 // la tranche — pas seulement la prochaine : une fenetre demain ne doit pas

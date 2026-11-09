@@ -12,7 +12,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fenetre, fenetres, choisirReco, choisirAlerte, dejaEnvoye, local } from '../wind-select.mjs';
+import { fenetre, fenetres, choisirReco, profilReco, choisirAlerte, dejaEnvoye, local } from '../wind-select.mjs';
 
 const S = (key, court, route_min, secteurs = [[200, 260]]) =>
   ({ key, court, nom: court, route_min, secteurs });
@@ -296,4 +296,42 @@ test('etatMesure : ● si fenetre, ◐ pres du seuil, ○ sinon, mesure absente 
   assert.equal(etatMesure(8, false, 11, 2), '○');
   assert.equal(etatMesure(null, false, 11, 2), '○');
   assert.equal(etatMesure(0, false, 2, 2), '◐', '0 kn est une vraie mesure');
+});
+
+// ---- profil horaire de la page detail (Guest Mode) ---------------------------
+
+const profil = (vent, o = {}) => {
+  const cl = classer(vent, o);
+  const cfg = o.cfg ?? CFG, biais = o.biais ?? new Map(), m = o.maintenant ?? VEN_19H;
+  return profilReco(cl, cfg, biais, m, choisirReco(cl, cfg, biais, m));
+};
+
+test('profil : spot et jour de la reco, ok = creneau + secteur + seuil plein', () => {
+  const p = profil({ reposoir: [
+    { jour: SAM, de: 10, a: 14, kn: 14 },
+    { jour: SAM, de: 14, a: 16, kn: 14, dir: 120 },        // hors secteur
+    { jour: SAM, de: 16, a: 20, kn: 14 },                  // 18-20 hors creneau (9-18)
+  ] });
+  assert.deepEqual([p.n, p.j, p.de], ['Reposoir', SAM, 7]);
+  //        7  8  9 10 11 12 13 14 15 16 17 18 19 20 21
+  assert.deepEqual(p.ok, [0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0]);
+  assert.deepEqual(p.kn, [4, 4, 4, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 4, 4]);
+});
+
+test('profil : kn corrige du biais, heure absente -> null, jamais negatif', () => {
+  const biais = new Map([[24, -2]]);
+  // samedi 12:00 local = 10:00 UTC : heure retiree des donnees
+  const p = profil({ reposoir: [{ jour: SAM, de: 9, a: 18, kn: 10 }] },
+    { biais, trous: ['202705151000'] });
+  assert.equal(p.kn[5], null);
+  assert.equal(p.ok[5], 0);
+  assert.equal(p.kn[3], 12);                              // 10 + 2
+  assert.equal(p.ok[3], 1);
+  const neg = profil({ reposoir: [{ jour: SAM, de: 9, a: 18, kn: 12 }] },
+    { biais: new Map([[24, 20]]) });                      // correction -20
+  assert.ok(neg.kn.every((v) => v === null || v >= 0));
+});
+
+test('profil : pas de reco -> null', () => {
+  assert.equal(profilReco([], CFG, new Map(), VEN_19H, null), null);
 });

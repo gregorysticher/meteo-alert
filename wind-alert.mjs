@@ -31,7 +31,7 @@ import {
   biaisParEcheance, journaliserGradient,
 } from './wind-qa.mjs';
 import {
-  local, fenetre, moyenne, choisirReco, choisirAlerte, dejaEnvoye, jourTient,
+  local, fenetre, moyenne, choisirReco, profilReco, choisirAlerte, dejaEnvoye, jourTient,
   ligneEau, finLocale, etatMesure, dansSaison,
 } from './wind-select.mjs';
 
@@ -134,7 +134,7 @@ async function neigeEcran(saison, maintenant) {
 
 // CONTRAT : docs/contrat-trmnl.md. Ajouter des champs, jamais en retirer ni en
 // changer le sens sans prevenir le markup (DASHBOARD 392375).
-async function versTrmnl(classement, cfg, emission, reco, maintenant) {
+async function versTrmnl(classement, cfg, emission, reco, profil, maintenant) {
   if (TEST) return 'TEST : webhook TRMNL non touche';
   if (!TRMNL && !DRY_RUN) {
     process.exitCode = 1;          // ecran fige sans le dire
@@ -150,6 +150,7 @@ async function versTrmnl(classement, cfg, emission, reco, maintenant) {
     j: f ? f[0].t.iso : null,
     de: f ? f[0].t.court : null,
     a: f ? finLocale(f) : null,
+    fin: f ? Math.round(f.at(-1).d.getTime() / 1000) + 3600 : null,
     kn: f ? +moyenne(f, 'corrige').toFixed(0) : null,
     raf: f ? +Math.max(...f.map((l) => l.rafale)).toFixed(0) : null,
     e: f ? 2 : null,
@@ -160,7 +161,7 @@ async function versTrmnl(classement, cfg, emission, reco, maintenant) {
       maj: emission, seuil: cfg.seuil_kn, saison,
       mesure: mesureEcran(classement, cfg),
       neige: await neigeEcran(saison, maintenant),
-      spots, reco,
+      spots, reco, profil,
     },
   });
   if (corps.length > 5000) {
@@ -353,7 +354,8 @@ if (QA_ONLY) {
     : 'aucune heure exploitable (hors saison ou hors creneaux)'));
   // Webhook injoignable : run rouge, mais la QA du run ne doit pas etre perdue.
   try {
-    console.log(await versTrmnl(classement, cfg, emission, reco, maintenant));
+    const profil = profilReco(classement, cfg, biais, maintenant, reco);
+    console.log(await versTrmnl(classement, cfg, emission, reco, profil, maintenant));
   } catch (err) {
     console.error(`ECHEC webhook TRMNL : ${err.message}`);
     process.exitCode = 1;

@@ -8,7 +8,8 @@ copie.
 - **`meteo-alert`** est la seule source de vérité sur les conditions : prévisions
   MétéoSuisse, correction du biais, fenêtres, choix du spot, seuils, saison. Il publie
   deux sorties : l'alerte ntfy et ce payload.
-- **Le markup** (DASHBOARD 392375, dépôt `trmnl-markup`) ne fait que rendre. Il ne
+- **Les markups** (DASHBOARD 392375, dépôt `trmnl-markup` ; page détail du plugin Vent
+  Wingfoil 471074, pour le Guest Mode) ne font que rendre. Il ne
   recalcule rien, ne retrie rien, ne convertit aucune unité et ne copie aucune valeur.
   Il garde seulement ce qui dépend de l'heure du rendu (fenêtre finie, âge des données)
   et la mise en forme.
@@ -42,7 +43,8 @@ données ne changent qu'à chaque run. À revoir si un second consommateur appar
 | `mesure` | objet ou null | Spot prioritaire mesuré, voir plus bas | Oui |
 | `neige` | objet ou null | Ligne neige, voir plus bas. Null en saison vent, ou si l'alerte neige n'a pas encore écrit | Oui, en saison neige |
 | `reco` | objet ou null | Spot et fenêtre à afficher, voir plus bas. Null s'il n'y a aucune heure exploitable dans l'horizon. Indépendant de `saison` | Oui, en saison vent |
-| `spots` | tableau | Les 6 spots les plus proches, voir plus bas | Non |
+| `spots` | tableau | Les 6 spots les plus proches, voir plus bas | Page détail |
+| `profil` | objet ou null | Profil horaire du spot et du jour de `reco`, voir plus bas. Null si `reco` est null | Page détail |
 
 ### `mesure`
 
@@ -73,8 +75,9 @@ meilleure moyenne sur `min_heures` dans les créneaux (`ok` faux).
 
 ### `spots[]`
 
-Triés par temps de route croissant. Non lus par le markup depuis le 2026-11-08. Sans
-fenêtre, `j`, `de`, `a`, `kn`, `raf` et `e` sont nuls ensemble : c'est l'état normal.
+Triés par temps de route croissant. Lus par la page détail seulement (le DASHBOARD ne
+les lit plus depuis le 2026-11-08). Sans fenêtre, `j`, `de`, `a`, `fin`, `kn`, `raf` et
+`e` sont nuls ensemble : c'est l'état normal.
 
 | Champ | Type | Sens |
 |---|---|---|
@@ -83,9 +86,22 @@ fenêtre, `j`, `de`, `a`, `kn`, `raf` et `e` sont nuls ensemble : c'est l'état 
 | `now` | nœuds, entier, ou null | Mesure à la station |
 | `d` | degrés, ou null | Direction mesurée |
 | `j`, `de`, `a` | comme `reco` | Prochaine fenêtre au seuil plein |
+| `fin` | epoch UTC, secondes | Fin de cette fenêtre, comme `reco.fin`. Depuis le 2026-11-09 |
 | `kn` | nœuds, entier | Moyenne corrigée du biais |
 | `raf` | nœuds, entier | Rafale maximale prévue |
 | `e` | 2 ou null | 2 : une fenêtre tient le seuil. Aucune autre valeur n'existe |
+
+### `profil`
+
+Depuis le 2026-11-09. Pour la page détail : le spot et le jour de `reco`, heure par heure.
+
+| Champ | Type | Sens |
+|---|---|---|
+| `n` | texte | Nom court, celui de `reco.n` |
+| `j` | `AAAA-MM-JJ` local | Jour, celui de `reco.j` |
+| `de` | heure locale, entier | Heure de la première valeur (7). Les valeurs suivent d'heure en heure jusqu'à 21 h |
+| `kn` | tableau de nœuds, entiers ou null | Prévision corrigée du biais, comme `reco.kn`. Null : heure absente des données |
+| `ok` | tableau de 0 ou 1 | 1 : l'heure est exploitable (créneau, saison, secteur) et au seuil plein. C'est la règle des fenêtres sans la durée minimale : une heure isolée peut valoir 1 |
 
 ### `neige`
 
