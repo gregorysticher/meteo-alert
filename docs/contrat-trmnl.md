@@ -40,6 +40,7 @@ données ne changent qu'à chaque run. À revoir si un second consommateur appar
 | `maj` | texte `AAAAMMJJHHMM`, UTC | Émission du run MétéoSuisse. Ni l'heure du run, ni celle de la mesure | Âge des données (badge VENT PÉRIMÉ) |
 | `saison` | `vent` ou `neige` | Selon `saison` de `wind/spots.json` | Choix du bloc. Page détail : le vent seul en saison vent, la neige seule en saison neige (règle de Greg, 2026-11-09) |
 | `seuil` | nœuds | `seuil_kn` de `wind/spots.json` | Non |
+| `tz` | secondes | Décalage de l'heure suisse sur UTC au moment du run (3600 ou 7200). Depuis le 2026-11-09 : `trmnl.user.utc_offset` pourrait ne pas suivre l'heure d'été | Heure locale de la page détail |
 | `mesure` | objet ou null | Spot prioritaire mesuré, voir plus bas | Oui |
 | `neige` | objet ou null | Ligne neige, voir plus bas. Null en saison vent, ou si l'alerte neige n'a pas encore écrit | Oui, en saison neige |
 | `reco` | objet ou null | Spot et fenêtre à afficher, voir plus bas. Null s'il n'y a aucune heure exploitable dans l'horizon. Indépendant de `saison` | Oui, en saison vent |
@@ -100,8 +101,8 @@ Depuis le 2026-11-09. Pour la page détail : le spot et le jour de `reco`, heure
 | `n` | texte | Nom court, celui de `reco.n` |
 | `j` | `AAAA-MM-JJ` local | Jour, celui de `reco.j` |
 | `de` | heure locale, entier | Heure de la première valeur (7). Les valeurs suivent d'heure en heure jusqu'à 21 h |
-| `kn` | tableau de nœuds, entiers ou null | Prévision corrigée du biais, comme `reco.kn`. Null : heure absente des données |
-| `ok` | tableau de 0 ou 1 | 1 : l'heure est exploitable (créneau, saison, secteur) et au seuil plein. C'est la règle des fenêtres sans la durée minimale : une heure isolée peut valoir 1 |
+| `kn` | tableau de nœuds au dixième, ou null | Prévision corrigée du biais. Au dixième, pour qu'une barre grise ne touche pas la ligne du seuil (10,6 arrondi à 11). Null : heure absente des données |
+| `ok` | tableau de 0 ou 1 | 1 : l'heure est exploitable (créneau, saison, secteur, horizon de 7 jours) et au seuil plein. C'est la règle des fenêtres sans la durée minimale : une heure isolée peut valoir 1. Au-delà de l'horizon, une heure au-dessus du seuil vaut 0 |
 
 ### `neige`
 

@@ -32,7 +32,7 @@ import {
 } from './wind-qa.mjs';
 import {
   local, fenetre, moyenne, choisirReco, profilReco, choisirAlerte, dejaEnvoye, jourTient,
-  ligneEau, finLocale, etatMesure, dansSaison,
+  ligneEau, finLocale, etatMesure, dansSaison, decalage,
 } from './wind-select.mjs';
 
 const CONFIG = 'wind/spots.json';
@@ -158,7 +158,7 @@ async function versTrmnl(classement, cfg, emission, reco, profil, maintenant) {
   const saison = dansSaison(maintenant, cfg.saison) ? 'vent' : 'neige';
   const corps = JSON.stringify({
     merge_variables: {
-      maj: emission, seuil: cfg.seuil_kn, saison,
+      maj: emission, seuil: cfg.seuil_kn, saison, tz: decalage(maintenant),
       mesure: mesureEcran(classement, cfg),
       neige: await neigeEcran(saison, maintenant),
       spots, reco, profil,

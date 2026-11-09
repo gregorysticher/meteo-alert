@@ -12,7 +12,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fenetre, fenetres, choisirReco, profilReco, choisirAlerte, dejaEnvoye, local } from '../wind-select.mjs';
+import { fenetre, fenetres, choisirReco, profilReco, choisirAlerte, dejaEnvoye, local, decalage } from '../wind-select.mjs';
 
 const S = (key, court, route_min, secteurs = [[200, 260]]) =>
   ({ key, court, nom: court, route_min, secteurs });
@@ -334,4 +334,24 @@ test('profil : kn corrige du biais, heure absente -> null, jamais negatif', () =
 
 test('profil : pas de reco -> null', () => {
   assert.equal(profilReco([], CFG, new Map(), VEN_19H, null), null);
+});
+
+test('profil : heure exactement au seuil -> ok, kn au dixieme', () => {
+  const p = profil({ reposoir: [{ jour: SAM, de: 10, a: 14, kn: 11 }, { jour: SAM, de: 14, a: 16, kn: 10.6 }] });
+  assert.deepEqual(p.ok.slice(3, 9), [1, 1, 1, 1, 0, 0]);       // 10-13 h a 11, 14-15 h a 10,6
+  assert.deepEqual(p.kn.slice(3, 9), [11, 11, 11, 11, 10.6, 10.6]);
+});
+
+test('profil : fenetre deja commencee -> les heures ecoulees du jour restent noires', () => {
+  const p = profil({ reposoir: [{ jour: SAM, de: 10, a: 14, kn: 15 }] },
+    { maintenant: new Date('2027-05-15T09:30:00Z') });           // samedi 11:30 locale
+  assert.equal(p.j, SAM);
+  assert.deepEqual(p.ok.slice(3, 7), [1, 1, 1, 1]);              // 10, 11 (ecoulees), 12, 13
+});
+
+test('decalage : heure suisse, ete et hiver', () => {
+  assert.equal(decalage(new Date('2027-05-15T09:30:00Z')), 7200);
+  assert.equal(decalage(new Date('2026-11-09T18:00:00Z')), 3600);
+  assert.equal(decalage(new Date('2026-10-25T00:30:00Z')), 7200);   // avant le passage (01:00 UTC)
+  assert.equal(decalage(new Date('2026-10-25T01:30:00Z')), 3600);   // apres
 });

@@ -213,7 +213,7 @@ const contient = (obj, champs, nom) => {
 
 test('contrat : aucun champ retire, en saison avec fenetre', () => {
   const p = lancer({ vent: venteSamedi('Bellevue') }, HOOK).payload;
-  contient(p, ['maj', 'mesure', 'neige', 'profil', 'reco', 'saison', 'seuil', 'spots'], 'payload');
+  contient(p, ['maj', 'mesure', 'neige', 'profil', 'reco', 'saison', 'seuil', 'spots', 'tz'], 'payload');
   contient(p.mesure, ['g', 'h', 'n', 'now'], 'mesure');
   contient(p.reco, ['a', 'de', 'fin', 'g', 'j', 'kn', 'min', 'n', 'ok', 'raf'], 'reco');
   contient(p.profil, ['de', 'j', 'kn', 'n', 'ok'], 'profil');
@@ -238,13 +238,27 @@ test('contrat : profil = spot et jour de la reco, 7 h a 21 h, ok decide par mete
   // Fenetre samedi 09:00-18:00 : les heures 9 a 17 tiennent, 7, 8 et 18 a 21 non.
   assert.deepEqual(pf.ok, [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0]);
   assert.equal(pf.kn[2], p.reco.kn);
-  assert.ok(pf.kn.every((v) => v === null || Number.isInteger(v)));
+  assert.ok(pf.kn.every((v) => v === null || Math.round(v * 10) === v * 10), 'kn au dixieme');
+  assert.equal(p.tz, 7200);
   // fin des spots : meme sens que reco.fin (epoch UTC, fin de la derniere heure)
   assert.equal(p.spots[0].fin, p.reco.fin);
 });
 
+test('contrat : chaque spot porte la fin de SA fenetre', () => {
+  // Coppet : secteur 180-300, d'ou la direction 230 ; dimanche, l'autre jour du week-end.
+  const vent = { Bellevue: { [SAMEDI]: 15 }, Coppet: { '2027-05-09': 15 } };
+  const p = lancer({ vent, dir: { Coppet: 230 } }, HOOK).payload;
+  const avec = p.spots.filter((s) => s.e === 2);
+  assert.ok(new Set(avec.map((s) => s.j)).size >= 2, avec.map((s) => s.n + ' ' + s.j).join(', '));
+  for (const s of avec) {
+    // fin = j + a en heure d'ete suisse ; a = 00:00 voudrait dire le lendemain
+    assert.equal(s.fin, Date.parse(`${s.j}T${s.a}:00+02:00`) / 1000, s.n);
+  }
+});
+
 test('contrat : hors saison, profil et fin des spots nuls', () => {
   const p = lancer({ now: '2026-11-09T18:00:00Z' }, HOOK).payload;
+  assert.equal(p.tz, 3600);
   assert.equal(p.reco, null);
   assert.equal(p.profil, null);
   assert.ok(p.spots.every((s) => s.fin === null));

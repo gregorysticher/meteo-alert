@@ -38,6 +38,18 @@ export function local(d) {
   };
 }
 
+// Decalage de l'heure suisse sur UTC a l'instant d, en secondes (3600 ou 7200).
+// Envoye a l'ecran : trmnl.user.utc_offset pourrait ne pas suivre l'heure d'ete.
+export function decalage(d) {
+  const p = new Intl.DateTimeFormat('en-GB', {
+    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(d);
+  const v = (t) => +p.find((x) => x.type === t).value;
+  const loc = Date.UTC(v('year'), v('month') - 1, v('day'), v('hour'), v('minute'));
+  return Math.round((loc - Math.floor(d.getTime() / 6e4) * 6e4) / 1000);
+}
+
 export function dansSaison(d, saison) {
   const p = new Intl.DateTimeFormat('fr-CH', {
     timeZone: TZ, day: '2-digit', month: '2-digit',
@@ -175,9 +187,10 @@ export function choisirReco(classement, cfg, biais, maintenant) {
 
 // Profil horaire de la page detail (Guest Mode) : le spot et le jour de la reco,
 // de PROFIL_HEURES[0] a PROFIL_HEURES[1] exclu, heure locale. kn = prevision
-// corrigee du biais, arrondie, null si l'heure manque. ok = 1 si l'heure est
-// exploitable (creneau, saison, secteur, horizon) ET au seuil plein : c'est la
-// regle de fenetre() sans la duree minimale. Decide ici, pas en Liquid.
+// corrigee du biais, au dixieme (un arrondi a l'entier montrerait 11 kn en gris
+// pour 10,6), null si l'heure manque. ok = 1 si l'heure est exploitable (creneau,
+// saison, secteur, horizon) ET au seuil plein : c'est la regle de fenetre() sans la
+// duree minimale. Decide ici, pas en Liquid.
 export const PROFIL_HEURES = [7, 22];
 export function profilReco(classement, cfg, biais, maintenant, reco) {
   if (!reco) return null;
@@ -189,7 +202,7 @@ export function profilReco(classement, cfg, biais, maintenant, reco) {
   const kn = [], ok = [];
   for (let heure = de; heure < fin; heure++) {
     const h = hs.find((x) => x.t.heure === heure);       // jour du changement d'heure : la premiere
-    kn.push(h ? Math.max(0, Math.round(h.corrige)) : null);
+    kn.push(h ? Math.max(0, Math.round(h.corrige * 10) / 10) : null);
     ok.push(h && h.ok && h.corrige >= cfg.seuil_kn ? 1 : 0);
   }
   return { n: reco.n, j: reco.j, de, kn, ok };
