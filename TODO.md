@@ -20,13 +20,10 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
       Échéance : avant le 2027-04-15.
-- [ ] **Rappel demandé par Greg pour la prochaine séance : la nouveauté TRMNL attendue
-      est arrivée.** Les *special functions* du TRMNL X sont disponibles avec le firmware
-      1.8.18 (menu de l'appareil, *Special...*). La veille a sonné le 2026-11-02. Décision
-      qui en découle : voir Guest Mode ci-dessous.
-- [ ] **Guest Mode du TRMNL X** : disponible (firmware 1.8.18 installé). Recréer
-      Wind Forecast (config au spec B1, Open-Meteo) ou faire un écran vent alimenté
-      par `meteo-alert` ?
+- [ ] **Guest Mode du TRMNL X** (firmware 1.8.18, menu de l'appareil, *Special...*) :
+      peut afficher un écran masqué de la playlist pendant 30 min à 8 h, par le menu
+      (environ 7 touches). Idée de Greg (2026-11-09) : une page détails vent et neige
+      ainsi. Dire à Claude s'il fait une maquette (non configuré, non testé).
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
 - [ ] **WindLive** : leur `robots.txt` interdit `/api/`. Décider si on leur
