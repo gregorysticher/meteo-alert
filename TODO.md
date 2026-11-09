@@ -20,10 +20,13 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
       Échéance : avant le 2027-04-15.
-- [ ] **Guest Mode du TRMNL X** (firmware 1.8.18, menu de l'appareil, *Special...*) :
-      peut afficher un écran masqué de la playlist pendant 30 min à 8 h, par le menu
-      (environ 7 touches). Idée de Greg (2026-11-09) : une page détails vent et neige
-      ainsi. Dire à Claude s'il fait une maquette (non configuré, non testé).
+- [ ] **Guest Mode du TRMNL X** : la page détail est en ligne (plugin Vent Wingfoil,
+      masqué dans la playlist). Reste à choisir la durée : Greg voulait 3 min, TRMNL ne
+      propose que 30 min au minimum. Dire à Claude s'il règle 30 min, puis tester sur
+      l'appareil si *Next Screen* ramène à la page principale avant la fin.
+- [ ] **Synchronisation GitHub du plugin Vent Wingfoil** : dire à Claude s'il la
+      connecte (dépôt `trmnl-markup`, dossier `vent-wingfoil`), pour versionner le markup
+      comme celui du DASHBOARD.
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
 - [ ] **WindLive** : leur `robots.txt` interdit `/api/`. Décider si on leur
@@ -69,6 +72,10 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-09 — Page détail pour le Guest Mode (plugin Vent Wingfoil 471074) : vent et
+      profil horaire en saison vent, neige seule en saison neige (règle de Greg). Payload :
+      `profil`, `tz`, `fin` par spot. Relue par un agent indépendant, constats corrigés.
+      Markup enregistré sur TRMNL (empreinte 5ddc1996), pas encore versionné sur GitHub.
 - [x] 2026-11-09 — Netatmo 396948 : *Reset Health* fait à la demande de Greg (« Plugin
       health reset successfully », la page affichait « Auto-refresh stopped »). La
       veille `trmnl-watchdog` peut envoyer une notification de transition.
