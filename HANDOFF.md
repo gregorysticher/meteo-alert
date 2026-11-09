@@ -67,7 +67,7 @@ code.claude.com/docs/en/remote-control et code.claude.com/docs/en/chrome.
 |---|---|---|
 | `gregorysticher/meteo-alert` | public | Alertes vent et neige, boucle QA, producteur du webhook vent TRMNL |
 | `gregorysticher/trmnl-markup` | privé | Copie du markup TRMNL. `src/full.liquid` est écrit par `trmnl-sync[bot]` à chaque sauvegarde dans TRMNL |
-| `gregorysticher/trmnl-watch` | privé | Veille hebdomadaire (lundi) : arrivée des special functions sur le TRMNL X. A sonné le 02/11/2026 à juste titre, à couper (TODO) |
+| `gregorysticher/trmnl-watch` | privé | Veille hebdomadaire (lundi) : arrivée des special functions sur le TRMNL X. A sonné le 02/11/2026 à juste titre, coupée le 09/11/2026 |
 | `gregorysticher/trmnl-watchdog` | privé | Santé et fraîcheur de Netatmo 396948 seul, via le MCP TRMNL, 3 runs/jour, ntfy sur transition. `degraded` collant depuis le 03/08/2026, données fraîches |
 
 **Ne jamais éditer `trmnl-markup` directement** : la sauvegarde suivante dans

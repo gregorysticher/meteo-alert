@@ -27,10 +27,6 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 - [ ] **Guest Mode du TRMNL X** : disponible (firmware 1.8.18 installé). Recréer
       Wind Forecast (config au spec B1, Open-Meteo) ou faire un écran vent alimenté
       par `meteo-alert` ?
-- [ ] **Veille TRMNL X à couper** : elle a rempli son rôle mais renvoie sa
-      notification chaque lundi. `gh workflow disable` refusé à Claude par le
-      classifieur ; le demander explicitement ou lancer
-      `gh workflow disable veille-trmnl-x.yml -R gregorysticher/trmnl-watch`.
 - [ ] **Netatmo « degraded » depuis le 2026-08-03**, données pourtant fraîches : dire à
       Claude s'il remet à zéro (*Reset Health*).
 - [ ] **Alerte neige, réglages ajoutés après la revue QA** : marge d'annulation de
@@ -81,6 +77,8 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-09 — Veille TRMNL X (`trmnl-watch`) coupée à la demande de Greg
+      (`disabled_manually`). Réactivable par `gh workflow enable`.
 - [x] 2026-11-09 — Worker Cloudflare `meteo-alert-cron` déployé (3 crons). Jeton GitHub
       fine-grained `meteo-alert-cron` (Actions en écriture sur `meteo-alert` seul, sans
       expiration) et `NTFY_TOPIC_PANNE` posés par Greg. Wrangler déconnecté du PC.
