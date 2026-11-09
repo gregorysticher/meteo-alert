@@ -20,10 +20,10 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
       Échéance : avant le 2027-04-15.
-- [ ] **Guest Mode du TRMNL X** : la page détail est en ligne (plugin Vent Wingfoil,
-      masqué dans la playlist). Reste à choisir la durée : Greg voulait 3 min, TRMNL ne
-      propose que 30 min au minimum. Dire à Claude s'il règle 30 min, puis tester sur
-      l'appareil si *Next Screen* ramène à la page principale avant la fin.
+- [ ] **Tester la page détail sur le TRMNL X** : toucher le milieu de la barre, *Special...*,
+      *Guest Mode*. Guest Mode réglé le 2026-11-09 sur Vent Wingfoil, 30 min (le minimum ;
+      Greg voulait 3 min). Vérifier que la page s'affiche, puis si *Next Screen* ramène
+      à la page principale avant les 30 min. Dire à Claude ce qu'il voit.
 - [ ] **Synchronisation GitHub du plugin Vent Wingfoil** : dire à Claude s'il la
       connecte (dépôt `trmnl-markup`, dossier `vent-wingfoil`), pour versionner le markup
       comme celui du DASHBOARD.
