@@ -38,13 +38,13 @@ données ne changent qu'à chaque run. À revoir si un second consommateur appar
 | Champ | Type | Sens | Écran |
 |---|---|---|---|
 | `maj` | texte `AAAAMMJJHHMM`, UTC | Émission du run MétéoSuisse. Ni l'heure du run, ni celle de la mesure | Âge des données (badge VENT PÉRIMÉ) |
-| `saison` | `vent` ou `neige` | Selon `saison` de `wind/spots.json` | Choix du bloc |
+| `saison` | `vent` ou `neige` | Selon `saison` de `wind/spots.json` | Choix du bloc. Page détail : le vent seul en saison vent, la neige seule en saison neige (règle de Greg, 2026-11-09) |
 | `seuil` | nœuds | `seuil_kn` de `wind/spots.json` | Non |
 | `mesure` | objet ou null | Spot prioritaire mesuré, voir plus bas | Oui |
 | `neige` | objet ou null | Ligne neige, voir plus bas. Null en saison vent, ou si l'alerte neige n'a pas encore écrit | Oui, en saison neige |
 | `reco` | objet ou null | Spot et fenêtre à afficher, voir plus bas. Null s'il n'y a aucune heure exploitable dans l'horizon. Indépendant de `saison` | Oui, en saison vent |
-| `spots` | tableau | Les 6 spots les plus proches, voir plus bas | Page détail |
-| `profil` | objet ou null | Profil horaire du spot et du jour de `reco`, voir plus bas. Null si `reco` est null | Page détail |
+| `spots` | tableau | Les 6 spots les plus proches, voir plus bas | Page détail, en saison vent |
+| `profil` | objet ou null | Profil horaire du spot et du jour de `reco`, voir plus bas. Null si `reco` est null | Page détail, en saison vent |
 
 ### `mesure`
 
