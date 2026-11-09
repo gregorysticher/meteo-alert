@@ -31,11 +31,6 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       notification chaque lundi. `gh workflow disable` refusé à Claude par le
       classifieur ; le demander explicitement ou lancer
       `gh workflow disable veille-trmnl-x.yml -R gregorysticher/trmnl-watch`.
-- [ ] **Déclencheur Cloudflare (B3)**, reporté par Greg le 2026-11-08 à la prochaine
-      séance. Compte créé. Reste : autoriser Wrangler (Claude relance la page, droits
-      limités aux Workers ; rien n'a encore été autorisé), créer le jeton GitHub
-      fine-grained, le poser, puis Claude déploie. Il faut être devant le PC. Worker écrit
-      et testé dans `worker/`, pas encore déployé.
 - [ ] **Netatmo « degraded » depuis le 2026-08-03**, données pourtant fraîches : dire à
       Claude s'il remet à zéro (*Reset Health*).
 - [ ] **Alerte neige, réglages ajoutés après la revue QA** : marge d'annulation de
@@ -57,8 +52,12 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       saison (2027-04-15) : jour, heures, inversion.
 - [ ] 2026-11-14 : compter les commits `data: wind` par jour (pas les runs : la garde
       en saute). En dessous de 4, revoir (spec B3).
-- [ ] Après déploiement du Worker : `GARDE_CRON_VENT_H` à 4,5 (pas avant : la cadence
-      tomberait). Vérifier un vrai run sauté dans les logs.
+- [ ] Worker Cloudflare : vérifier le premier vrai déclenchement (2026-11-09, 21:17 UTC,
+      `wind-alert` en `workflow_dispatch`), puis passer `GARDE_CRON_VENT_H` à 4,5 et
+      vérifier un vrai run sauté dans les logs.
+- [ ] Redéployer le Worker exige `wrangler login` (déconnecté après le déploiement) :
+      `npx --yes wrangler@4.158.0 login --device --scopes account:read user:read
+      workers:write workers_scripts:write workers_tail:read`, code valable 5 minutes.
 - [ ] Début de saison B5 : après 4 à 6 semaines d'archive AROME, comparer les modèles
       (rapport « Erreur absolue par spot, 12-36 h »).
 - [ ] Neige : après 3 ou 4 épisodes, trancher l'alignement (B4.1) et regarder la
@@ -82,6 +81,9 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-09 — Worker Cloudflare `meteo-alert-cron` déployé (3 crons). Jeton GitHub
+      fine-grained `meteo-alert-cron` (Actions en écriture sur `meteo-alert` seul, sans
+      expiration) et `NTFY_TOPIC_PANNE` posés par Greg. Wrangler déconnecté du PC.
 - [x] 2026-11-08 — B4.2 : l'écran affiche le cumul et la plage de l'alerte, horizon
       5 jours (`W.neige`, variante B validée par Greg). Journal neige complété.
 - [x] 2026-11-08 — Contrat TRMNL écrit (`docs/contrat-trmnl.md`), webhook conservé. Le

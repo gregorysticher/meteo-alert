@@ -113,7 +113,8 @@ l'envoi a réussi).
 | `snow-fresh-alert.yml` | `47 5,16 * * *` | SLF IMIS ILI2 (HN_1D) ≥ `vars.SEUIL_NEIGE_FRAICHE_CM` (10) ; journal et rapport prévision/mesure (`data/neige.csv`) |
 | `probe-windlive.yml` | manuel | Sonde de découverte WindLive (lecture seule) |
 
-**Déclencheur Cloudflare** (`worker/`, pas encore déployé) : appelle
+**Déclencheur Cloudflare** (`worker/`, Worker `meteo-alert-cron`, déployé le 2026-11-09
+sur le compte Cloudflare de Greg, secrets `GH_TOKEN` et `NTFY_TOPIC_PANNE`) : appelle
 `workflow_dispatch` aux mêmes heures, cron GitHub gardé en secours. Le cron de
 `wind-alert` saute si un vrai run a écrit depuis moins de `vars.GARDE_CRON_VENT_H`
 heures (`cron-garde.mjs`, 3 h ; 4,5 h une fois le Worker actif).
