@@ -27,9 +27,6 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 - [ ] **Guest Mode du TRMNL X** : disponible (firmware 1.8.18 installé). Recréer
       Wind Forecast (config au spec B1, Open-Meteo) ou faire un écran vent alimenté
       par `meteo-alert` ?
-- [ ] **Alerte neige, réglages ajoutés après la revue QA** : marge d'annulation de
-      2 cm et 2 cm minimum pour une prolongation (variables de dépôt, 0 = règle
-      littérale). À confirmer ou à changer.
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
 - [ ] **WindLive** : leur `robots.txt` interdit `/api/`. Décider si on leur
