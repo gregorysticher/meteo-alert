@@ -1,6 +1,7 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-08
+Dernière mise à jour : 2026-11-09
+Session : Weather Station — claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 À lire au début de chaque session, à mettre à jour à chaque fin de séance
