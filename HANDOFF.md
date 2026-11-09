@@ -19,7 +19,8 @@ sollicite Greg que pour ce qu'elle ne peut pas faire (marqué **Greg**), une
 chose à la fois, en une phrase.
 
 1. **Dépôts.** Si la session ne tourne pas déjà dans `meteo-alert`, cloner les
-   dépôts côte à côte dans `C:\dev\weather-station\` :
+   dépôts côte à côte dans `C:\Users\grego\Google Drive\Claude\weather-station\`
+   (Greg veut ses dépôts dans Google Drive) :
    `meteo-alert` (public), `trmnl-markup` (privé, lecture seule ; nécessite
    l'étape 2), `trmnl-watch` et `trmnl-watchdog` (privés). Lire ensuite `CLAUDE.md`, ce fichier et `TODO.md` depuis le clone.
 2. **GitHub CLI.** Si `gh` manque : `winget install --id GitHub.cli`. Puis
