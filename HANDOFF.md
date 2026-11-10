@@ -67,7 +67,7 @@ code.claude.com/docs/en/remote-control et code.claude.com/docs/en/chrome.
 | Dépôt | Visibilité | Rôle |
 |---|---|---|
 | `gregorysticher/meteo-alert` | public | Alertes vent et neige, boucle QA, producteur du webhook vent TRMNL |
-| `gregorysticher/trmnl-markup` | privé | Copie du markup TRMNL. `src/full.liquid` est écrit par `trmnl-sync[bot]` à chaque sauvegarde dans TRMNL |
+| `gregorysticher/trmnl-markup` | privé | Copie du markup TRMNL, écrite par `trmnl-sync[bot]` à chaque sauvegarde dans TRMNL : `src/` pour le DASHBOARD, `page-detail/src/` pour la page détail (Vent Wingfoil 471074, depuis le 2026-11-10) |
 | `gregorysticher/trmnl-watch` | privé | Veille hebdomadaire (lundi) : arrivée des special functions sur le TRMNL X. A sonné le 02/11/2026 à juste titre, coupée le 09/11/2026 |
 | `gregorysticher/trmnl-watchdog` | privé | Santé et fraîcheur de Netatmo 396948 seul, via le MCP TRMNL, 3 runs/jour, ntfy sur transition. `degraded` collant depuis le 03/08/2026, données fraîches |
 
@@ -87,7 +87,7 @@ Seul **DASHBOARD** est affiché ; il fusionne (Plugin Merge) les autres.
 | Netatmo Data 2 | 396948 | Polling OAuth | `D` | Intérieur / extérieur |
 | Météo Carouge | 394232 | Polling Open-Meteo | `M` | Prévisions, 7 jours, pluie, UV, phénomènes |
 | Neige Les Collines | 395305 | Polling Open-Meteo (16 j) | `S` | Chutes, hauteur au sol |
-| Vent Wingfoil | 471074 | Webhook (alimenté par `wind-alert`) | `W` | Spots vent |
+| Vent Wingfoil | 471074 | Webhook (alimenté par `wind-alert`) | `W` | Spots vent ; son propre markup est la page détail vent et neige |
 
 Wind Forecast (392131), recette obsolète, a été désinstallé le 2026-11-08.
 

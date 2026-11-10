@@ -20,9 +20,6 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
       Échéance : avant le 2027-04-15.
-- [ ] **Synchronisation GitHub du plugin Vent Wingfoil** : dire à Claude s'il la
-      connecte (dépôt `trmnl-markup`, dossier `vent-wingfoil`), pour versionner le markup
-      comme celui du DASHBOARD.
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
 - [ ] **WindLive** : leur `robots.txt` interdit `/api/`. Décider si on leur
@@ -65,6 +62,9 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-10 — Page détail (plugin Vent Wingfoil 471074) synchronisée sur GitHub à la
+      demande de Greg : `trmnl-markup/page-detail/src/`, premier commit `fd9d069`, contenu
+      identique au markup enregistré (seules les fins de ligne diffèrent).
 - [x] 2026-11-10 — Garde vérifiée en réel : le cron GitHub de 13:33 UTC (en retard) a été
       sauté, le Worker avait lancé le run à 13:17. Worker à l'heure toute la journée.
 - [x] 2026-11-10 — Météo Carouge et Neige « degraded » (Open-Meteo 429 Too Many Requests,
