@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-09
+Dernière mise à jour : 2026-11-10
 Session : Weather Station — https://claude.ai/code/session_01V44DmrGmT76TSq2yZ4XBUY — PC claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
@@ -39,8 +39,6 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       saison (2027-04-15) : jour, heures, inversion.
 - [ ] 2026-11-14 : compter les commits `data: wind` par jour (pas les runs : la garde
       en saute). En dessous de 4, revoir (spec B3).
-- [ ] Worker Cloudflare : vérifier dans les logs qu'un run du cron GitHub (en retard) est
-      bien sauté par la garde, maintenant à 4,5 h (passée le 2026-11-09).
 - [ ] Redéployer le Worker exige `wrangler login` (déconnecté après le déploiement) :
       `npx --yes wrangler@4.158.0 login --device --scopes account:read user:read
       workers:write workers_scripts:write workers_tail:read`, code valable 5 minutes.
@@ -67,6 +65,12 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-10 — Garde vérifiée en réel : le cron GitHub de 13:33 UTC (en retard) a été
+      sauté, le Worker avait lancé le run à 13:17. Worker à l'heure toute la journée.
+- [x] 2026-11-10 — Météo Carouge et Neige « degraded » (Open-Meteo 429 Too Many Requests,
+      13:37 UTC) et Netatmo « degraded » (Netatmo 503, 09:48 UTC) : erreurs passagères,
+      données fraîches ensuite. *Reset Health* sur les trois. Cause hors de notre portée
+      (TRMNL interroge Open-Meteo depuis ses serveurs partagés).
 - [x] 2026-11-09 — Premier déclenchement du Worker vérifié : `wind-alert` lancé à 21:17:26
       UTC pile (cron 21:17), run vert, TRMNL HTTP 200. `GARDE_CRON_VENT_H` passé à 4,5.
 - [x] 2026-11-09 — Accès à la page détail testé par Greg sur le TRMNL X. Playlist : *Hold
