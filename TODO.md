@@ -48,9 +48,12 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ### Dette technique
 
-- [ ] `trmnl-watch` : une vérification en échec reste verte, et aucune mémoire entre
-      deux runs. `trmnl-watch` et `trmnl-watchdog` : actions en v4 (Node 20), push du
-      watchdog sans nouvel essai.
+- [ ] `trmnl-watch` (coupé le 2026-11-09) : une vérification en échec reste verte, aucune
+      mémoire entre deux runs, actions en v4. À traiter seulement si on le relance.
+- [ ] `trmnl-watchdog` : actions passées en v7 et push de `state.json` avec 3 essais
+      (commit `8c95070`, 2026-11-11). Pas encore vu tourner : les 2 runs de test ont
+      échoué au démarrage pendant une panne GitHub Actions (githubstatus : « major
+      outage »). Vérifier que le prochain run planifié (02:07, 10:07 ou 18:07 UTC) est vert.
 - [ ] Vent et Météo sans watchdog : seulement les e-mails de santé TRMNL.
 - [ ] Taille du dépôt : ~300 Mo/an estimés une fois compressés ; prévoir de compresser
       ou d'élaguer les vieux mois de `data/forecasts/`.
