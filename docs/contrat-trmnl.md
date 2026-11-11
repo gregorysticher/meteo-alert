@@ -25,7 +25,7 @@ copie.
 
 ## Transport
 
-Webhook : `wind-alert.mjs` pousse à chaque run vers le plugin Vent Wingfoil (471074), via
+Webhook : `wind-alert.mjs` pousse à chaque run vers le plugin « Détail vent et neige » (471074, ex-Vent Wingfoil), via
 le secret `TRMNL_WEBHOOK_URL`. Le payload remplace le précédent. Limites TRMNL : 5 Ko et
 12 envois par heure. Un refus ou un payload trop gros rend le run rouge.
 

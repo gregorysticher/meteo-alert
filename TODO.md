@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-10
+Dernière mise à jour : 2026-11-11
 Session : Weather Station — https://claude.ai/code/session_01V44DmrGmT76TSq2yZ4XBUY — PC claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
@@ -62,6 +62,8 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-11 — Plugin 471074 renommé « Détail vent et neige » (ex-Vent Wingfoil) à la
+      demande de Greg. Playlist, Hold screen, Guest Mode et DASHBOARD vérifiés intacts.
 - [x] 2026-11-10 — Page détail (plugin Vent Wingfoil 471074) synchronisée sur GitHub à la
       demande de Greg : `trmnl-markup/page-detail/src/`, premier commit `fd9d069`, contenu
       identique au markup enregistré (seules les fins de ligne diffèrent).
