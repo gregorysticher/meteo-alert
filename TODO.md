@@ -22,9 +22,6 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       Échéance : avant le 2027-04-15.
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
-- [ ] **WindLive** : leur `robots.txt` interdit `/api/`. Décider si on leur
-      demande l'autorisation (balises lacustres du Petit-Lac, seule correction
-      possible de l'angle mort Reposoir/Vengeron) ou si on abandonne.
 
 ---
 
@@ -62,6 +59,9 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-11 — WindLive abandonné (décision de Greg : trop peu de chances d'accès).
+      Navigation de la page détail précisée : ouvrir par milieu deux fois (données
+      fraîches) ; la droite ne rejoue qu'une image gardée en mémoire.
 - [x] 2026-11-11 — Plugin 471074 renommé « Détail vent et neige » (ex-Vent Wingfoil) à la
       demande de Greg. Playlist, Hold screen, Guest Mode et DASHBOARD vérifiés intacts.
 - [x] 2026-11-10 — Page détail (plugin Vent Wingfoil 471074) synchronisée sur GitHub à la

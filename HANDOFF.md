@@ -96,8 +96,10 @@ E-mails de santé TRMNL activés sur les 5 plugins actifs (07/11/2026).
 Appareil : TRMNL X, firmware 1.8.18 (special functions disponibles via le menu de
 l'appareil, *Special...*). Depuis le 2026-11-09 : playlist en *Hold screen* sur le
 DASHBOARD, Détail vent et neige (page détail) visible juste après, le reste masqué. Milieu deux
-fois ou droite → page détail, gauche → retour. Laissé sur la page détail, l'écran y
-reste. Guest Mode : Détail vent et neige, 30 min. Le handoff Cowork qui les disait
+fois (*Next Screen*) → page détail fraîche, gauche → retour. La droite ne fait qu'avancer dans
+l'historique de l'appareil (images en mémoire, doc TRMNL) : elle ne marche qu'après un
+retour à gauche, montre l'image gardée (données possiblement anciennes) et cesse dès
+qu'un nouvel écran arrive. Laissé sur la page détail, l'écran y reste. Guest Mode : Détail vent et neige, 30 min. Le handoff Cowork qui les disait
 indisponibles et citait 392131 ou le Col de Cou est périmé.
 
 ### Notifications
@@ -216,6 +218,9 @@ apparaît à l'écran : « Reposoir · Dim 10–14 h » (« Auj. » si aujourd'h
 - Pas encore vu sur un vrai payload : contrôle à l'ouverture de saison.
 
 ### Sonde WindLive (04/10/2026)
+
+**Abandonné le 2026-11-11 (décision de Greg) :** trop peu de chances d'obtenir l'accès. La
+sonde (`probe-windlive.yml`, manuelle) reste pour mémoire.
 
 `/api/stations` : 789 points, 10 entre Genève et Nyon (Creux de Genthod, SNG,
 Pioupiou côté Cologny, GVE, CGI…). `robots.txt` : `Disallow: /api/`. **Non
