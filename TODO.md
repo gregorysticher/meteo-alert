@@ -31,8 +31,6 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 - [ ] Contrôler le premier vrai `W.reco` à l'écran à l'ouverture de la
       saison (2027-04-15) : jour, heures, inversion.
-- [ ] 2026-11-14 : compter les commits `data: wind` par jour (pas les runs : la garde
-      en saute). En dessous de 4, revoir (spec B3).
 - [ ] Redéployer le Worker exige `wrangler login` (déconnecté après le déploiement) :
       `npx --yes wrangler@4.158.0 login --device --scopes account:read user:read
       workers:write workers_scripts:write workers_tail:read`, code valable 5 minutes.
@@ -50,14 +48,23 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 - [ ] `trmnl-watch` (coupé le 2026-11-09) : une vérification en échec reste verte, aucune
       mémoire entre deux runs, actions en v4. À traiter seulement si on le relance.
-- [ ] Vent et Météo sans watchdog : seulement les e-mails de santé TRMNL.
-- [ ] Taille du dépôt : ~300 Mo/an estimés une fois compressés ; prévoir de compresser
-      ou d'élaguer les vieux mois de `data/forecasts/`.
+- [ ] Taille du dépôt, à remesurer le 2027-05-01 : 18 Mo compressés (git) et 29 Mo sur
+      GitHub le 2026-11-13 ; `data/forecasts/` grossit d'environ 17 Mo bruts par mois
+      depuis AROME. Compresser ou élaguer les vieux mois si le dépôt dépasse ~500 Mo.
 
 ---
 
 ## Fait récemment
 
+- [x] 2026-11-13 — Cadence vent vérifiée (spec B3) : 9 commits `data: wind` le 12/11
+      (6 par le Worker, à l'heure ; 3 relances après un changement de l'écran neige),
+      cron GitHub sauté 2 fois par la garde. Objectif de 4 par jour dépassé.
+- [x] 2026-11-13 — Commentaire du markup de la page détail mis au nouveau nom (TRMNL,
+      synchronisé `405027d`).
+- [x] 2026-11-13 — « Vent et Météo sans watchdog » clos sans nouveau watchdog : Vent est
+      couvert par les runs rouges de `meteo-alert`, l'alerte de panne du Worker et le
+      badge VENT PÉRIMÉ ; Météo Carouge par les e-mails de santé TRMNL et le badge
+      PRÉVISIONS PÉRIMÉ. Un watchdog de plus doublerait ces alertes.
 - [x] 2026-11-13 — `trmnl-watchdog` réparé (`19f3371`) : le MCP TRMNL répond désormais en
       JSON, l'ancienne lecture (format Ruby) donnait « unknown ». Les deux formats sont
       lus ; un état illisible rend le run rouge. Run réel vert : « Netatmo Data 2 ·
