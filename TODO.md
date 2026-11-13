@@ -50,10 +50,6 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 - [ ] `trmnl-watch` (coupé le 2026-11-09) : une vérification en échec reste verte, aucune
       mémoire entre deux runs, actions en v4. À traiter seulement si on le relance.
-- [ ] `trmnl-watchdog` est aveugle : il lit « Plugin : ? » et « État : unknown » via le MCP
-      TRMNL (format de réponse changé ?), croit le plugin malade, a déjà « escaladé » et
-      se tait. Les données Netatmo, elles, sont fraîches. À diagnostiquer avec
-      `discover-mcp-tools.yml` (lecture seule) avant de corriger `watchdog.mjs`.
 - [ ] Vent et Météo sans watchdog : seulement les e-mails de santé TRMNL.
 - [ ] Taille du dépôt : ~300 Mo/an estimés une fois compressés ; prévoir de compresser
       ou d'élaguer les vieux mois de `data/forecasts/`.
@@ -62,6 +58,12 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-13 — `trmnl-watchdog` réparé (`19f3371`) : le MCP TRMNL répond désormais en
+      JSON, l'ancienne lecture (format Ruby) donnait « unknown ». Les deux formats sont
+      lus ; un état illisible rend le run rouge. Run réel vert : « Netatmo Data 2 ·
+      degraded · Netatmo 503 », données à 16 min, état poussé avec le nouveau réessai.
+      Netatmo repasse « degraded » à chaque 503 passager : le vrai signal est la
+      fraîcheur des données (alerte si plus de 2 h), que le watchdog surveille.
 - [x] 2026-11-13 — `trmnl-watchdog` en actions v7 vérifié : 4 runs planifiés verts, plus
       d'avertissement Node 20. Run neige de 04:23 UTC rouge (Open-Meteo injoignable,
       « fetch failed ») ; relancé à 10:28 UTC : vert, alerte « prolongé » envoyée
