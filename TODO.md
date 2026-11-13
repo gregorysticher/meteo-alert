@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-11
+Dernière mise à jour : 2026-11-13
 Session : Weather Station — https://claude.ai/code/session_01V44DmrGmT76TSq2yZ4XBUY — PC claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
@@ -50,10 +50,10 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 - [ ] `trmnl-watch` (coupé le 2026-11-09) : une vérification en échec reste verte, aucune
       mémoire entre deux runs, actions en v4. À traiter seulement si on le relance.
-- [ ] `trmnl-watchdog` : actions passées en v7 et push de `state.json` avec 3 essais
-      (commit `8c95070`, 2026-11-11). Pas encore vu tourner : les 2 runs de test ont
-      échoué au démarrage pendant une panne GitHub Actions (githubstatus : « major
-      outage »). Vérifier que le prochain run planifié (02:07, 10:07 ou 18:07 UTC) est vert.
+- [ ] `trmnl-watchdog` est aveugle : il lit « Plugin : ? » et « État : unknown » via le MCP
+      TRMNL (format de réponse changé ?), croit le plugin malade, a déjà « escaladé » et
+      se tait. Les données Netatmo, elles, sont fraîches. À diagnostiquer avec
+      `discover-mcp-tools.yml` (lecture seule) avant de corriger `watchdog.mjs`.
 - [ ] Vent et Météo sans watchdog : seulement les e-mails de santé TRMNL.
 - [ ] Taille du dépôt : ~300 Mo/an estimés une fois compressés ; prévoir de compresser
       ou d'élaguer les vieux mois de `data/forecasts/`.
@@ -62,6 +62,10 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-13 — `trmnl-watchdog` en actions v7 vérifié : 4 runs planifiés verts, plus
+      d'avertissement Node 20. Run neige de 04:23 UTC rouge (Open-Meteo injoignable,
+      « fetch failed ») ; relancé à 10:28 UTC : vert, alerte « prolongé » envoyée
+      (28 cm, dim 15 → mar 17.11). Le contrôle prévu à 4 h le 12/11 n'a pas tourné.
 - [x] 2026-11-11 — WindLive abandonné (décision de Greg : trop peu de chances d'accès).
       Navigation de la page détail précisée : ouvrir par milieu deux fois (données
       fraîches) ; la droite ne rejoue qu'une image gardée en mémoire.
