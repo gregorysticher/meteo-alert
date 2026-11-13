@@ -56,6 +56,13 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-13 — Second essai réseau (demande de Greg) : tout appel raté est réessayé
+      une fois après 20 s (`reseau.mjs`), vert si le second passe. Open-Meteo sans réponse :
+      second essai par le serveur européen 157.90.83.168 (le serveur US 51.81.167.44 était
+      en panne, runners GitHub envoyés dessus 2 fois sur 3 ; revenu vers 20h). Le secours
+      n'a pas encore servi en production : regarder « serveur de secours » dans les logs.
+- [x] 2026-11-13 — CO₂ intérieur (DASHBOARD) : dès 900 ppm (`SEUIL_CO2_PPM`), libellé
+      « CO₂ ppm - ÉLEVÉ » inversé, chiffre normal.
 - [x] 2026-11-13 — Message « prolongé » trompeur corrigé (signalé par Greg) : le 12/11,
       « Neige annoncée 64 cm, dim 15 → lun 16 » ; le 13/11, « prolongé, 28 cm (2 j à la
       dernière alerte) » taisait la baisse. Le message dit maintenant « 28 cm cumulés
