@@ -94,6 +94,15 @@ test('annoncée : HTTP 400 -> rouge', () => {
 test('annoncée : erreur réseau -> rouge', () => {
   assert.equal(lancer('snow-forecast-alert.mjs', 'network-error').code, 1);
 });
+test('annoncée : un raté réseau puis réponse -> vert, raté au journal', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), { MOCK_RATES: '1' });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /Raté sur https:\/\/api\.open-meteo\.com \(fetch failed/);
+  assert.match(r.out, /À notifier : 1/);
+});
+test('annoncée : deux ratés réseau -> rouge', () => {
+  assert.equal(lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), { MOCK_RATES: '2' }).code, 1);
+});
 test('annoncée : unité inattendue -> rouge', () => {
   assert.equal(lancer('snow-forecast-alert.mjs', prev([0, 5], 'mm')).code, 1);
 });
@@ -266,7 +275,9 @@ test('annoncée : l\'écran suit les décisions, épisode scindé compris (scrip
 test('annoncée : alerte envoyée avant le journal long, avec un délai maximal', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), REEL);
   assert.ok(r.out.indexOf('ntfy →') < r.out.indexOf('horizon long'), r.out);
-  assert.ok(readFileSync(join(RACINE, 'snow-forecast-alert.mjs'), 'utf8').includes('AbortSignal.timeout'));
+  // Le délai maximal vient de reseau.mjs, utilisé pour tous les appels.
+  assert.ok(readFileSync(join(RACINE, 'snow-forecast-alert.mjs'), 'utf8').includes('fetchEssai(long)'));
+  assert.ok(readFileSync(join(RACINE, 'reseau.mjs'), 'utf8').includes('AbortSignal.timeout'));
 });
 test('annoncée : écran daté du run', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), REEL);
@@ -388,6 +399,14 @@ test('fraîche : HTTP 503 -> rouge', () => {
 });
 test('fraîche : erreur réseau -> rouge', () => {
   assert.equal(lancer('snow-fresh-alert.mjs', 'network-error').code, 1);
+});
+test('fraîche : un raté réseau puis réponse -> vert', () => {
+  const r = lancer('snow-fresh-alert.mjs', slf(3, 1), { MOCK_RATES: '1' });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /Raté sur/);
+});
+test('fraîche : deux ratés réseau -> rouge', () => {
+  assert.equal(lancer('snow-fresh-alert.mjs', slf(3, 1), { MOCK_RATES: '2' }).code, 1);
 });
 test('fraîche : station absente -> rouge', () => {
   assert.equal(lancer('snow-fresh-alert.mjs', { body: [] }).code, 1);

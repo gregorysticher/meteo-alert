@@ -58,7 +58,7 @@ jobs:
 
       - name: Tests
         if: steps.garde.outputs.passer != 'true'
-        run: node --test test/reco.test.mjs test/qa.test.mjs test/wind-e2e.test.mjs test/worker.test.mjs test/garde.test.mjs
+        run: node --test test/reseau.test.mjs test/reco.test.mjs test/qa.test.mjs test/wind-e2e.test.mjs test/worker.test.mjs test/garde.test.mjs
 
       - name: Previsions, alertes et QA
         if: steps.garde.outputs.passer != 'true'

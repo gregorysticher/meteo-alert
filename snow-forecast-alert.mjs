@@ -36,6 +36,7 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
+import { fetchEssai } from "./reseau.mjs";
 import { journaliserPrevision } from "./snow-qa.mjs";
 import { episodes as decouper, decider, ecranNeige } from "./snow-episodes.mjs";
 
@@ -198,7 +199,7 @@ async function journaliserLong(url, jour) {
   const long = url.replace("&models=meteoswiss_icon_seamless", "")
     .replace("&forecast_days=5", "&forecast_days=16").replace(/&past_days=\d+/, "");
   try {
-    const res = await fetch(long, { signal: AbortSignal.timeout(30000) });
+    const res = await fetchEssai(long);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const d = (await res.json()).daily;
     if (!d?.time?.length || !d.snowfall_sum?.length) throw new Error("réponse vide");
@@ -238,7 +239,7 @@ async function main() {
 
   let data;
   try {
-    const res = await fetch(url);
+    const res = await fetchEssai(url);
     if (!res.ok) {
       // Un 4xx n'est pas une panne passagère : c'est la requête qui est
       // refusée, et l'alerte reste aveugle tant qu'on ne la corrige pas.

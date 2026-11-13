@@ -1,13 +1,20 @@
 // Remplace fetch pour les tests de bout en bout des scripts (node --import).
 // MOCK_FETCH = JSON { status, body } | "network-error".
 // body est renvoyé tel quel (objet/tableau -> JSON).
+// MOCK_RATES = nombre de premiers appels qui échouent (erreur réseau), pour
+// vérifier le second essai.
 // MOCK_NTFY_STATUS = statut renvoyé par ntfy (200 par défaut), pour simuler une
 // panne d'envoi alors que la source météo répond.
 import { appendFileSync } from 'node:fs';
 
+// Pas d'attente avant le second essai de reseau.mjs.
+process.env.ESSAI_ATTENTE_S ??= '0';
+
 const spec = process.env.MOCK_FETCH;
 if (spec) {
+  let rates = Number(process.env.MOCK_RATES || 0);
   globalThis.fetch = async (url) => {
+    if (rates > 0) { rates--; throw new Error('fetch failed (raté simulé)'); }
     if (process.env.MOCK_URLS) appendFileSync(process.env.MOCK_URLS, `${url}\n`);
     if (String(url).includes('ntfy.sh') && process.env.MOCK_NTFY_STATUS) {
       return new Response('panne', { status: +process.env.MOCK_NTFY_STATUS });

@@ -8,6 +8,8 @@
 // alerte n'aurait jamais pu partir. Le corps JSON est en UTF-8 : accents,
 // tirets cadratins et emoji passent sans problème.
 
+import { fetchEssai } from "./reseau.mjs";
+
 const PRIORITE = { min: 1, low: 2, default: 3, high: 4, urgent: 5 };
 
 // Échecs d'envoi accumulés — le job doit finir en rouge, jamais en silence.
@@ -16,7 +18,8 @@ export const echecs = [];
 export async function notifier(topic, titre, corps, opts = {}) {
   const { priorite = "high", tags = [] } = opts;
   try {
-    const res = await fetch("https://ntfy.sh", {
+    // Second essai : un ntfy perdu pèse plus qu'un doublon, rare (envoi reçu mais réponse perdue).
+    const res = await fetchEssai("https://ntfy.sh", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

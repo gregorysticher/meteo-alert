@@ -11,6 +11,8 @@
 // catalogue MeteoSuisse. On verifie la presence de la colonne attendue plutot
 // que de supposer, comme le faisait deja l'ancien controle Open-Meteo.
 
+import { fetchEssai, lireEssai } from './reseau.mjs';
+
 const STAC =
   'https://data.geo.admin.ch/api/stac/v1/collections/' +
   'ch.meteoschweiz.ogd-local-forecasting/items';
@@ -38,10 +40,9 @@ export const PARAMS_OPTION = {
   air: 'tre200h0',    // temperature de l'air a 2 m, degres C
 };
 
+// Lecture du corps dans l'essai : un CSV de ~30 Mo coupé en route est réessayé.
 async function texte(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(url + ' -> HTTP ' + res.status);
-  return new TextDecoder('latin1').decode(await res.arrayBuffer());
+  return lireEssai(url, async (res) => new TextDecoder('latin1').decode(await res.arrayBuffer()));
 }
 
 // ---- points de prevision -------------------------------------------------
@@ -82,7 +83,7 @@ export async function resoudrePoints(spots) {
 // ---- previsions ----------------------------------------------------------
 
 async function dernierAsset(param) {
-  const j = await (await fetch(STAC)).json();
+  const j = await (await fetchEssai(STAC)).json();
   const assets = {};
   for (const f of j.features || []) {
     for (const [k, v] of Object.entries(f.assets || {})) assets[k] = v.href;
@@ -169,7 +170,7 @@ export async function previsions(spots) {
  * Leve une erreur si la reponse est inexploitable.
  */
 export async function previsionsArome(spots) {
-  const resMeta = await fetch(AROME_META);
+  const resMeta = await fetchEssai(AROME_META);
   if (!resMeta.ok) throw new Error('meta AROME -> HTTP ' + resMeta.status);
   const init = (await resMeta.json()).last_run_initialisation_time;
   if (!Number.isFinite(init)) throw new Error('meta AROME sans heure de run');
@@ -184,7 +185,7 @@ export async function previsionsArome(spots) {
     `&longitude=${spots.map((s) => s.lon).join(',')}` +
     '&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m' +
     `&models=${AROME_MODELE}&wind_speed_unit=kn&timezone=GMT&forecast_days=3`;
-  const res = await fetch(url);
+  const res = await fetchEssai(url);
   if (!res.ok) throw new Error('AROME -> HTTP ' + res.status);
   const reponses = [].concat(await res.json());
   if (reponses.length !== spots.length) {
@@ -261,7 +262,7 @@ export async function tempLac(lac, lat, lon) {
     ALPLAKES + '/simulations/point/delft3d-flow/' + lac + '/' +
     f(0) + '/' + f(1) + '/0/' + lat + '/' + lon + '?variables=temperature';
   try {
-    const res = await fetch(url);
+    const res = await fetchEssai(url);
     if (!res.ok) return null;
     const j = await res.json();
     const temp = j && j.variables && j.variables.temperature;

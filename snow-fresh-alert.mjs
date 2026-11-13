@@ -29,6 +29,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
+import { fetchEssai } from "./reseau.mjs";
 import { journaliserMesures, lire, rapport } from "./snow-qa.mjs";
 
 // ══════ OUTILS DE CONFIGURATION ══════
@@ -136,7 +137,7 @@ async function main() {
   // publication du relevé du jour.
   let releves;
   try {
-    const res = await fetch(`${API}?period_in_days=3`, {
+    const res = await fetchEssai(`${API}?period_in_days=3`, {
       headers: { Accept: "application/json" },
     });
     if (!res.ok) {

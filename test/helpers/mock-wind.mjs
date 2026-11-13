@@ -18,6 +18,9 @@
 // Chaque notification est ajoutee a MOCK_NTFY_LOG (une ligne JSON).
 import { appendFileSync } from 'node:fs';
 
+// Pas d'attente avant le second essai de reseau.mjs.
+process.env.ESSAI_ATTENTE_S ??= '0';
+
 const M = JSON.parse(process.env.MOCK_WIND);
 const NOW = new Date(M.now).getTime();
 

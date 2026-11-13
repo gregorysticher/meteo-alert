@@ -24,6 +24,7 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { notifier, sortieSiEchecs } from './notify.mjs';
+import { fetchEssai } from './reseau.mjs';
 import { previsions, previsionsArome, mesures, tempLac } from './wind-sources.mjs';
 import {
   archiver, apparier, rapport, versDate, versCle,
@@ -171,7 +172,7 @@ async function versTrmnl(classement, cfg, emission, reco, profil, maintenant) {
   }
   if (DRY_RUN) return `DRY_RUN — ${corps.length} o prets :
 ${corps}`;
-  const res = await fetch(TRMNL, {
+  const res = await fetchEssai(TRMNL, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: corps,
   });
