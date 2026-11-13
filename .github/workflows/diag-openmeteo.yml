@@ -9,8 +9,10 @@ jobs:
       - run: |
           U='https://api.open-meteo.com/v1/forecast?latitude=46.19&longitude=6.83&daily=snowfall_sum'
           curl -s https://api.ipify.org; echo
-          getent ahosts api.open-meteo.com | head -3
-          for i in $(seq 1 20); do
-            curl -4 -s -o /dev/null --connect-timeout 8 -m 20 -w "essai $i %{http_code} %{time_connect}s\n" "$U" || echo "essai $i echec"
-            sleep 5
+          for n in 1 2 3; do dig +short api.open-meteo.com | tr '\n' ' '; echo; sleep 2; done
+          for ip in 51.81.167.44 167.114.211.86; do
+            for i in $(seq 1 8); do
+              curl -4 -s -o /dev/null --resolve api.open-meteo.com:443:$ip --connect-timeout 8 -m 20 -w "$ip essai $i %{http_code} %{time_connect}s\n" "$U" || echo "$ip essai $i echec"
+              sleep 3
+            done
           done
