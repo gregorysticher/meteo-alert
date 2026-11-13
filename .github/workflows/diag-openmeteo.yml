@@ -1,0 +1,15 @@
+# Diagnostic temporaire (13/11/2026) : Open-Meteo injoignable depuis les runners. À supprimer.
+name: diag-openmeteo
+on: workflow_dispatch
+permissions: {}
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          U='https://api.open-meteo.com/v1/forecast?latitude=46.19&longitude=6.83&daily=snowfall_sum'
+          curl -s https://api.ipify.org; echo
+          getent ahosts api.open-meteo.com | head -6
+          for f in -4 -6; do curl $f -s -o /dev/null -m 40 -w "curl $f %{http_code} connect %{time_connect}s total %{time_total}s ip %{remote_ip}\n" "$U" || echo "curl $f echec $?"; done
+          curl -s -o /dev/null -m 40 -w "ensemble %{http_code} %{time_connect}s\n" 'https://ensemble-api.open-meteo.com/v1/ensemble?latitude=46&longitude=6&hourly=temperature_2m' || echo "ensemble echec"
+          node -e "fetch('$U').then(r=>console.log('node',r.status)).catch(e=>console.log('node echec',e.message,e.cause?.code))"
