@@ -166,7 +166,9 @@ function notification({ type, episode: e, record: r }) {
   const avant = {
     nouvelle: "",
     hausse: ` (${Math.round(r?.total)} cm à la dernière alerte)`,
-    prolonge: ` (${r?.duree} j à la dernière alerte)`,
+    // Le cumul d'avant aussi : une prolongation peut s'accompagner d'une forte baisse
+    // (13/11/2026 : 64 cm sur 2 j annoncés, puis « prolongé » à 28 cm sur 3 j).
+    prolonge: ` (${Math.round(r?.total)} cm sur ${r?.duree} j à la dernière alerte)`,
   };
   return {
     titre: titres[type],

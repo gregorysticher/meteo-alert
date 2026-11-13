@@ -56,6 +56,11 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-13 — Message « prolongé » trompeur corrigé (signalé par Greg) : le 12/11,
+      « Neige annoncée 64 cm, dim 15 → lun 16 » ; le 13/11, « prolongé, 28 cm (2 j à la
+      dernière alerte) » taisait la baisse. Le message dit maintenant « 28 cm cumulés
+      (64 cm sur 2 j à la dernière alerte) ». La règle ne change pas : pas de message
+      pour une baisse seule.
 - [x] 2026-11-13 — Cadence vent vérifiée (spec B3) : 9 commits `data: wind` le 12/11
       (6 par le Worker, à l'heure ; 3 relances après un changement de l'écran neige),
       cron GitHub sauté 2 fois par la garde. Objectif de 4 par jour dépassé.

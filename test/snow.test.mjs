@@ -160,6 +160,13 @@ test('annoncée : HAUSSE_CM abaissé -> +2 cm suffit', () => {
 test('annoncée : un jour de plus -> « prolongé »', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 3, 0]), REEL, etatDe(1, 2, 12));
   assert.match(r.out, /ntfy → Épisode de neige prolongé/);
+  assert.match(r.out, /15 cm cumulés \(12 cm sur 2 j à la dernière alerte\)/);
+});
+test('annoncée : prolongé avec forte baisse -> le message dit le cumul d\'avant', () => {
+  // Cas réel du 13/11/2026 : 64 cm sur 2 j annoncés, puis 28 cm sur 3 j.
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 9, 12, 0]), REEL, etatDe(1, 2, 64));
+  assert.match(r.out, /ntfy → Épisode de neige prolongé/);
+  assert.match(r.out, /28 cm cumulés \(64 cm sur 2 j à la dernière alerte\)/);
 });
 test('annoncée : requête avec le bon modèle et les jours passés', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0]));
