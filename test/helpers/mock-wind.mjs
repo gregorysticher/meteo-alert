@@ -20,6 +20,8 @@ import { appendFileSync } from 'node:fs';
 
 // Pas d'attente avant le second essai de reseau.mjs.
 process.env.ESSAI_ATTENTE_S ??= '0';
+// Pas de serveur de secours : le second essai reste dans la simulation.
+process.env.RESEAU_SECOURS ??= '{}';
 
 const M = JSON.parse(process.env.MOCK_WIND);
 const NOW = new Date(M.now).getTime();

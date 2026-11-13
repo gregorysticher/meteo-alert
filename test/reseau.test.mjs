@@ -1,7 +1,8 @@
 // Second essai de reseau.mjs : une seule reprise, puis l'échec remonte.
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchEssai, lireEssai } from '../reseau.mjs';
+import http from 'node:http';
+import { fetchEssai, lireEssai, SECOURS } from '../reseau.mjs';
 
 const vrai = globalThis.fetch;
 const logVrai = console.log;
@@ -19,9 +20,10 @@ function simuler(...reponses) {
 beforeEach(() => {
   appels = []; journal = [];
   process.env.ESSAI_ATTENTE_S = '0';
+  process.env.RESEAU_SECOURS = '{}';
   console.log = (m) => journal.push(m);
 });
-afterEach(() => { globalThis.fetch = vrai; console.log = logVrai; });
+afterEach(() => { globalThis.fetch = vrai; console.log = logVrai; delete process.env.RESEAU_SECOURS; });
 
 test('succès au premier essai : un seul appel, rien au journal', async () => {
   simuler(200);
@@ -113,4 +115,119 @@ test('lireEssai : deux 404, erreur « url -> HTTP 404 » comme avant', async () 
     (e) => e.message === 'https://a.test/f.csv -> HTTP 404');
   assert.equal(appels.length, 2);
   assert.match(journal[0], /\(HTTP 404\)/);
+});
+
+// ---- serveur de secours (panne du serveur US d'Open-Meteo, 13/11/2026) ----
+
+// Serveur local qui joue le serveur de secours ; l'hôte « secours.test » n'existe
+// pas : seule l'adresse imposée par la table de secours peut l'atteindre.
+async function serveur(traiter) {
+  const recus = [];
+  const srv = http.createServer((req, res) => {
+    let corps = '';
+    req.on('data', (c) => (corps += c));
+    req.on('end', () => { recus.push({ url: req.url, host: req.headers.host, methode: req.method, corps }); traiter(req, res); });
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  return { recus, port: srv.address().port, fermer: () => new Promise((r) => srv.close(r)) };
+}
+
+test('table de secours : api.open-meteo.com vers le serveur européen', () => {
+  assert.equal(SECOURS['api.open-meteo.com'], '157.90.83.168');
+});
+
+test('secours : connexion impossible, second essai par l\'adresse de secours', async () => {
+  const s = await serveur((req, res) => res.end('{"ok":1}'));
+  try {
+    process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': '127.0.0.1' });
+    simuler(new Error('fetch failed'));
+    const url = `http://secours.test:${s.port}/v1/forecast?a=1`;
+    const res = await fetchEssai(url);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: 1 });
+    assert.equal(appels.length, 1, 'le second essai ne passe pas par fetch');
+    assert.equal(s.recus[0].url, '/v1/forecast?a=1');
+    assert.equal(s.recus[0].host, `secours.test:${s.port}`);
+    assert.match(journal[0], /par le serveur de secours 127\.0\.0\.1/);
+  } finally { await s.fermer(); }
+});
+
+test('secours : un 503 (serveur joignable) est réessayé normalement', async () => {
+  const s = await serveur((req, res) => res.end('x'));
+  try {
+    process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': '127.0.0.1' });
+    simuler(503, 200);
+    assert.equal((await fetchEssai(`http://secours.test:${s.port}/x`)).status, 200);
+    assert.equal(appels.length, 2);
+    assert.equal(s.recus.length, 0);
+    assert.doesNotMatch(journal[0], /serveur de secours/);
+  } finally { await s.fermer(); }
+});
+
+test('secours : son 500 remonte tel quel, run rouge comme avant', async () => {
+  const s = await serveur((req, res) => { res.statusCode = 500; res.end('panne'); });
+  try {
+    process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': '127.0.0.1' });
+    simuler(new Error('fetch failed'));
+    assert.equal((await fetchEssai(`http://secours.test:${s.port}/x`)).status, 500);
+  } finally { await s.fermer(); }
+});
+
+test('secours : injoignable lui aussi, l\'erreur remonte', async () => {
+  const s = await serveur(() => {});
+  const port = s.port;
+  await s.fermer();
+  process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': '127.0.0.1' });
+  simuler(new Error('fetch failed'));
+  await assert.rejects(fetchEssai(`http://secours.test:${port}/x`), /ECONNREFUSED/);
+});
+
+test('secours : hôte hors table, second essai normal', async () => {
+  process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': '127.0.0.1' });
+  simuler(new Error('fetch failed'), 200);
+  assert.equal((await fetchEssai('https://autre.test/x')).status, 200);
+  assert.equal(appels.length, 2);
+});
+
+test('secours : POST, même méthode, en-têtes et corps', async () => {
+  const s = await serveur((req, res) => { res.statusCode = 204; res.end(); });
+  try {
+    process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': '127.0.0.1' });
+    simuler(new Error('fetch failed'));
+    const res = await fetchEssai(`http://secours.test:${s.port}/p`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"a":1}' });
+    assert.equal(res.status, 204);
+    assert.deepEqual([s.recus[0].methode, s.recus[0].corps], ['POST', '{"a":1}']);
+  } finally { await s.fermer(); }
+});
+
+test('secours : lireEssai lit le corps par l\'adresse de secours', async () => {
+  const s = await serveur((req, res) => res.end('a;b\n1;2\n'));
+  try {
+    process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': '127.0.0.1' });
+    simuler(new Error('fetch failed'));
+    assert.equal(await lireEssai(`http://secours.test:${s.port}/f.csv`, (r) => r.text()), 'a;b\n1;2\n');
+  } finally { await s.fermer(); }
+});
+
+test('secours : lireEssai sur un 404, pas de secours', async () => {
+  process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': '127.0.0.1' });
+  simuler(404, 404);
+  await assert.rejects(lireEssai('http://secours.test:1/f.csv', (r) => r.text()), /HTTP 404/);
+  assert.equal(appels.length, 2);
+});
+
+test('secours : statut 205 rendu sans corps, pas de plantage', async () => {
+  const s = await serveur((req, res) => { res.statusCode = 205; res.end(); });
+  try {
+    process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': '127.0.0.1' });
+    simuler(new Error('fetch failed'));
+    assert.equal((await fetchEssai(`http://secours.test:${s.port}/x`)).status, 205);
+  } finally { await s.fermer(); }
+});
+
+test('secours : RESEAU_SECOURS illisible, erreur claire', async () => {
+  process.env.RESEAU_SECOURS = '{pas du json';
+  simuler(new Error('fetch failed'));
+  await assert.rejects(fetchEssai('https://a.test/x'), /RESEAU_SECOURS illisible/);
 });
