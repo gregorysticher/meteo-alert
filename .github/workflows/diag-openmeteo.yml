@@ -12,4 +12,6 @@ jobs:
           getent ahosts api.open-meteo.com | head -6
           for f in -4 -6; do curl $f -s -o /dev/null -m 40 -w "curl $f %{http_code} connect %{time_connect}s total %{time_total}s ip %{remote_ip}\n" "$U" || echo "curl $f echec $?"; done
           curl -s -o /dev/null -m 40 -w "ensemble %{http_code} %{time_connect}s\n" 'https://ensemble-api.open-meteo.com/v1/ensemble?latitude=46&longitude=6&hourly=temperature_2m' || echo "ensemble echec"
+          for i in $(seq 1 20); do curl -4 -s -o /dev/null --connect-timeout 8 -m 20 -w "$i %{http_code} %{time_connect}s
+" "$U" || echo "$i echec"; sleep 5; done
           node -e "fetch('$U').then(r=>console.log('node',r.status)).catch(e=>console.log('node echec',e.message,e.cause?.code))"
