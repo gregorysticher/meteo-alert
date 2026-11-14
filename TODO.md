@@ -61,6 +61,12 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-14 — 4 runs rouges du jour expliqués. 2 : serveur européen d'Open-Meteo muet
+      60 s au second essai (le serveur US 51.81.167.44 est toujours mort) → secours par
+      l'autre serveur US 167.114.211.86 puis l'européen, 15 s max chacun ; vérifié sur un
+      runner (6/6 en 0,1-0,3 s). 1 : meta AROME 404 plus de 20 s → second essai après 80 s.
+      1 (19h30) : commits de la session chat sans tests, déjà révoqués par elle.
+      Branche temporaire `diag-reseau` laissée sur GitHub (diagnostic, à supprimer).
 - [x] 2026-11-13 — Second essai réseau (demande de Greg) : tout appel raté est réessayé
       une fois après 20 s (`reseau.mjs`), vert si le second passe. Open-Meteo sans réponse :
       second essai par le serveur européen 157.90.83.168 (le serveur US 51.81.167.44 était

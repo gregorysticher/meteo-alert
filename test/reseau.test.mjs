@@ -23,7 +23,10 @@ beforeEach(() => {
   process.env.RESEAU_SECOURS = '{}';
   console.log = (m) => journal.push(m);
 });
-afterEach(() => { globalThis.fetch = vrai; console.log = logVrai; delete process.env.RESEAU_SECOURS; });
+afterEach(() => {
+  globalThis.fetch = vrai; console.log = logVrai;
+  delete process.env.RESEAU_SECOURS; delete process.env.RESEAU_DELAI_ADRESSE_S;
+});
 
 test('succès au premier essai : un seul appel, rien au journal', async () => {
   simuler(200);
@@ -121,19 +124,19 @@ test('lireEssai : deux 404, erreur « url -> HTTP 404 » comme avant', async () 
 
 // Serveur local qui joue le serveur de secours ; l'hôte « secours.test » n'existe
 // pas : seule l'adresse imposée par la table de secours peut l'atteindre.
-async function serveur(traiter) {
+async function serveur(traiter, ip = '127.0.0.1', port = 0) {
   const recus = [];
   const srv = http.createServer((req, res) => {
     let corps = '';
     req.on('data', (c) => (corps += c));
     req.on('end', () => { recus.push({ url: req.url, host: req.headers.host, methode: req.method, corps }); traiter(req, res); });
   });
-  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
-  return { recus, port: srv.address().port, fermer: () => new Promise((r) => srv.close(r)) };
+  await new Promise((r) => srv.listen(port, ip, r));
+  return { recus, srv, port: srv.address().port, fermer: () => new Promise((r) => { srv.close(r); srv.closeAllConnections(); }) };
 }
 
-test('table de secours : api.open-meteo.com vers le serveur européen', () => {
-  assert.equal(SECOURS['api.open-meteo.com'], '157.90.83.168');
+test('table de secours : autre serveur US, puis serveur européen', () => {
+  assert.deepEqual(SECOURS['api.open-meteo.com'], ['167.114.211.86', '157.90.83.168']);
 });
 
 test('secours : connexion impossible, second essai par l\'adresse de secours', async () => {
@@ -230,4 +233,53 @@ test('secours : RESEAU_SECOURS illisible, erreur claire', async () => {
   process.env.RESEAU_SECOURS = '{pas du json';
   simuler(new Error('fetch failed'));
   await assert.rejects(fetchEssai('https://a.test/x'), /RESEAU_SECOURS illisible/);
+});
+
+// Deux « serveurs » sur le même port, l'un en 127.0.0.2 (muet), l'autre en 127.0.0.1.
+test('secours : première adresse muette, la suivante répond', async () => {
+  const bon = await serveur((req, res) => res.end('ok'));
+  const muet = await serveur(() => {}, '127.0.0.2', bon.port);
+  try {
+    process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': ['127.0.0.2', '127.0.0.1'] });
+    process.env.RESEAU_DELAI_ADRESSE_S = '1';
+    simuler(new Error('fetch failed'));
+    const res = await fetchEssai(`http://secours.test:${bon.port}/x`);
+    assert.equal(await res.text(), 'ok');
+    assert.match(journal[0], /par le serveur de secours 127\.0\.0\.2 puis 127\.0\.0\.1/);
+    assert.match(journal[1], /Serveur de secours 127\.0\.0\.2 raté \(127\.0\.0\.2 muet depuis 1 s\), essai par 127\.0\.0\.1/);
+  } finally { await muet.fermer(); await bon.fermer(); }
+});
+
+test('secours : première adresse refuse, la suivante répond', async () => {
+  const bon = await serveur((req, res) => res.end('ok'));
+  try {
+    process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': ['127.0.0.2', '127.0.0.1'] });
+    simuler(new Error('fetch failed'));
+    assert.equal(await (await fetchEssai(`http://secours.test:${bon.port}/x`)).text(), 'ok');
+    assert.match(journal[1], /127\.0\.0\.2 raté .*ECONNREFUSED/);
+  } finally { await bon.fermer(); }
+});
+
+test('secours : toutes les adresses muettes, erreur de la dernière remontée', async () => {
+  const a = await serveur(() => {});
+  const b = await serveur(() => {}, '127.0.0.2', a.port);
+  try {
+    process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': ['127.0.0.2', '127.0.0.1'] });
+    process.env.RESEAU_DELAI_ADRESSE_S = '1';
+    simuler(new Error('fetch failed'));
+    await assert.rejects(fetchEssai(`http://secours.test:${a.port}/x`), /127\.0\.0\.1 muet depuis 1 s/);
+  } finally {
+    // Les connexions muettes restent ouvertes : on les coupe pour fermer.
+    a.srv?.closeAllConnections?.(); b.srv?.closeAllConnections?.();
+    await Promise.all([a.fermer(), b.fermer()]);
+  }
+});
+
+test('attenteFois : attente allongée avant le second essai', async () => {
+  process.env.ESSAI_ATTENTE_S = '0.05';
+  simuler(404, 200);
+  const t = Date.now();
+  await fetchEssai('https://a.test/meta.json', {}, { attenteFois: 4 });
+  assert.match(journal[0], /nouvel essai dans 0\.2 s/);
+  assert.ok(Date.now() - t >= 190);
 });
