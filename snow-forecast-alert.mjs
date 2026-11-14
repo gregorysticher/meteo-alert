@@ -10,7 +10,7 @@
 // Un "épisode" = jours consécutifs avec de la neige, jours passés compris
 // (past_days), sinon le cumul baisserait tout seul à mesure que l'épisode
 // avance. L'alerte se déclenche sur le cumul de l'épisode, pas sur une seule
-// journée. Règles d'envoi (nouvelle, hausse, prolongation, annulation) :
+// journée. Règles d'envoi (nouvelle, hausse, baisse, prolongation, annulation) :
 // snow-episodes.mjs.
 //
 // Saison : 15 octobre → 15 avril.
@@ -167,11 +167,14 @@ function notification({ type, episode: e, record: r }) {
   const titres = {
     nouvelle: `Neige annoncée — ${LIEU}`,
     hausse: `Neige revue à la hausse — ${LIEU}`,
+    baisse: `Neige revue à la baisse — ${LIEU}`,
     prolonge: `Épisode de neige prolongé — ${LIEU}`,
   };
   const avant = {
     nouvelle: "",
     hausse: ` (${Math.round(r?.total)} cm à la dernière alerte)`,
+    // Plage d'avant aussi : la baisse peut venir avec un changement de jours (D-002).
+    baisse: r ? ` (${Math.round(r.total)} cm à la dernière alerte, ${periode(r)})` : "",
     // Le cumul d'avant aussi : une prolongation peut s'accompagner d'une forte baisse
     // (13/11/2026 : 64 cm sur 2 j annoncés, puis « prolongé » à 28 cm sur 3 j).
     prolonge: ` (${Math.round(r?.total)} cm sur ${r?.duree} j à la dernière alerte)`,
@@ -179,7 +182,7 @@ function notification({ type, episode: e, record: r }) {
   return {
     titre: titres[type],
     corps: `${Math.round(e.total)} cm cumulés${avant[type]} · ${periode(e)}\n${detail}`,
-    priorite: "high",
+    priorite: type === "baisse" ? "default" : "high",
   };
 }
 
@@ -319,6 +322,8 @@ async function main() {
   const inconnus = new Set(dates.filter((_, i) => typeof neige[i] !== "number" || !Number.isFinite(neige[i])));
   let decisions = decider(episodes, avant, {
     jour, seuil: SEUIL_CM, ...regl, memoire: JOURS_PASSES, inconnus,
+    // Dernier jour de l'horizon du modèle : exclu pour une nouvelle alerte (D-002).
+    horizon: dates.at(-1),
   });
   if (SEUIL_FORCE) {
     decisions = decisions.filter((d) => d.type !== "annule" && d.type !== "decale");

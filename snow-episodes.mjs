@@ -3,12 +3,17 @@
 //
 // RÈGLES (spec B4.3, validées le 08/11/2026, précisées après la revue QA) :
 //   nouvelle  cumul >= seuil, jamais alerté, et encore `hausse` cm à venir :
-//             de la neige déjà tombée n'est pas « annoncée »
+//             de la neige déjà tombée n'est pas « annoncée ». Cumul et « à venir »
+//             comptés SANS le dernier jour de l'horizon du modèle (`horizon`, D-002) :
+//             le 12/11/2026, 56,6 cm sur 64 tombaient à J+4 et ont oscillé de 9,8 à
+//             37,3 cm ensuite. Une fois l'épisode alerté, tout se juge sur le cumul complet
 //   hausse    cumul >= cumul de la dernière alerte + pas, et `hausse` cm à venir ;
 //             pas = max(`hausse`, `hausseRel` × cumul de la dernière alerte)
 //             (D-001, Greg 2026-11-14 : 28 → 37 → 44 → 59 cm donnait 3 « hausse »,
 //             2 avec un pas de 30 %). Les autres emplois de `hausse` (à venir, neige
 //             tombée qui bloque l'annulation) restent absolus
+//   baisse    cumul <= cumul de la dernière alerte - pas (même pas que la hausse,
+//             D-002), épisode pas fini, au-dessus du seuil d'annulation
 //   prolonge  plus de jours que lors de la dernière alerte, et au moins
 //             `prolongeMin` cm sur les jours ajoutés à venir : une révision du
 //             passé ou une queue de traces n'est pas une prolongation
@@ -18,6 +23,9 @@
 //             sait plus ce qui est tombé). La marge évite la rafale
 //             alerte/annulation autour du seuil
 //   decale    annulation et nouvelle dans le même run : un seul message
+// Priorité pour un épisode suivi (D-002) : annulation, puis baisse, puis hausse, puis
+// prolongation. Une baisse avec changement de plage est une « baisse » : le 13/11,
+// 64 → 28 cm sur 3 jours était parti en « prolongé » et taisait la perte.
 // Un épisode annulé qui repasse au seuil redevient une « nouvelle ».
 //
 // Un enregistrement d'état = { debut, fin, total, duree, annule } : les valeurs
@@ -86,8 +94,9 @@ const reference = (e) => ({
 });
 
 // eps : tous les épisodes de la série, y compris ceux déjà finis.
-// opts : { jour, seuil, hausse, hausseRel, marge, prolongeMin, memoire, inconnus }
+// opts : { jour, seuil, hausse, hausseRel, marge, prolongeMin, memoire, inconnus, horizon }
 //   hausseRel fraction du cumul de la dernière alerte (0,3 = 30 %), 0 = pas absolu
+//   horizon   dernier jour de la série du modèle (AAAA-MM-JJ) : exclu pour une nouvelle
 //   memoire  jours de passé dans la série : un épisode reste suivi tant que ses
 //            jours y figurent, sinon il reviendrait comme une « nouvelle »
 //   inconnus Set des dates sans valeur exploitable : pas d'annulation à l'aveugle
@@ -98,8 +107,17 @@ const reference = (e) => ({
 // Si l'envoi échoue, l'appelant garde `record` : l'alerte repart au run suivant.
 export function decider(eps, records, opts) {
   const { jour, seuil, hausse, hausseRel = 0, marge = 0, prolongeMin = 0, memoire = 0,
-    inconnus = new Set() } = opts;
+    inconnus = new Set(), horizon } = opts;
   const minAVenir = Math.min(hausse, seuil);
+  // Une nouvelle se juge sans le dernier jour de l'horizon.
+  const sansHorizon = (e) => {
+    const jours = (e?.jours ?? []).filter((j) => j.d !== horizon);
+    return { total: jours.reduce((a, j) => a + j.v, 0), venir: aVenir({ jours }, jour) };
+  };
+  const nouvelleOk = (e) => {
+    const s = sansHorizon(e);
+    return s.total >= seuil && s.venir >= minAVenir;
+  };
   const decisions = [];
   const lies = new Set();
 
@@ -116,18 +134,26 @@ export function decider(eps, records, opts) {
     const tombe = (c?.jours ?? []).filter((j) => j.d < jour).reduce((a, j) => a + j.v, 0);
     const effondre = (c?.total ?? 0) < seuil - marge;
     const finDeMemoire = r.fin < reculer(jour, memoire);
+    const pas = Math.max(hausse, hausseRel * r.total);
+    // Ni annulation ni baisse à l'aveugle : épisode en cours, début encore dans la série,
+    // aucune valeur inconnue sur la plage annoncée.
+    const jugeable = r.fin >= jour && r.debut >= reculer(jour, memoire) &&
+      ![...inconnus].some((d) => d >= r.debut && d <= r.fin);
 
     let type = null;
     if (r.annule) {
-      if (c && c.total >= seuil && venir >= minAVenir) type = 'nouvelle';
-    } else if (c && c.total >= r.total + Math.max(hausse, hausseRel * r.total) && venir >= hausse) {
+      if (c && nouvelleOk(c)) type = 'nouvelle';
+    } else if (effondre && tombe < hausse && jugeable) {
+      type = 'annule';
+    } else if (c && !effondre && c.total <= r.total - pas && jugeable) {
+      type = 'baisse';
+    } else if (c && c.total >= r.total + pas && venir >= hausse) {
       type = 'hausse';
-    } else if (c && !effondre && duree(c) > r.duree) {
+    } else if (c && !effondre && c.total > r.total - pas && duree(c) > r.duree) {
+      // Une forte baisse n'est jamais une « prolongation », même quand une valeur
+      // inconnue empêche de la notifier comme baisse.
       const ajoutes = c.jours.filter((j) => j.d >= jour && (j.d < r.debut || j.d > r.fin));
       if (ajoutes.reduce((a, j) => a + j.v, 0) >= prolongeMin && ajoutes.length) type = 'prolonge';
-    } else if (effondre && tombe < hausse && r.fin >= jour && r.debut >= reculer(jour, memoire)) {
-      const plage = [...inconnus].some((d) => d >= r.debut && d <= r.fin);
-      if (!plage) type = 'annule';
     }
 
     if (type === 'annule') {
@@ -140,7 +166,7 @@ export function decider(eps, records, opts) {
   }
 
   for (const e of eps) {
-    if (lies.has(e) || e.total < seuil || aVenir(e, jour) < minAVenir) continue;
+    if (lies.has(e) || !nouvelleOk(e)) continue;
     decisions.push({ type: 'nouvelle', episode: e, record: null, apres: reference(e) });
   }
 

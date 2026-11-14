@@ -19,6 +19,9 @@ faite, fais-la d'abord.
   seul (connexion Cloudflare, secrets, matériel) se demande quand même.
 - **Réponse toujours dans le fichier** : section « Réponse » remplie et statut
   changé, pas seulement dans le chat.
+- **Avant de dire qu'il n'y a plus rien à faire** (règle de Greg, 14.11.2026) :
+  `git pull`, puis relis `docs/demandes-wingfoil.md` ; une nouvelle demande
+  `OUVERTE` a pu arriver pendant la séance.
 
 ## TODO.md (à tenir à jour à chaque fin de séance)
 

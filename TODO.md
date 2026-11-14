@@ -66,6 +66,9 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-14 — D-002 (décidé par Greg) : « revue à la baisse » et nouvelle alerte jugée
+      sans le dernier jour de l'horizon, en production. Rejeu du 12 au 14.11 : 3 messages au
+      lieu de 6. Probable « revue à la baisse 46 cm (68) » au réveil du 15.11.
 - [x] 2026-11-14 — D-001 (session chat, décidé par Greg) : palier de révision neige à
       30 % et silence nocturne en service (Worker redéployé à 21h55 avec le réveil
       `3 5,6,7 * * *`, `SILENCE_NOCTURNE` = 1, Wrangler de nouveau déconnecté) ; cause

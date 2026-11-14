@@ -80,10 +80,49 @@ test('hausse : reference = derniere alerte, pas le dernier run (montee lente)', 
   }
   assert.deepEqual(types(decider([ep(ME, [12, 5])], [r], OPT)), ['hausse']);
 });
-test('baisse puis remontee sous la reference : rien', () => {
+test('baisse d\'au moins le pas : « baisse » (D-002), sinon rien', () => {
   const r = rec(ME, JE, 30);
-  assert.deepEqual(types(decider([ep(ME, [10, 10])], [r], OPT)), [null]);
-  assert.deepEqual(types(decider([ep(ME, [14, 13])], [r], OPT)), [null]);
+  assert.deepEqual(types(decider([ep(ME, [10, 10])], [r], OPT)), ['baisse']);   // 20 <= 25
+  assert.deepEqual(types(decider([ep(ME, [14, 13])], [r], OPT)), [null]);       // 27 > 25
+  // Pas proportionnel : 64 -> 45 (pas 19,2) rien, 64 -> 44 baisse.
+  const O = { ...OPT, hausseRel: 0.3 };
+  assert.deepEqual(types(decider([ep(ME, [25, 20])], [rec(ME, JE, 64)], O)), [null]);
+  assert.deepEqual(types(decider([ep(ME, [24, 20])], [rec(ME, JE, 64)], O)), ['baisse']);
+});
+test('priorite (D-002) : annulation > baisse > hausse > prolongation', () => {
+  // Baisse avec un jour de plus : baisse.
+  const d = decider([ep(ME, [7, 9, 12])], [rec(ME, JE, 64)], { ...OPT, hausseRel: 0.3 });
+  assert.deepEqual(types(d), ['baisse']);
+  assert.deepEqual([d[0].apres.debut, d[0].apres.fin, d[0].apres.total], [ME, VE, 28]);
+  // Sous seuil - marge : annulation, pas baisse.
+  assert.deepEqual(types(decider([ep(ME, [4, 3])], [rec(ME, JE, 30)], OPT)), ['annule']);
+});
+test('baisse : episode fini, ou valeur inconnue sur la plage -> rien', () => {
+  const O = { ...OPT, jour: VE };
+  assert.deepEqual(types(decider([ep(ME, [10, 8])], [rec(ME, JE, 30)], O)), [null]);
+  const inconnus = new Set([JE]);
+  assert.deepEqual(types(decider([ep(ME, [10, 8])], [rec(ME, JE, 30)], { ...OPT, inconnus })), [null]);
+});
+test('baisse : debut de l\'annonce sorti de la serie (memoire) -> rien', () => {
+  // Annonce LU -> ME, memoire 0 jour avant MA : LU est sorti, le cumul baisse tout seul.
+  const O = { ...OPT, memoire: 0 };
+  assert.deepEqual(types(decider([ep(MA, [9, 9])], [rec(LU, ME, 30)], O)), [null]);
+});
+test('forte baisse + un jour de plus, valeur inconnue sur la plage -> ni baisse ni prolonge', () => {
+  const inconnus = new Set([JE]);
+  const d = decider([ep(ME, [7, 9, 12])], [rec(ME, JE, 64)], { ...OPT, hausseRel: 0.3, inconnus });
+  assert.deepEqual(types(d), [null]);
+});
+test('nouvelle : jugee sans le dernier jour de l\'horizon (D-002)', () => {
+  const O = { ...OPT, horizon: JE };
+  assert.deepEqual(types(decider([ep(ME, [8, 56])], [], O)), []);              // 8 sans J+4
+  assert.deepEqual(types(decider([ep(ME, [12, 56])], [], O)), ['nouvelle']);   // 12 sans J+4
+  assert.equal(decider([ep(ME, [12, 56])], [], O)[0].apres.total, 68, 'reference = cumul complet');
+  // Episode annule qui revient : meme regle.
+  const r = rec(ME, JE, 12, true);
+  assert.deepEqual(types(decider([ep(ME, [3, 40])], [r], O)), [null]);
+  // Episode deja suivi : cumul complet, le dernier jour compte.
+  assert.deepEqual(types(decider([ep(ME, [8, 56])], [rec(ME, JE, 30)], { ...O, hausseRel: 0.3 })), ['hausse']);
 });
 test('seuil de hausse parametrable', () => {
   const d = decider([ep(ME, [8, 7])], [rec(ME, JE, 12)], { ...OPT, hausse: 3 });

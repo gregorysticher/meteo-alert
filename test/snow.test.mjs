@@ -202,11 +202,28 @@ test('annoncée : un jour de plus -> « prolongé »', () => {
   assert.match(r.out, /ntfy → Épisode de neige prolongé/);
   assert.match(r.out, /15 cm cumulés \(12 cm sur 2 j à la dernière alerte\)/);
 });
-test('annoncée : prolongé avec forte baisse -> le message dit le cumul d\'avant', () => {
-  // Cas réel du 13/11/2026 : 64 cm sur 2 j annoncés, puis 28 cm sur 3 j.
+test('annoncée : forte baisse avec un jour de plus -> « revue à la baisse », pas « prolongé »', () => {
+  // Cas réel du 13/11/2026 : 64 cm sur 2 j annoncés, puis 28 cm sur 3 j (D-002).
   const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 9, 12, 0]), REEL, etatDe(1, 2, 64));
-  assert.match(r.out, /ntfy → Épisode de neige prolongé/);
-  assert.match(r.out, /28 cm cumulés \(64 cm sur 2 j à la dernière alerte\)/);
+  assert.match(r.out, /ntfy → Neige revue à la baisse/);
+  assert.doesNotMatch(r.out, /prolongé/);
+  assert.match(r.out, /28 cm cumulés \(64 cm à la dernière alerte, \w\w \d\d\.\d\d → \w\w \d\d\.\d\d\)/);
+  assert.equal(JSON.parse(r.etat).episodes[0].total, 28);
+});
+test('annoncée : baisse sous le pas -> rien (37 -> 30 cm, pas 11,1)', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 15, 15, 0, 0]), REEL, etatDe(1, 2, 37));
+  assert.match(r.out, /À notifier : 0/);
+});
+test('annoncée : nouvelle sur le seul dernier jour de l\'horizon -> rien, écran plein', () => {
+  // Cas réel du 12/11/2026 : 7,8 cm à J+3, 56,6 cm à J+4 (D-002).
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 8, 57]), REEL);
+  assert.match(r.out, /À notifier : 0/);
+  assert.equal(r.ecran.episode.cm, 65, 'l\'écran garde le cumul complet');
+});
+test('annoncée : nouvelle qui tient sans le dernier jour -> envoyée avec le cumul complet', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 6, 5, 20]), REEL);
+  assert.match(r.out, /ntfy → Neige annoncée/);
+  assert.match(r.out, /31 cm cumulés/);
 });
 test('annoncée : requête avec le bon modèle et les jours passés', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0]));
@@ -334,7 +351,7 @@ test('annoncée : la requête longue n\'a ni modèle ni past_days, sur 16 jours'
   assert.doesNotMatch(liste[1], /models=|past_days=/);
 });
 test('annoncée : annonce déplacée -> un seul message « décalée »', () => {
-  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 7, 5]), REEL, etatDe(0, 1, 12));
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 7, 5, 0]), REEL, etatDe(0, 1, 12));
   assert.match(r.out, /ntfy → Neige décalée/);
   assert.doesNotMatch(r.out, /ntfy → (Annulé|Neige annoncée)/);
 });

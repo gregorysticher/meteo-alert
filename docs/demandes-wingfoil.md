@@ -120,7 +120,7 @@ remarques mineures corrigées.
 
 ## D-002 — Réponses aux questions de D-001 : baisse notifiée, dernier jour de l'horizon
 
-**Statut :** OUVERTE
+**Statut :** FAITE (en production le 14.11.2026 vers 23h ; une question en fin de Réponse)
 **De :** WINGFOIL/METEO-ALERT — samedi 14.11.2026, 22h00
 **Décidé par :** Greg, 14.11.2026
 
@@ -165,4 +165,63 @@ contenu des messages qui seraient partis.
 
 ### Réponse
 
-_(à remplir par Weather Station)_
+**De :** Weather Station — samedi 14.11.2026, 23h
+
+**Décision 1 — « revue à la baisse » : en production.** Nouveau type `baisse` dans
+`snow-episodes.mjs` : cumul ≤ dernière alerte − pas, avec le même pas que la hausse.
+Message « Neige revue à la baisse — Les Collines », priorité normale (la hausse reste
+haute) : « 28 cm cumulés (64 cm à la dernière alerte, Di 15.11 → Lu 16.11) · Di 15.11
+→ Ma 17.11 ». La plage d'avant est ajoutée, puisqu'une baisse peut venir avec un
+changement de jours.
+
+**Ordre de priorité retenu** pour un épisode déjà alerté :
+1. annulation (cumul sous seuil − marge, règle inchangée) ;
+2. baisse ;
+3. hausse ;
+4. prolongation.
+
+Une forte baisse n'est jamais étiquetée « prolongé », même quand une valeur inconnue
+sur la plage empêche de la notifier. La baisse se tait aussi dans trois cas, comme
+l'annulation : épisode fini, début de l'annonce sorti des 7 jours passés de la série,
+valeur inconnue sur la plage.
+
+**Décision 2 — dernier jour de l'horizon : en production.** Une nouvelle alerte, ou le
+retour d'un épisode annulé, se juge sans le dernier jour de la série du modèle (J+4
+pour ICON-CH2), cumul et « à venir » compris. Le message et l'écran gardent le cumul
+complet. Un épisode déjà suivi se juge sur le cumul complet.
+
+**Rejeu de la série réelle du 12 au 14.11**, avec le code réel sur les prévisions de
+`data/neige.csv`. Contrôle : les règles d'avant redonnent exactement les 6 messages
+reçus. Avec D-001 et D-002 (30 %, silence, baisse, dernier jour exclu), il en reste
+**3** :
+1. Ve 13.11, 11h28 — **Neige annoncée** : 28 cm, Di 15.11 → Ma 17.11. Le 12.11, la
+   première alerte ne part pas : sans le lundi à J+4, il restait 7,8 cm.
+2. Ve 13.11, 17h33 — **Revue à la hausse** : 37 cm (28 cm à la dernière alerte),
+   Di 15 → Lu 16.
+3. Sa 14.11, 8h03 (réveil) — **Revue à la hausse** : 59 cm (37 cm à la dernière
+   alerte), Di 15 → Me 18. Elle était tombée à 5h24, retenue par le silence.
+
+Ni 22h27, ni 5h24, ni 12h36, et aucune baisse dans cette série.
+
+**À savoir pour le prochain run.** L'état réel garde 68 cm (Di 15 → Me 18, alerte du
+14.11 à 12h36), et la prévision de 20h57 donne 46 cm. Le réveil de dimanche à 8h03
+enverra donc vraisemblablement « revue à la baisse 46 cm (68 cm à la dernière
+alerte) ». Exception : si le nouveau dernier jour (Je 19) a 2 cm ou plus, ce sera
+« prolongé ».
+
+**Question (risque relevé par la revue de code) :** un épisode suivi garde le dernier
+jour de l'horizon dans son cumul, comme tu l'as décidé. Or ce jour oscille fort : le
+lundi a varié de 9,8 à 37,3 cm. Avec la baisse désormais notifiée, cela peut donner
+hausse puis baisse sur deux runs de suite (66 cm, puis 39 cm). Le pas de 30 % amortit,
+sans exclure le cas. Deux options :
+- **(a)** on observe tel quel ;
+- **(b)** hausse et baisse se jugent aussi sans le dernier jour ; seule l'annulation
+  garde le cumul complet.
+Je recommande (a) pour cet hiver, puis de regarder `data/neige.csv` après 3 ou 4
+épisodes.
+
+Autre cas rare : une baisse peut tomber entre seuil − marge et seuil (18-20 cm),
+suivie d'une annulation au run d'après. Cela fait deux messages, laissé tel quel.
+
+Tests : 290 au vert ; revue de code par un agent indépendant, rien de sérieux, ses
+remarques mineures corrigées.
