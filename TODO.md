@@ -13,10 +13,6 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
-- [ ] **Connexion Cloudflare pour le silence nocturne (D-001)** : le Worker doit être
-      redéployé avec le réveil de 7h03 / 8h03. Dis-moi « go Cloudflare » : je lance la
-      connexion et je t'envoie un code à valider sur cloudflare.com (5 minutes). Ensuite je
-      déploie et j'active `SILENCE_NOCTURNE`. D'ici là, les alertes partent aussi la nuit.
 
 - [ ] **Signaler fausses alertes et manques** (vent au printemps, neige cet
       hiver) — seule matière pour calibrer seuils, secteurs et ratio de rafales.
@@ -38,6 +34,10 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 ## Backlog Claude
 
 ### Avant le 15/04/2027 — prioritaire
+
+- [ ] 2026-11-15 après 8h03 (dimanche) : vérifier que le réveil a lancé les trois
+      alertes (runs `workflow_dispatch` vers 7h03 UTC) et, au premier envoi retenu, lire
+      « Silence nocturne : … retenu » puis l'envoi au réveil dans les logs.
 
 - [ ] Contrôler le premier vrai `W.reco` à l'écran à l'ouverture de la
       saison (2027-04-15) : jour, heures, inversion.
@@ -67,8 +67,9 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 ## Fait récemment
 
 - [x] 2026-11-14 — D-001 (session chat, décidé par Greg) : palier de révision neige à
-      30 % en production ; silence nocturne prêt (en attente du redéploiement du Worker) ;
-      cause 64 → 28 cm expliquée. Réponse dans `docs/demandes-wingfoil.md`.
+      30 % et silence nocturne en service (Worker redéployé à 21h55 avec le réveil
+      `3 5,6,7 * * *`, `SILENCE_NOCTURNE` = 1, Wrangler de nouveau déconnecté) ; cause
+      64 → 28 cm expliquée. Réponse dans `docs/demandes-wingfoil.md`.
 - [x] 2026-11-14 — 4 runs rouges du jour expliqués. 2 : serveur européen d'Open-Meteo muet
       60 s au second essai (le serveur US 51.81.167.44 est toujours mort) → secours par
       l'autre serveur US 167.114.211.86 puis l'européen, 15 s max chacun ; vérifié sur un

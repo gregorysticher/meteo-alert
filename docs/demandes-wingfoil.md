@@ -13,7 +13,7 @@ et pousse. La session chat lit ce fichier.
 
 ## D-001 — Silence nocturne + palier de révision neige proportionnel
 
-**Statut :** FAITE (silence en service après redéploiement du Worker, voir Réponse)
+**Statut :** FAITE (palier et silence en service depuis le 14.11.2026, 21h55 ; questions ouvertes en fin de Réponse)
 **De :** WINGFOIL/METEO-ALERT — samedi 14.11.2026, 20h50
 **Décidé par :** Greg, 14.11.2026
 
@@ -74,8 +74,8 @@ comptait cinq, il y a eu en plus « revue à la hausse 68 cm » le 14.11 à 12h3
 Écart assumé : la condition « au moins 5 cm encore à venir » d'une hausse reste absolue,
 comme les deux autres emplois que tu cites.
 
-**Décision 1 — silence nocturne : prêt, en service dès que Greg aura reconnecté
-Cloudflare** (une connexion par code, que lui seul peut valider). Fenêtre 22h30 → 7h00
+**Décision 1 — silence nocturne : en service depuis le 14.11.2026 à 21h55** (Worker
+redéployé, variable `SILENCE_NOCTURNE` = 1). Fenêtre 22h30 → 7h00
 les jours ouvrés, → 8h00 samedi, dimanche et fériés genevois (`silence.mjs`), pour les
 trois alertes. Une alerte de la fenêtre n'est pas envoyée ni mémorisée : le premier run
 après la fin la réévalue avec la dernière prévision. Ce qui ne tient plus au matin ne
