@@ -4,7 +4,7 @@
 // RÈGLES (spec B4.3, validées le 08/11/2026, précisées après la revue QA) :
 //   nouvelle  cumul >= seuil, jamais alerté, et encore `hausse` cm à venir :
 //             de la neige déjà tombée n'est pas « annoncée »
-//   hausse    cumul >= cumul de la dernière alerte + `hausse`, et autant à venir
+//   hausse    cumul >= cumul de la dernière alerte + PAS, et autant à venir
 //   prolonge  plus de jours que lors de la dernière alerte, et au moins
 //             `prolongeMin` cm sur les jours ajoutés à venir : une révision du
 //             passé ou une queue de traces n'est pas une prolongation
@@ -15,6 +15,17 @@
 //             alerte/annulation autour du seuil
 //   decale    annulation et nouvelle dans le même run : un seul message
 // Un épisode annulé qui repasse au seuil redevient une « nouvelle ».
+//
+// PAS DE RÉVISION PROPORTIONNEL (14.11.2026). Le palier était fixe à 5 cm, ce
+// qui a produit quatre notifications pour un seul épisode : 28 → 37 → 44 → 59.
+// À 28 cm, +5 cm informe ; à 59 cm, non — la décision de monter est prise
+// depuis longtemps. Le pas vaut donc max(`hausse`, `haussePct` × cumul de la
+// dernière alerte). Sur cette série, avec 30 % : 28 → 37 (+32 %) notifie,
+// 37 → 44 (+19 %) non, 44 → 59 (+34 %) notifie. Deux messages au lieu de
+// quatre. Le seuil absolu reste le plancher pour les petits cumuls.
+// Les autres emplois de `hausse` restent absolus : « 5 cm déjà tombés »
+// (pas d'annulation) et le minimum à venir d'une nouvelle alerte ne sont pas
+// des révisions et n'ont pas à grandir avec le cumul.
 //
 // Un enregistrement d'état = { debut, fin, total, duree, annule } : les valeurs
 // de la DERNIÈRE ALERTE. La plage ne bouge qu'à l'envoi d'une alerte. Le cumul
@@ -82,17 +93,23 @@ const reference = (e) => ({
 });
 
 // eps : tous les épisodes de la série, y compris ceux déjà finis.
-// opts : { jour, seuil, hausse, marge, prolongeMin, memoire, inconnus }
-//   memoire  jours de passé dans la série : un épisode reste suivi tant que ses
-//            jours y figurent, sinon il reviendrait comme une « nouvelle »
-//   inconnus Set des dates sans valeur exploitable : pas d'annulation à l'aveugle
+// opts : { jour, seuil, hausse, haussePct, marge, prolongeMin, memoire, inconnus }
+//   hausse     palier plancher, en cm
+//   haussePct  part du cumul de la dernière alerte servant de palier quand elle
+//              dépasse ce plancher (0.30 = 30 %)
+//   memoire    jours de passé dans la série : un épisode reste suivi tant que ses
+//              jours y figurent, sinon il reviendrait comme une « nouvelle »
+//   inconnus   Set des dates sans valeur exploitable : pas d'annulation à l'aveugle
 // Renvoie une liste de décisions { type, episode, record, apres } :
 //   type    'nouvelle' | 'hausse' | 'prolonge' | 'annule' | 'decale' | null
 //   record  état actuel (null pour une nouvelle)
 //   apres   état une fois la décision appliquée (null = oublier l'épisode)
 // Si l'envoi échoue, l'appelant garde `record` : l'alerte repart au run suivant.
 export function decider(eps, records, opts) {
-  const { jour, seuil, hausse, marge = 0, prolongeMin = 0, memoire = 0, inconnus = new Set() } = opts;
+  const {
+    jour, seuil, hausse, haussePct = 0.3, marge = 0, prolongeMin = 0,
+    memoire = 0, inconnus = new Set(),
+  } = opts;
   const minAVenir = Math.min(hausse, seuil);
   const decisions = [];
   const lies = new Set();
@@ -110,11 +127,13 @@ export function decider(eps, records, opts) {
     const tombe = (c?.jours ?? []).filter((j) => j.d < jour).reduce((a, j) => a + j.v, 0);
     const effondre = (c?.total ?? 0) < seuil - marge;
     const finDeMemoire = r.fin < reculer(jour, memoire);
+    // Palier de révision : plancher absolu, puis proportionnel au cumul annoncé.
+    const pas = Math.max(hausse, (r.total ?? 0) * haussePct);
 
     let type = null;
     if (r.annule) {
       if (c && c.total >= seuil && venir >= minAVenir) type = 'nouvelle';
-    } else if (c && c.total >= r.total + hausse && venir >= hausse) {
+    } else if (c && c.total >= r.total + pas && venir >= pas) {
       type = 'hausse';
     } else if (c && !effondre && duree(c) > r.duree) {
       const ajoutes = c.jours.filter((j) => j.d >= jour && (j.d < r.debut || j.d > r.fin));
