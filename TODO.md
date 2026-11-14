@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-13
+Dernière mise à jour : 2026-11-14
 Session : Weather Station — https://claude.ai/code/session_01V44DmrGmT76TSq2yZ4XBUY — PC claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
@@ -20,6 +20,11 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
       Échéance : avant le 2027-04-15.
+- [ ] **Écran resté sur la page détail sans appui** : le signaler avec l'heure s'il se
+      reproduit. Le 14/11 à 5h50, un réveil « écran suivant » sans appui l'a mis sur la page
+      détail, gardée par le maintien jusqu'à 10h05. Décision de Greg : rien ne change sauf
+      récidive ; parade alors : page détail hors rotation, ouverte en Guest Mode (retour seul
+      après 30 min). Vérif : TRMNL › appareil › Timeline, chercher un « Delivered » non voulu.
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
 
