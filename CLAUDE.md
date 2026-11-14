@@ -4,6 +4,17 @@ Avant toute action, lis `HANDOFF.md` (état, architecture, conventions) puis
 `TODO.md` (priorités). Si la mise en route du §0 de `HANDOFF.md` n'est pas
 faite, fais-la d'abord.
 
+## Rôles entre sessions (décidé par Greg le 14.11.2026)
+
+- **Session chat WINGFOIL/METEO-ALERT** : décide pour les alertes vent et neige
+  (seuils, créneaux, fréquence, contenu des messages, silence nocturne) et suit
+  la qualité des prévisions. Elle n'écrit pas de code dans ce dépôt.
+- **Session Claude Code Weather Station** (toi) : implémente, teste et met en
+  production, ici et dans les dépôts `trmnl-*`.
+- **Canal direct** : `docs/demandes-wingfoil.md`. En début de séance, traite
+  les demandes au statut `OUVERTE`, réponds dans le fichier, change le statut,
+  commite et pousse. Greg ne fait pas le passe-plat.
+
 ## TODO.md (à tenir à jour à chaque fin de séance)
 
 - `TODO.md` à la racine, ligne « Dernière mise à jour : AAAA-MM-JJ » en tête.
