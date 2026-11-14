@@ -13,6 +13,11 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
+- [ ] **Connexion Cloudflare pour le silence nocturne (D-001)** : le Worker doit être
+      redéployé avec le réveil de 7h03 / 8h03. Dis-moi « go Cloudflare » : je lance la
+      connexion et je t'envoie un code à valider sur cloudflare.com (5 minutes). Ensuite je
+      déploie et j'active `SILENCE_NOCTURNE`. D'ici là, les alertes partent aussi la nuit.
+
 - [ ] **Signaler fausses alertes et manques** (vent au printemps, neige cet
       hiver) — seule matière pour calibrer seuils, secteurs et ratio de rafales.
 - [ ] **Valider le format d'alerte vent** sur une vraie journée ventée (rendu
@@ -61,6 +66,9 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-14 — D-001 (session chat, décidé par Greg) : palier de révision neige à
+      30 % en production ; silence nocturne prêt (en attente du redéploiement du Worker) ;
+      cause 64 → 28 cm expliquée. Réponse dans `docs/demandes-wingfoil.md`.
 - [x] 2026-11-14 — 4 runs rouges du jour expliqués. 2 : serveur européen d'Open-Meteo muet
       60 s au second essai (le serveur US 51.81.167.44 est toujours mort) → secours par
       l'autre serveur US 167.114.211.86 puis l'européen, 15 s max chacun ; vérifié sur un

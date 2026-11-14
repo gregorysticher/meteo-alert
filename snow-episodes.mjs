@@ -4,7 +4,11 @@
 // RÈGLES (spec B4.3, validées le 08/11/2026, précisées après la revue QA) :
 //   nouvelle  cumul >= seuil, jamais alerté, et encore `hausse` cm à venir :
 //             de la neige déjà tombée n'est pas « annoncée »
-//   hausse    cumul >= cumul de la dernière alerte + `hausse`, et autant à venir
+//   hausse    cumul >= cumul de la dernière alerte + pas, et `hausse` cm à venir ;
+//             pas = max(`hausse`, `hausseRel` × cumul de la dernière alerte)
+//             (D-001, Greg 2026-11-14 : 28 → 37 → 44 → 59 cm donnait 3 « hausse »,
+//             2 avec un pas de 30 %). Les autres emplois de `hausse` (à venir, neige
+//             tombée qui bloque l'annulation) restent absolus
 //   prolonge  plus de jours que lors de la dernière alerte, et au moins
 //             `prolongeMin` cm sur les jours ajoutés à venir : une révision du
 //             passé ou une queue de traces n'est pas une prolongation
@@ -82,7 +86,8 @@ const reference = (e) => ({
 });
 
 // eps : tous les épisodes de la série, y compris ceux déjà finis.
-// opts : { jour, seuil, hausse, marge, prolongeMin, memoire, inconnus }
+// opts : { jour, seuil, hausse, hausseRel, marge, prolongeMin, memoire, inconnus }
+//   hausseRel fraction du cumul de la dernière alerte (0,3 = 30 %), 0 = pas absolu
 //   memoire  jours de passé dans la série : un épisode reste suivi tant que ses
 //            jours y figurent, sinon il reviendrait comme une « nouvelle »
 //   inconnus Set des dates sans valeur exploitable : pas d'annulation à l'aveugle
@@ -92,7 +97,8 @@ const reference = (e) => ({
 //   apres   état une fois la décision appliquée (null = oublier l'épisode)
 // Si l'envoi échoue, l'appelant garde `record` : l'alerte repart au run suivant.
 export function decider(eps, records, opts) {
-  const { jour, seuil, hausse, marge = 0, prolongeMin = 0, memoire = 0, inconnus = new Set() } = opts;
+  const { jour, seuil, hausse, hausseRel = 0, marge = 0, prolongeMin = 0, memoire = 0,
+    inconnus = new Set() } = opts;
   const minAVenir = Math.min(hausse, seuil);
   const decisions = [];
   const lies = new Set();
@@ -114,7 +120,7 @@ export function decider(eps, records, opts) {
     let type = null;
     if (r.annule) {
       if (c && c.total >= seuil && venir >= minAVenir) type = 'nouvelle';
-    } else if (c && c.total >= r.total + hausse && venir >= hausse) {
+    } else if (c && c.total >= r.total + Math.max(hausse, hausseRel * r.total) && venir >= hausse) {
       type = 'hausse';
     } else if (c && !effondre && duree(c) > r.duree) {
       const ajoutes = c.jours.filter((j) => j.d >= jour && (j.d < r.debut || j.d > r.fin));

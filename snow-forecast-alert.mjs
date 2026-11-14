@@ -23,6 +23,8 @@
 //                          seuil de test ne doit pas toucher aux vrais épisodes
 //   HAUSSE_CM=5          → nouvelle alerte si le cumul monte d'autant (variable
 //                          de dépôt HAUSSE_NEIGE_CM)
+//   HAUSSE_PCT=30        → ... ou de ce pourcentage du cumul de la dernière alerte,
+//                          le plus grand des deux (variable HAUSSE_NEIGE_PCT, D-001)
 //   MARGE_CM=2           → annulation seulement sous seuil - marge (variable
 //                          de dépôt MARGE_ANNUL_NEIGE_CM ; 0 = sous le seuil)
 //   PROLONGE_MIN_CM=2    → neige minimale sur les jours ajoutés pour une
@@ -52,6 +54,7 @@ const nombreEnv = (nom, defaut) => {
   return v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Number(v) : defaut;
 };
 const HAUSSE_CM = nombreEnv("HAUSSE_CM", 5);
+const HAUSSE_PCT = nombreEnv("HAUSSE_PCT", 30);
 const MARGE_CM = nombreEnv("MARGE_CM", 2);
 const PROLONGE_MIN_CM = nombreEnv("PROLONGE_MIN_CM", 2);
 const AFFICHAGE_CM = nombreEnv("AFFICHAGE_CM", 5);
@@ -60,13 +63,15 @@ const SEUIL_FORCE = Boolean(process.env.SEUIL_FORCE);
 
 // Réglage absurde : le script tourne avec les défauts, mais le run est rouge.
 function reglages() {
-  const r = { hausse: HAUSSE_CM, marge: MARGE_CM, prolongeMin: PROLONGE_MIN_CM, affichage: AFFICHAGE_CM };
+  const r = { hausse: HAUSSE_CM, hausseRel: HAUSSE_PCT / 100, marge: MARGE_CM,
+    prolongeMin: PROLONGE_MIN_CM, affichage: AFFICHAGE_CM };
   const refuser = (msg, cle, defaut) => {
     console.error(`Variable invalide : ${msg} — défaut ${defaut} utilisé.`);
     process.exitCode = 1;
     r[cle] = defaut;
   };
   if (r.hausse <= 0) refuser(`HAUSSE_CM = ${r.hausse}`, "hausse", 5);
+  if (!(HAUSSE_PCT >= 0 && HAUSSE_PCT <= 100)) refuser(`HAUSSE_PCT = ${HAUSSE_PCT}`, "hausseRel", 0.3);
   if (r.affichage <= 0) refuser(`AFFICHAGE_CM = ${r.affichage}`, "affichage", 5);
   if (r.prolongeMin < 0) refuser(`PROLONGE_MIN_CM = ${r.prolongeMin}`, "prolongeMin", 2);
   if (!SEUIL_FORCE && (r.marge < 0 || r.marge >= SEUIL_CM)) {
@@ -217,7 +222,7 @@ async function journaliserLong(url, jour) {
 // ══════ MAIN ══════
 async function main() {
   const jour = aujourdhuiLocal();
-  console.log(`${LIEU} (${ALT} m) · seuil ${SEUIL_CM} cm cumulés · hausse ${HAUSSE_CM} cm`);
+  console.log(`${LIEU} (${ALT} m) · seuil ${SEUIL_CM} cm cumulés · hausse ${HAUSSE_CM} cm ou ${HAUSSE_PCT} %`);
   console.log(`Date locale : ${jour}\n`);
 
   if (!enSaison(jour) && !IGNORER_SAISON) {
@@ -347,6 +352,7 @@ async function main() {
       const ok = await notifier(NTFY_TOPIC, n.titre, n.corps, {
         priorite: n.priorite,
         tags: d.type === "annule" ? ["snowflake", "annul"] : ["snowflake"],
+        ignorerSilence: SEUIL_FORCE,
       });
       if (!ok) garde = d.record;
     }

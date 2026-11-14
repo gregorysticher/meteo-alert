@@ -28,7 +28,7 @@ function lancer(script, mock, env = {}, etat = null) {
       ['--import', 'file:///' + MOCK.replace(/\\/g, '/'), join(RACINE, script)], {
         cwd: dir, encoding: 'utf8',
         env: { ...process.env, DRY_RUN: 'true', IGNORER_SAISON: 'true',
-          SEUIL_CM: '10', NTFY_TOPIC_NEIGE: '',
+          SEUIL_CM: '10', NTFY_TOPIC_NEIGE: '', SILENCE_NOCTURNE: '', HAUSSE_PCT: '',
           MOCK_FETCH: typeof mock === 'string' ? mock : JSON.stringify(mock), ...env },
       });
     return {
@@ -163,7 +163,38 @@ test('annoncée : +2 cm -> rien', () => {
 });
 test('annoncée : HAUSSE_CM abaissé -> +2 cm suffit', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 8, 6, 0, 0]),
-    { ...REEL, HAUSSE_CM: '2' }, etatDe(1, 2, 12));
+    { ...REEL, HAUSSE_CM: '2', HAUSSE_PCT: '0' }, etatDe(1, 2, 12));
+  assert.match(r.out, /ntfy → Neige revue à la hausse/);
+});
+// Série du 13-14/11/2026 (D-001) : pas = max(5 cm, 30 % de la dernière alerte).
+test('annoncée : 37 -> 44 cm, sous le pas de 30 % -> rien', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 20, 24, 0, 0]), REEL, etatDe(1, 2, 37));
+  assert.match(r.out, /À notifier : 0/);
+  assert.match(r.out, /hausse 5 cm ou 30 %/);
+});
+test('annoncée : 37 -> 59 cm -> « revue à la hausse », comparé à la dernière alerte', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 29, 30, 0, 0]), REEL, etatDe(1, 2, 37));
+  assert.match(r.out, /ntfy → Neige revue à la hausse/);
+  assert.match(r.out, /59 cm cumulés \(37 cm à la dernière alerte\)/);
+});
+test('annoncée : HAUSSE_PCT absurde -> rouge, défaut 30 %', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 20, 24, 0, 0]), { ...REEL, HAUSSE_PCT: '300' }, etatDe(1, 2, 37));
+  assert.equal(r.code, 1);
+  assert.match(r.out, /Variable invalide : HAUSSE_PCT = 300/);
+  assert.match(r.out, /À notifier : 0/);
+});
+test('annoncée : silence nocturne -> rien envoyé, état gardé, run vert', () => {
+  const etat = etatDe(1, 2, 12);
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 10, 7, 0, 0]),
+    { ...REEL, SILENCE_NOCTURNE: '1', SILENCE_HORLOGE: '2026-11-16T23:00:00Z' }, etat);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /Silence nocturne : « Neige revue à la hausse — Les Collines » retenu, réévalué au réveil \(Ma 17\.11 07:00\)/);
+  assert.doesNotMatch(r.out, /ntfy →/);
+  assert.equal(r.etat, etat, "état inchangé : l'alerte repart au réveil");
+});
+test('annoncée : silence actif mais de jour -> envoyé', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 10, 7, 0, 0]),
+    { ...REEL, SILENCE_NOCTURNE: '1', SILENCE_HORLOGE: '2026-11-16T09:00:00Z' }, etatDe(1, 2, 12));
   assert.match(r.out, /ntfy → Neige revue à la hausse/);
 });
 test('annoncée : un jour de plus -> « prolongé »', () => {

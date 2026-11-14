@@ -58,7 +58,7 @@ jobs:
 
       - name: Tests
         if: steps.garde.outputs.passer != 'true'
-        run: node --test test/reseau.test.mjs test/reco.test.mjs test/qa.test.mjs test/wind-e2e.test.mjs test/worker.test.mjs test/garde.test.mjs
+        run: node --test test/reseau.test.mjs test/reco.test.mjs test/qa.test.mjs test/wind-e2e.test.mjs test/worker.test.mjs test/garde.test.mjs test/silence.test.mjs
 
       - name: Previsions, alertes et QA
         if: steps.garde.outputs.passer != 'true'
@@ -72,6 +72,8 @@ jobs:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || '0' }}
           QA_ONLY: ${{ inputs.qa_only || '0' }}
           SEUIL_TEST: ${{ inputs.seuil_test || '' }}
+          # Silence nocturne 22h30-7h/8h (silence.mjs) : actif si la variable vaut 1.
+          SILENCE_NOCTURNE: ${{ vars.SILENCE_NOCTURNE }}
         run: node wind-alert.mjs | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Les donnees QA n'ont de valeur qu'accumulees : on commite a chaque run,

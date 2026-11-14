@@ -9,7 +9,8 @@ preview_urls = false
 # Mêmes horaires que le cron GitHub de chaque workflow (UTC). Toute modification
 # se répercute dans TACHES (src/taches.mjs) : test/worker.test.mjs le vérifie.
 [triggers]
-crons = ["17 1,5,9,13,17,21 * * *", "23 4,15 * * *", "47 5,16 * * *"]
+# Le quatrième est le réveil après le silence nocturne (REVEIL, sans cron GitHub).
+crons = ["17 1,5,9,13,17,21 * * *", "23 4,15 * * *", "47 5,16 * * *", "3 5,6,7 * * *"]
 
 [observability]
 enabled = true

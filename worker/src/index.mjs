@@ -30,7 +30,7 @@ async function signaler(env, message) {
 export default {
   async scheduled(event, env) {
     try {
-      await declencher(event.cron, env);
+      await declencher(event.cron, env, new Date(event.scheduledTime ?? Date.now()));
     } catch (err) {
       console.error(err.message);
       await signaler(env, err.message).catch((e) => console.error(`ntfy : ${e.message}`));

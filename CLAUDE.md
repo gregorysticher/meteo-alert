@@ -14,6 +14,11 @@ faite, fais-la d'abord.
 - **Canal direct** : `docs/demandes-wingfoil.md`. En début de séance, traite
   les demandes au statut `OUVERTE`, réponds dans le fichier, change le statut,
   commite et pousse. Greg ne fait pas le passe-plat.
+- **Validation** (règle de Greg, 14.11.2026) : une demande marquée « Décidé par :
+  Greg » est validée par lui ; traite-la sans lui redemander. Ce qui reste à lui
+  seul (connexion Cloudflare, secrets, matériel) se demande quand même.
+- **Réponse toujours dans le fichier** : section « Réponse » remplie et statut
+  changé, pas seulement dans le chat.
 
 ## TODO.md (à tenir à jour à chaque fin de séance)
 

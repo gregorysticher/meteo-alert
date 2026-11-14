@@ -1,6 +1,8 @@
 // Tâches du déclencheur et appel à GitHub, à part du point d'entrée du Worker,
 // qui n'exporte que son gestionnaire.
 
+import { heureDeReveil } from '../../silence.mjs';
+
 const DEPOT = 'gregorysticher/meteo-alert';
 
 // Les entrées sont explicites : sans elles, workflow_dispatch prend les valeurs
@@ -11,11 +13,33 @@ export const TACHES = {
   '47 5,16 * * *': { workflow: 'snow-fresh-alert.yml', inputs: { dry_run: 'false' } },
 };
 
+// Réveil après le silence nocturne (silence.mjs, D-001) : les trois alertes à HH:03,
+// HH = 7 h un jour ouvré, 8 h sinon, heure de Genève. Le cron couvre 5, 6 et 7 h UTC
+// (heure d'hiver et d'été) ; seul celui qui tombe dans l'heure de fin déclenche. Pas
+// de cron GitHub de secours : avec ses heures de retard, il ne réveillerait rien.
+export const REVEIL = '3 5,6,7 * * *';
+
 const ESSAIS = 2;
 
-export async function declencher(cron, env) {
+export async function declencher(cron, env, quand = new Date()) {
+  if (cron === REVEIL) {
+    if (!heureDeReveil(quand)) {
+      console.log('Réveil : hors de l’heure de fin du silence, rien à lancer.');
+      return;
+    }
+    const erreurs = [];
+    for (const tache of Object.values(TACHES)) {
+      await lancer(tache, env).catch((err) => erreurs.push(err.message));
+    }
+    if (erreurs.length) throw new Error(erreurs.join(' ; '));
+    return;
+  }
   const tache = TACHES[cron];
   if (!tache) throw new Error(`cron inconnu : ${cron}`);
+  await lancer(tache, env);
+}
+
+async function lancer(tache, env) {
   if (!env.GH_TOKEN) throw new Error('secret GH_TOKEN absent');
 
   const url = `https://api.github.com/repos/${DEPOT}/actions/workflows/${tache.workflow}/dispatches`;

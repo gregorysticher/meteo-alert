@@ -33,7 +33,8 @@ function lancer(monde, { vus = [], env = {}, fichiers = {} } = {}) {
     writeFileSync(logTrmnl, '');
     const r = spawnSync(process.execPath, ['--import', MOCK, join(RACINE, 'wind-alert.mjs')], {
       cwd: dir, encoding: 'utf8',
-      env: { ...process.env, DRY_RUN: '0', QA_ONLY: '0', SEUIL_TEST: '', TRMNL_WEBHOOK_URL: 'https://trmnl.test/hook',
+      env: { ...process.env, SILENCE_NOCTURNE: '', SILENCE_HORLOGE: '',
+        DRY_RUN: '0', QA_ONLY: '0', SEUIL_TEST: '', TRMNL_WEBHOOK_URL: 'https://trmnl.test/hook',
         NTFY_TOPIC_VENT: 'test', MOCK_NTFY_LOG: log, MOCK_TRMNL_LOG: logTrmnl,
         MOCK_WIND: JSON.stringify({ now: VENDREDI, ...monde }), ...env },
     });

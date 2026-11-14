@@ -41,7 +41,7 @@ jobs:
       # Chemins d'échec (API refusée, muette, vide) sur fetch simulé :
       # un test en échec bloque le run, il apparaît en rouge.
       - name: Tests
-        run: node --test test/snow.test.mjs test/snow-episodes.test.mjs test/reseau.test.mjs
+        run: node --test test/snow.test.mjs test/snow-episodes.test.mjs test/reseau.test.mjs test/silence.test.mjs
 
       - name: Vérifier les chutes annoncées
         id: alerte
@@ -53,6 +53,9 @@ jobs:
           # Surcharge manuelle : le script n'annule rien et n'écrit pas d'état.
           SEUIL_FORCE: ${{ inputs.seuil_cm }}
           HAUSSE_CM: ${{ vars.HAUSSE_NEIGE_CM }}
+          HAUSSE_PCT: ${{ vars.HAUSSE_NEIGE_PCT }}
+          # Silence nocturne 22h30-7h/8h (silence.mjs) : actif si la variable vaut 1.
+          SILENCE_NOCTURNE: ${{ vars.SILENCE_NOCTURNE }}
           MARGE_CM: ${{ vars.MARGE_ANNUL_NEIGE_CM }}
           PROLONGE_MIN_CM: ${{ vars.PROLONGE_MIN_NEIGE_CM }}
           AFFICHAGE_CM: ${{ vars.AFFICHAGE_NEIGE_CM }}

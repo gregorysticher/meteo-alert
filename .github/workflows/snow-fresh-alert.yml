@@ -52,7 +52,7 @@ jobs:
       # Chemins d'échec (API refusée, muette, vide) sur fetch simulé :
       # un test en échec bloque le run, il apparaît en rouge.
       - name: Tests
-        run: node --test test/snow.test.mjs test/reseau.test.mjs
+        run: node --test test/snow.test.mjs test/reseau.test.mjs test/silence.test.mjs
 
       - name: Vérifier la neige fraîche mesurée
         env:
@@ -60,6 +60,9 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           IGNORER_SAISON: ${{ inputs.ignorer_saison }}
           SEUIL_CM: ${{ inputs.seuil_cm || vars.SEUIL_NEIGE_FRAICHE_CM }}
+          # Silence nocturne 22h30-7h/8h (silence.mjs) : actif si la variable vaut 1,
+          # sauf test manuel avec seuil forcé.
+          SILENCE_NOCTURNE: ${{ !inputs.seuil_cm && vars.SILENCE_NOCTURNE || '' }}
         run: node snow-fresh-alert.mjs
 
       - name: Commit l'état si modifié

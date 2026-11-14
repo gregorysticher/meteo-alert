@@ -24,6 +24,7 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { notifier, sortieSiEchecs } from './notify.mjs';
+import { apresSilence } from './silence.mjs';
 import { fetchEssai } from './reseau.mjs';
 import { previsions, previsionsArome, mesures, tempLac } from './wind-sources.mjs';
 import {
@@ -299,6 +300,7 @@ if (QA_ONLY) {
     const envoye = await notifier(TOPIC, titre, corps, {
       priorite: etage === 'pre' ? 'default' : 'high',
       tags: ['wind', etage, ...(TEST ? ['test'] : [])],
+      ignorerSilence: TEST,
     });
     if (TEST) {
       console.log(`[${etage}] TEST : ni anti-spam ni journal QA.`);
@@ -317,11 +319,14 @@ if (QA_ONLY) {
   }
 
   if (cfg.annulation && !TEST && !DRY_RUN && TOPIC) {
+    // Apres le silence nocturne (silence.mjs), 3 h durant : une annulation retenue la
+    // nuit peut etre passee sous lead_min_h entre-temps ; elle part quand meme.
+    const reveil = process.env.SILENCE_NOCTURNE === '1' && apresSilence(maintenant);
     for (const id of vus.ids.filter((i) => i.startsWith('pre|'))) {
       const [, key, debut] = id.split('|');
       const lead = (versDate(debut) - maintenant) / 36e5;
       const conf = cfg.alertes.conf;
-      if (lead < conf.lead_min_h || lead > conf.lead_max_h) continue;
+      if (lead < (reveil ? 0 : conf.lead_min_h) || lead > conf.lead_max_h) continue;
       const annul = `annul|${key}|${debut}`;
       if (vus.ids.includes(annul)) continue;
       if (dejaEnvoye(vus.ids, 'conf', key, local(versDate(debut)).iso)) continue;

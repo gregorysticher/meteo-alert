@@ -89,6 +89,15 @@ test('seuil de hausse parametrable', () => {
   const d = decider([ep(ME, [8, 7])], [rec(ME, JE, 12)], { ...OPT, hausse: 3 });
   assert.deepEqual(types(d), ['hausse']);
 });
+test('pas proportionnel (D-001) : max(hausse, 30 % de la derniere alerte)', () => {
+  const O = { ...OPT, hausseRel: 0.3 };
+  assert.deepEqual(types(decider([ep(ME, [20, 17])], [rec(ME, JE, 28)], O)), ['hausse']); // 37 >= 36,4
+  assert.deepEqual(types(decider([ep(ME, [24, 20])], [rec(ME, JE, 37)], O)), [null]);     // 44 < 48,1
+  assert.deepEqual(types(decider([ep(ME, [30, 29])], [rec(ME, JE, 37)], O)), ['hausse']); // 59
+  // Petit cumul : le pas absolu reste le plancher (12 -> 17 = +5, 30 % = 3,6).
+  assert.deepEqual(types(decider([ep(ME, [9, 8])], [rec(ME, JE, 12)], O)), ['hausse']);
+  assert.deepEqual(types(decider([ep(ME, [9, 7])], [rec(ME, JE, 12)], O)), [null]);
+});
 test('hausse due au passe seul : rien', () => {
   // Le modele revise hier a la hausse, plus rien a venir.
   assert.deepEqual(types(decider([ep(DI, [10, 10])], [rec(DI, LU, 12)], OPT)), [null]);

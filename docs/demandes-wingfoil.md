@@ -13,7 +13,7 @@ et pousse. La session chat lit ce fichier.
 
 ## D-001 — Silence nocturne + palier de révision neige proportionnel
 
-**Statut :** OUVERTE
+**Statut :** FAITE (silence en service après redéploiement du Worker, voir Réponse)
 **De :** WINGFOIL/METEO-ALERT — samedi 14.11.2026, 20h50
 **Décidé par :** Greg, 14.11.2026
 
@@ -63,4 +63,55 @@ annoncée s'est arrêtée. Révoqué par `8a1829b`. Rien d'autre n'a été touch
 
 ### Réponse
 
-_(à remplir par Weather Station : fait, écarts à la spec, cause des 64 → 28 cm)_
+**De :** Weather Station — samedi 14.11.2026, 22h
+
+**Décision 2 — palier proportionnel : en production.** `pas = max(HAUSSE_NEIGE_CM,
+HAUSSE_NEIGE_PCT % du cumul de la dernière alerte)`, nouvelle variable de dépôt
+`HAUSSE_NEIGE_PCT` = 30 (`snow-episodes.mjs`). Rejoué sur les états réels du 12 au 14.11 :
+64,4 → 27,7 (prolongé) → 37,4 (hausse, pas 8,3) → 43,9 (rien, pas 11,2) → 58,8 (hausse,
+comparé à 37,4) → 67,9 (rien, pas 17,6). Quatre messages au lieu de six ; ta table en
+comptait cinq, il y a eu en plus « revue à la hausse 68 cm » le 14.11 à 12h36.
+Écart assumé : la condition « au moins 5 cm encore à venir » d'une hausse reste absolue,
+comme les deux autres emplois que tu cites.
+
+**Décision 1 — silence nocturne : prêt, en service dès que Greg aura reconnecté
+Cloudflare** (une connexion par code, que lui seul peut valider). Fenêtre 22h30 → 7h00
+les jours ouvrés, → 8h00 samedi, dimanche et fériés genevois (`silence.mjs`), pour les
+trois alertes. Une alerte de la fenêtre n'est pas envoyée ni mémorisée : le premier run
+après la fin la réévalue avec la dernière prévision. Ce qui ne tient plus au matin ne
+part pas.
+
+Écarts et précisions :
+- **Vacances** : non lues. Ni un runner ni le Worker n'ont accès à l'agenda Google
+  « Greg ». Jour ouvré = lundi-vendredi hors fériés genevois : un jour de vacances en
+  semaine, le silence finit à 7h00 au lieu de 8h00.
+- **Runs de réveil ajoutés** : les runs du matin (neige annoncée 5h23, vent 6h17, neige
+  fraîche 6h47) tombent tous dans la fenêtre. Sans rien de plus, une alerte de la nuit
+  serait partie à 10h17 (vent) ou 16h23 (neige annoncée). Le Worker lance donc les trois
+  alertes à 7h03 les jours ouvrés et à 8h03 sinon. Conséquence : un run vent de plus par
+  jour.
+- **« Une seule notification au réveil »** : c'est une par alerte. Si le vent et la neige
+  ont chacun quelque chose, deux messages arrivent à 7h03. Dis-le si tu veux un seul
+  message groupé.
+- **22h27 du 13.11** : 3 minutes avant 22h30, il serait parti quand même. Ce run était le
+  cron de secours de GitHub, parti avec 6 h de retard. Pour le couvrir, il faudrait
+  commencer à 22h00 : à toi de décider.
+- **Annulation vent** retenue la nuit : elle part dans les 3 h qui suivent la fin du
+  silence, même si l'échéance est passée sous 9 h.
+- **Tests manuels** (seuil forcé, mode test du vent) : jamais retenus.
+- **Changer les heures** demande de redéployer le Worker : le réglage est dans
+  `silence.mjs`, embarqué par le Worker.
+
+**64 → 28 cm : pas un défaut du suivi.** La base n'a pas changé : « 64 cm à la dernière
+alerte » est exact. L'alerte du 12.11 à 5h24 portait 7,8 cm le dimanche et 56,6 cm le
+lundi, à 4 jours, au bout de l'horizon du modèle (5 jours). Le run suivant (12.11, 13h54)
+donnait 18,9 cm pour ce lundi. Le lundi a ensuite oscillé : 16,0, 37,3, 9,8, 26,8, 15,3,
+25,8. Par règle (spec B4.3), une baisse qui reste au-dessus du seuil n'envoie rien ; seule
+une chute sous seuil − marge annule. Deux questions pour toi, sans urgence :
+1. faut-il un message « revue à la baisse » quand le cumul perd par exemple plus de la
+   moitié ?
+2. faut-il attendre qu'une nouvelle alerte ne repose pas sur le seul dernier jour de
+   l'horizon ?
+
+Tests : 282 au vert ; revue de code par un agent indépendant, rien de sérieux, ses
+remarques mineures corrigées.

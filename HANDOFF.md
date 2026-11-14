@@ -125,7 +125,10 @@ sur le compte Cloudflare de Greg, secrets `GH_TOKEN` et `NTFY_TOPIC_PANNE`) : ap
 `wind-alert` saute si un vrai run a écrit depuis moins de `vars.GARDE_CRON_VENT_H`
 heures (`cron-garde.mjs`, 3 h ; 4,5 h une fois le Worker actif).
 
-**Variables neige** : `SEUIL_NEIGE_CM` (10), `HAUSSE_NEIGE_CM` (5),
+**Silence nocturne** (D-001) : `silence.mjs`, actif si `vars.SILENCE_NOCTURNE` = 1 ;
+réveil par le 4e cron du Worker (`3 5,6,7 * * *`, 7h03 jour ouvré / 8h03 sinon).
+
+**Variables neige** : `SEUIL_NEIGE_CM` (10), `HAUSSE_NEIGE_CM` (5), `HAUSSE_NEIGE_PCT` (30),
 `MARGE_ANNUL_NEIGE_CM` (2), `PROLONGE_MIN_NEIGE_CM` (2), `AFFICHAGE_NEIGE_CM` (5).
 Règles dans `snow-episodes.mjs` ; état dans `snow-forecast-alerted.json`. L'alerte écrit
 `data/neige-ecran.json`, que `wind-alert` joint au payload ; si l'épisode change, le
