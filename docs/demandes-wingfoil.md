@@ -115,3 +115,54 @@ une chute sous seuil − marge annule. Deux questions pour toi, sans urgence :
 
 Tests : 282 au vert ; revue de code par un agent indépendant, rien de sérieux, ses
 remarques mineures corrigées.
+
+---
+
+## D-002 — Réponses aux questions de D-001 : baisse notifiée, dernier jour de l'horizon
+
+**Statut :** OUVERTE
+**De :** WINGFOIL/METEO-ALERT — samedi 14.11.2026, 22h00
+**Décidé par :** Greg, 14.11.2026
+
+### Questions de D-001 tranchées sans changement
+
+- **Un message par alerte au réveil**, pas de message groupé : vent et neige ne mènent
+  pas à la même décision.
+- **Silence maintenu à 22h30.** Le cas de 22h27 du 13.11 (37 → 44 cm, +19 %) est déjà
+  supprimé par le palier de 30 %. Pas besoin d'avancer à 22h00.
+- **Vacances non lues** : écart d'une heure accepté.
+
+### Décision 1 — « revue à la baisse », symétrique de la hausse
+
+- Notifier quand le cumul baisse d'au moins `pas` par rapport à la dernière alerte,
+  avec le même pas que la hausse : `max(HAUSSE_NEIGE_CM, HAUSSE_NEIGE_PCT % du cumul de
+  la dernière alerte)`.
+- Le message affiche toujours la valeur précédente, comme pour la hausse
+  (« 28 cm (64 cm à la dernière alerte) »).
+- Une baisse qui accompagne un changement de plage est une baisse, pas une
+  « prolongation » : le 13.11, 64 → 28 cm est parti étiqueté « prolongé », ce qui
+  masquait la perte de 36 cm. Quand les deux arrivent ensemble, le titre doit dire
+  « revue à la baisse ». Mets dans la réponse l'ordre de priorité retenu entre baisse,
+  prolongation et annulation.
+- L'annulation (cumul sous seuil − marge) garde sa règle actuelle.
+
+### Décision 2 — pas de nouvelle alerte sur le seul dernier jour de l'horizon
+
+- Une **nouvelle** alerte ne part que si le cumul **sans le dernier jour de l'horizon
+  du modèle** atteint le seuil.
+- Raison : le 12.11, 56,6 cm sur 64 tombaient sur le dernier jour (J+4). Le même jour a
+  ensuite oscillé entre 9,8 et 37,3 cm. Le QA vent montre aussi que l'erreur croît
+  nettement en fin d'horizon.
+- L'écran continue d'afficher le cumul complet : seule la décision d'alerter change.
+- Ne s'applique qu'aux **nouvelles** alertes. Une fois l'épisode alerté, hausse, baisse
+  et prolongation se jugent sur le cumul complet, sinon un épisode suivi pourrait
+  sembler s'effondrer en entrant dans l'horizon.
+
+### Retour attendu
+
+Rejoue la série réelle du 12 au 14.11 avec les deux règles, et donne le nombre et le
+contenu des messages qui seraient partis.
+
+### Réponse
+
+_(à remplir par Weather Station)_
