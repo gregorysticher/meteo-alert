@@ -36,6 +36,9 @@ function lancer(script, mock, env = {}, etat = null) {
       etat: existsSync(fichierEtat) ? readFileSync(fichierEtat, 'utf8') : null,
       journal: existsSync(join(dir, 'data/neige.csv')) ? readFileSync(join(dir, 'data/neige.csv'), 'utf8') : '',
       ecran: existsSync(join(dir, 'data/neige-ecran.json')) ? JSON.parse(readFileSync(join(dir, 'data/neige-ecran.json'), 'utf8')) : null,
+      alertes: existsSync(join(dir, 'data/alertes-neige.csv')) ? readFileSync(join(dir, 'data/alertes-neige.csv'), 'utf8') : '',
+      qa: existsSync(join(dir, 'data/alertes-neige-qa.csv')) ? readFileSync(join(dir, 'data/alertes-neige-qa.csv'), 'utf8') : '',
+      hs: existsSync(join(dir, 'data/neige-hs.csv')) ? readFileSync(join(dir, 'data/neige-hs.csv'), 'utf8') : '',
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -191,6 +194,32 @@ test('annoncée : silence nocturne -> rien envoyé, état gardé, run vert', () 
   assert.match(r.out, /Silence nocturne : « Neige revue à la hausse — Les Collines » retenu, réévalué au réveil \(Ma 17\.11 07:00\)/);
   assert.doesNotMatch(r.out, /ntfy →/);
   assert.equal(r.etat, etat, "état inchangé : l'alerte repart au réveil");
+});
+test('annoncée : message parti -> journalisé pour le verdict QA (D-003)', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 10, 7, 0, 0]), REEL, etatDe(1, 2, 12));
+  assert.match(r.out, /ntfy → Neige revue à la hausse/);
+  const [entete, ligne, ...reste] = r.alertes.trim().split('\n');
+  assert.equal(entete, 'envoye_le,type,debut,fin,annonce_cm,avant_cm,echeance_j,seuil_cm');
+  assert.deepEqual(reste, []);
+  assert.match(ligne, new RegExp(`^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\dZ,hausse,${jourLocal(1)},${jourLocal(2)},17,12,1,10$`));
+});
+test('annoncée : retenu par le silence, ntfy en panne ou seuil forcé -> rien au journal QA', () => {
+  const nuit = lancer('snow-forecast-alert.mjs', prev([0, 10, 7, 0, 0]),
+    { ...REEL, SILENCE_NOCTURNE: '1', SILENCE_HORLOGE: '2026-11-16T23:00:00Z' }, etatDe(1, 2, 12));
+  assert.match(nuit.out, /Silence nocturne/);
+  assert.equal(nuit.alertes, '');
+  const panne = lancer('snow-forecast-alert.mjs', prev([0, 10, 7, 0, 0]),
+    { ...REEL, MOCK_NTFY_STATUS: '500' }, etatDe(1, 2, 12));
+  assert.equal(panne.code, 1);
+  assert.equal(panne.alertes, '');
+  const force = lancer('snow-forecast-alert.mjs', prev([0, 3, 0, 0, 0]), { ...REEL, SEUIL_FORCE: '1', SEUIL_CM: '1' });
+  assert.match(force.out, /ntfy → Neige annoncée/);
+  assert.equal(force.alertes, '');
+});
+test('annoncée : annulation journalisée avec la plage annulée', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0]), REEL, etatDe(1, 2, 30));
+  assert.match(r.out, /ntfy → Annulé/);
+  assert.match(r.alertes, new RegExp(`,annule,${jourLocal(1)},${jourLocal(2)},0,30,1,10\n$`));
 });
 test('annoncée : silence actif mais de jour -> envoyé', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 10, 7, 0, 0]),
@@ -496,6 +525,24 @@ test('fraîche : stations voisines journalisées, le rapport ne lit que la réf�
   assert.doesNotMatch(r.journal, /XXX1/);
 });
 
+test('fraîche : verdicts QA écrits et HS archivées hors DRY_RUN (D-003)', () => {
+  const r = lancer('snow-fresh-alert.mjs', slf(3, 1), { DRY_RUN: 'false', NTFY_TOPIC_NEIGE: 'x' });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /QA alertes neige \(D-003\)/);
+  assert.match(r.qa, /^envoye_le,episode,type,/);
+  assert.match(r.hs, /^ts,station,hs,ta\n.*,ILI2,40,/s);
+  assert.doesNotMatch(r.hs, /XXX1/);
+});
+test('fraîche : HAUSSE_PCT absurde -> verdict à 30 %, run rouge', () => {
+  const r = lancer('snow-fresh-alert.mjs', slf(3, 1), { HAUSSE_PCT: '-5' });
+  assert.equal(r.code, 1);
+  assert.match(r.out, /Variable invalide : HAUSSE_PCT = -5/);
+});
+test('fraîche : archive HS en panne -> rouge', () => {
+  const r = lancer('snow-fresh-alert.mjs', { body: {} }, { DRY_RUN: 'false', NTFY_TOPIC_NEIGE: 'x' });
+  assert.equal(r.code, 1);
+  assert.match(r.out, /ECHEC archive HS ILI2 : réponse inattendue/);
+});
 test('rapport : modèle de l\'alerte et station de référence seuls', () => {
   const dir = mkdtempSync(join(tmpdir(), 'neige-'));
   const fichier = join(dir, 'neige.csv');

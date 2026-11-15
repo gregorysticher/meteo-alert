@@ -41,6 +41,7 @@ import { notifier, sortieSiEchecs } from "./notify.mjs";
 import { fetchEssai } from "./reseau.mjs";
 import { journaliserPrevision } from "./snow-qa.mjs";
 import { episodes as decouper, decider, ecranNeige } from "./snow-episodes.mjs";
+import { journaliserEnvoi } from "./snow-verdict.mjs";
 
 // ══════ PARAMÈTRES ══════
 const LAT = 46.1913556421;
@@ -360,6 +361,17 @@ async function main() {
         ignorerSilence: SEUIL_FORCE,
       });
       if (!ok) garde = d.record;
+      // Message parti : journalisé pour le verdict QA (D-003). Un seuil forcé est un
+      // test, il n'y entre pas. Une panne du journal rend le run rouge sans toucher à
+      // l'état : l'alerte ne repart pas.
+      else if (!SEUIL_FORCE) {
+        try {
+          journaliserEnvoi(d, { jour, seuil: SEUIL_CM });
+        } catch (err) {
+          console.error(`ECHEC journal des alertes neige : ${err.message}`);
+          process.exitCode = 1;
+        }
+      }
     }
     if (garde) apres.push(garde);
   }

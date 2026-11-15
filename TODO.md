@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-14
+Dernière mise à jour : 2026-11-15
 Session : Weather Station — https://claude.ai/code/session_01V44DmrGmT76TSq2yZ4XBUY — PC claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
@@ -35,9 +35,11 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ### Avant le 15/04/2027 — prioritaire
 
-- [ ] 2026-11-15 après 8h03 (dimanche) : vérifier que le réveil a lancé les trois
-      alertes (runs `workflow_dispatch` vers 7h03 UTC) et, au premier envoi retenu, lire
-      « Silence nocturne : … retenu » puis l'envoi au réveil dans les logs.
+- [ ] 2026-11-21 (D-003) : épisode du 15 au 19.11 mesuré. Lire `data/alertes-neige-qa.csv`
+      et le résumé du job neige fraîche ; trancher l'alignement HN_1D avec `data/neige-hs.csv`
+      (4 stations, heure des hausses de HS ; premier indice : lecture J+1), mettre
+      `ALIGNEMENT` dans `snow-verdict.mjs`, écrire la règle en spec B4.1 et répondre dans
+      `docs/demandes-wingfoil.md` (verdicts, règle, messages par épisode).
 
 - [ ] Contrôler le premier vrai `W.reco` à l'écran à l'ouverture de la
       saison (2027-04-15) : jour, heures, inversion.
@@ -66,6 +68,13 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-15 — Réveil du silence vérifié : les trois alertes lancées à 8h03 ; le
+      « prolongé 84 cm » retenu à 5h24 a été réévalué et envoyé en « revue à la hausse 89 cm
+      (68) » (Je 19.11 passé à 35 cm), un seul message.
+- [x] 2026-11-15 — D-003 (décidé par Greg) : journal des alertes neige envoyées
+      (`data/alertes-neige.csv`, 7 messages repris des logs), verdicts recalculés à chaque run
+      neige fraîche (lectures J et J+1), messages par épisode (7, objectif 3), biais par
+      échéance et rapport neige / eau en information, HS à la demi-heure archivées.
 - [x] 2026-11-14 — D-002 (décidé par Greg) : « revue à la baisse » et nouvelle alerte jugée
       sans le dernier jour de l'horizon, en production. Rejeu du 12 au 14.11 : 3 messages au
       lieu de 6. Probable « revue à la baisse 46 cm (68) » au réveil du 15.11.

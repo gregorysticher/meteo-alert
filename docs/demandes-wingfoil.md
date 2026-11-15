@@ -230,7 +230,7 @@ remarques mineures corrigées.
 
 ## D-003 — Boucle QA neige : verdict des alertes envoyées
 
-**Statut :** OUVERTE
+**Statut :** FAITE (en production le 15.11.2026 ; alignement HN_1D tranché vers le 21.11, après l'épisode)
 **De :** WINGFOIL/METEO-ALERT — dimanche 15.11.2026, 08h15
 **Décidé par :** Greg, 15.11.2026
 
@@ -282,4 +282,75 @@ d'alignement retenue, et le nombre de messages envoyés sur l'épisode.
 
 ### Réponse
 
-_(à remplir par Weather Station)_
+Weather Station — dimanche 15.11.2026, vers 14h. En production le même jour.
+
+**Décision 1 — verdict des alertes envoyées : fait.**
+
+- `data/alertes-neige.csv` : un message neige annoncée parti par ligne (`envoye_le` UTC,
+  `type`, `debut`, `fin`, `annonce_cm`, `avant_cm`, `echeance_j`, `seuil_cm`). Écrit juste
+  après un envoi réussi. Les messages retenus par le silence, ratés, ou de test (seuil
+  forcé) n'y entrent pas. Une annulation porte la plage de l'épisode annulé, et
+  `annonce_cm` = ce qui reste prévu.
+- Rempli après coup avec les 7 messages réellement partis, repris des logs et de
+  l'historique de l'état (cumuls exacts).
+- `data/alertes-neige-qa.csv` : recalculé en entier à chaque run de l'alerte neige
+  fraîche (6h47 et 17h47). Le SLF révise HN_1D jusqu'à deux jours après (07.11 : 8,6 puis
+  11,2 cm), donc un verdict peut encore bouger pendant ce temps.
+- Règles telles que demandées, tolérance = `HAUSSE_NEIGE_PCT` (30 %). Deux valeurs en plus :
+  `ATTENTE` tant que la plage n'est pas passée, et `?` si une mesure manque.
+- Épisode = messages dont les plages se chevauchent ou se touchent (un jour d'écart au
+  plus). Le rapport donne le nombre de messages et signale ceux qui dépassent 3.
+- Le rapport (tableau des verdicts, messages par épisode, biais) sort dans le résumé du
+  job « Alerte neige fraîche », comme le QA vent.
+- Seulement l'alerte neige annoncée : la neige fraîche est une mesure, elle n'a pas de
+  verdict.
+
+**Épisode en cours, à ce jour : 7 messages, objectif 3 dépassé.** Plage Di 15.11 → Je 19.11.
+
+| envoyé (heure suisse) | type | plage | cumul |
+|---|---|---|---|
+| Je 12.11 5h24 | nouvelle | 15 → 16.11 | 64 |
+| Ve 13.11 11h28 | prolongé | 15 → 17.11 | 28 |
+| Ve 13.11 17h33 | hausse | 15 → 16.11 | 37 |
+| Ve 13.11 22h27 | hausse | 15 → 16.11 | 44 |
+| Sa 14.11 5h24 | hausse | 15 → 18.11 | 59 |
+| Sa 14.11 12h36 | hausse | 15 → 18.11 | 68 |
+| Di 15.11 8h03 (réveil) | hausse | 15 → 19.11 | 89 |
+
+Les six premiers sont partis avant D-001 et D-002. Avec les règles actuelles, le rejeu
+réel n'en gardait que 3 (Réponse D-002). Le 7e est le premier sous les nouvelles règles :
+le run de 5h24 avait retenu un « prolongé 84 cm » (silence), puis le réveil de 8h03 a
+réévalué et envoyé « revue à la hausse 89 cm (68) ». Le jeudi 19.11 est passé de moins de
+2 cm à 35 cm, donc ce n'est pas la « revue à la baisse » prévue hier soir. Un seul message
+au réveil, comme voulu. Verdicts : `ATTENTE` jusqu'au 20.11 (lecture J) et au 21.11
+(lecture J+1), recalculés ensuite à chaque run.
+
+**Décision 2 — alignement de HN_1D : pas encore tranché, les deux lectures calculées.**
+
+- Le SLF publie aussi la hauteur de neige (HS) à la demi-heure, mais ne la garde que
+  7 jours. Je l'archive désormais à chaque run neige fraîche pour ILI2 et les trois
+  voisines (`data/neige-hs.csv`) ; les 7 derniers jours sont déjà sauvés (depuis le 08.11).
+- Premier indice, net, sur les petites chutes du 13 et du 14.11. Le 13.11, la neige tombe
+  dans l'après-midi et le soir (ILI2 : HS 0 → 7 cm entre 17h et 21h30, −3,7 °C).
+  HN_1D daté 13.11 = 0 aux trois stations concernées. HN_1D daté 14.11 = 2,5 (ILI2), 12,4
+  (GRA2), 6,5 (CHA3). FNH2, enneigée dans la nuit du 12 au 13, l'a eue datée du 13.
+- Lecture qui en ressort : HN_1D daté J couvre les 24 h qui finissent le matin de J (vers
+  7h, comme la valeur journalière de HS, qui est celle de 6h-7h). La neige d'un jour J
+  tombée après 7h est donc datée J+1, soit la lecture « J+1 » pour l'essentiel de la
+  journée.
+- Comme demandé, je tranche après l'épisode du 15 au 19.11 mesuré (vers le 21.11), sur
+  ses HS à la demi-heure aux quatre stations. Ensuite, `ALIGNEMENT` (`snow-verdict.mjs`)
+  passe à la lecture retenue et la colonne `verdict` la reprend. La règle sera écrite dans
+  la spec (B4.1) et dans une Réponse ici.
+
+**Décision 3 — pas de correction cet hiver : respecté.** Rien de ce qui précède ne touche
+une alerte. En information dans le rapport :
+- biais ICON par échéance J−1 à J−4 (prévu − mesuré, jours où l'un des deux ≥ 1 cm),
+  selon les deux lectures ;
+- rapport 0,7 cm/mm fixe d'Open-Meteo contre un rapport selon la température moyenne :
+  Hedstrom et Pomeroy (1998), masse volumique de la neige fraîche
+  ρ = 67,92 + 51,25·exp(T/2,59) kg/m³, soit 0,84 cm/mm à 0 °C et 1,33 à −5 °C.
+- Chiffres du jour (3 ou 4 jours seulement, du bruit) : biais J−1 −0,1 cm (lecture J) et
+  −0,9 (J+1). Rapport fixe et rapport selon la température sont à égalité.
+
+Tests : 309 au vert. Revue de code par un agent indépendant : rien de grave côté alerte (ni doublon ni perte, rien écrit en DRY_RUN). Quatre défauts du calcul QA corrigés : fusion de deux épisodes reliés par un message, ATTENTE (et non verdict ou `?`) le dernier jour de la plage et avant la publication du relevé, pas de RATE pour une baisse annoncée sous le seuil, rapport neige / eau lu sur `snowfall_sum` (les averses faussaient `mm − pluie`).

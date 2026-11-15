@@ -27,10 +27,11 @@
 //   SEUIL_CM=10          → abaisse le seuil (test) ; 0 est accepté
 //   IGNORER_SAISON=true  → force l'analyse hors saison (test en été)
 
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, appendFileSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
 import { fetchEssai } from "./reseau.mjs";
-import { journaliserMesures, lire, rapport } from "./snow-qa.mjs";
+import { journaliserMesures, journaliserHs, lire, rapport } from "./snow-qa.mjs";
+import { lireEnvois, mesuresReference, verdicts, ecrireVerdicts, rapport as rapportVerdicts } from "./snow-verdict.mjs";
 
 // ══════ OUTILS DE CONFIGURATION ══════
 // "Number(x) || defaut" rejetterait un seuil de 0, qui est justement la
@@ -64,6 +65,10 @@ const SAISON_DEBUT = 1015;
 const SAISON_FIN = 415;
 
 const API = "https://measurement-api.slf.ch/public/api/imis/daily-snow";
+// Mesures à la demi-heure d'une station (HS, TA...) : les 7 jours que le SLF garde,
+// pour qu'un run sauté ou en retard ne laisse pas de trou.
+const API_STATION = (code) =>
+  `https://measurement-api.slf.ch/public/api/imis/station/${code}/measurements?period_in_days=7`;
 const ETAT_FILE = "snow-fresh-alerted.json";
 const TZ = "Europe/Zurich";
 
@@ -240,7 +245,51 @@ async function main() {
   }
 }
 
+// ══════ QA NEIGE (D-003) ══════
+// Après l'alerte, et quel qu'en soit le sort : verdict des alertes neige annoncées
+// envoyées (snow-verdict.mjs) et archive des HS à la demi-heure. Information
+// seulement ; une panne rend le run rouge, sans toucher à l'alerte déjà traitée.
+async function qaNeige() {
+  const jour = aujourdhuiLocal();
+  if (!enSaison(jour) && !IGNORER_SAISON) return;
+  try {
+    const lignes = lire();
+    const mesures = mesuresReference(lignes);
+    let pct = nombreOuDefaut(process.env.HAUSSE_PCT, 30);
+    if (!(pct >= 0 && pct <= 100)) {
+      console.error(`Variable invalide : HAUSSE_PCT = ${pct} — défaut 30 utilisé pour le verdict.`);
+      process.exitCode = 1;
+      pct = 30;
+    }
+    const tolerance = pct / 100;
+    const qa = verdicts(lireEnvois(), mesures, { jour, tolerance });
+    if (!DRY_RUN) ecrireVerdicts(qa);
+    const texte = rapportVerdicts(qa, lignes, mesures);
+    console.log("\n" + texte);
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, texte + "\n");
+  } catch (err) {
+    console.error(`ECHEC QA alertes neige : ${err.message}`);
+    process.exitCode = 1;
+  }
+  if (DRY_RUN) return;
+  let n = 0;
+  for (const code of [STATION, ...VOISINES]) {
+    try {
+      const res = await fetchEssai(API_STATION(code), { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!Array.isArray(data)) throw new Error("réponse inattendue");
+      n += journaliserHs(data.filter((r) => r.station_code === code));
+    } catch (err) {
+      console.error(`ECHEC archive HS ${code} : ${err.message}`);
+      process.exitCode = 1;
+    }
+  }
+  console.log(`Archive HS à la demi-heure : ${n} ligne(s) ajoutée(s).`);
+}
+
 main()
+  .then(qaNeige)
   .then(sortieSiEchecs)
   .catch((err) => {
     // Filet de sécurité : erreur imprévue = alerte aveugle = run rouge.

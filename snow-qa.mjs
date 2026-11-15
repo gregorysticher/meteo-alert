@@ -40,8 +40,10 @@ export function lire(fichier = FICHIER) {
   return readFileSync(fichier, 'utf8').trim().split('\n').slice(1)
     .filter(Boolean)
     .map((l) => {
-      const [run, source, jour, cm, ech, modele, , , , station, hs] = l.trimEnd().split(',');
+      const [run, source, jour, cm, ech, modele, mm, pluie, tMoy, station, hs] = l.trimEnd().split(',');
+      const nombre = (x) => (x === undefined || x === '' ? NaN : +x);
       return { run, source, jour, cm: +cm, echeance_j: ech === '' ? null : +ech,
+        mm: nombre(mm), pluie: nombre(pluie), tMoy: nombre(tMoy),
         modele: modele || (source === 'prev' ? 'icon' : ''),
         station: station || (source === 'mesure' ? STATION_REFERENCE : ''), hs: hs ?? '' };
     });
@@ -115,4 +117,43 @@ export function rapport(lignes, nJours = 10) {
     out.push(`  ${j}  ${f(prevVeille.get(j))} | ${f(mesure.get(j))} | ${f(mesure.get(lendemain(j)))}`);
   }
   return out.join('\n');
+}
+
+// ---- hauteur de neige à la demi-heure (D-003, Décision 2) --------------------------
+// data/neige-hs.csv : ts,station,hs,ta — HS et température de l'air des stations IMIS,
+// toutes les 30 min. L'API SLF ne garde que 7 jours : archivées ici, elles diront à
+// quelle heure la neige est tombée, donc à quelle date le SLF range HN_1D.
+// Aucune alerte n'en dépend.
+export const FICHIER_HS = 'data/neige-hs.csv';
+const ENTETE_HS = 'ts,station,hs,ta';
+
+// releves = [{ station_code, measure_date (ISO UTC), HS, TA_30MIN_MEAN }] ; une ligne
+// déjà archivée (même station, même heure) n'est pas réécrite.
+export function journaliserHs(releves, { fichier = FICHIER_HS } = {}) {
+  const deja = new Set();
+  if (existsSync(fichier)) {
+    for (const l of readFileSync(fichier, 'utf8').trim().split('\n').slice(1)) {
+      const [ts, station] = l.split(',');
+      deja.add(`${station}|${ts}`);
+    }
+  }
+  const lignes = [];
+  for (const r of releves) {
+    const ts = String(r.measure_date ?? '');
+    if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d/.test(ts) || typeof r.HS !== 'number' || !Number.isFinite(r.HS)) continue;
+    const t = ts.slice(0, 16) + 'Z';
+    const cle = `${r.station_code}|${t}`;
+    if (deja.has(cle)) continue;
+    deja.add(cle);
+    const ta = typeof r.TA_30MIN_MEAN === 'number' && Number.isFinite(r.TA_30MIN_MEAN) ? r.TA_30MIN_MEAN : '';
+    lignes.push([t, r.station_code, r.HS, ta]);
+  }
+  lignes.sort((a, b) => (a[1] + a[0]).localeCompare(b[1] + b[0]));
+  if (!lignes.length) return 0;
+  if (!existsSync(fichier)) {
+    mkdirSync('data', { recursive: true });
+    appendFileSync(fichier, ENTETE_HS + '\n');
+  }
+  appendFileSync(fichier, lignes.map((l) => l.join(',')).join('\n') + '\n');
+  return lignes.length;
 }

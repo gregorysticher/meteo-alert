@@ -52,7 +52,7 @@ jobs:
       # Chemins d'échec (API refusée, muette, vide) sur fetch simulé :
       # un test en échec bloque le run, il apparaît en rouge.
       - name: Tests
-        run: node --test test/snow.test.mjs test/reseau.test.mjs test/silence.test.mjs
+        run: node --test test/snow.test.mjs test/reseau.test.mjs test/silence.test.mjs test/snow-verdict.test.mjs
 
       - name: Vérifier la neige fraîche mesurée
         env:
@@ -63,6 +63,8 @@ jobs:
           # Silence nocturne 22h30-7h/8h (silence.mjs) : actif si la variable vaut 1,
           # sauf test manuel avec seuil forcé.
           SILENCE_NOCTURNE: ${{ !inputs.seuil_cm && vars.SILENCE_NOCTURNE || '' }}
+          # Tolérance du verdict QA neige = palier de révision (D-003).
+          HAUSSE_PCT: ${{ vars.HAUSSE_NEIGE_PCT }}
         run: node snow-fresh-alert.mjs
 
       - name: Commit l'état si modifié
@@ -71,7 +73,7 @@ jobs:
           git config --global user.name "snow-alert-bot"
           git config --global user.email "snow-alert-bot@users.noreply.github.com"
           # Un par un : un git add avec un chemin absent n'ajoute RIEN.
-          for f in snow-fresh-alerted.json data/neige.csv; do
+          for f in snow-fresh-alerted.json data/neige.csv data/alertes-neige-qa.csv data/neige-hs.csv; do
             if [ -f "$f" ]; then git add "$f"; fi
           done
           if git diff --staged --quiet; then

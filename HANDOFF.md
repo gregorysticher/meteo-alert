@@ -136,6 +136,12 @@ workflow neige relance `wind-alert` aussitôt. Journal `data/neige.csv` : prévi
 du modèle long, précipitations, température, 4 stations SLF. L'API SLF ne garde que
 7 jours : ce journal est irremplaçable.
 
+**QA des alertes neige** (D-003, `snow-verdict.mjs`) : chaque message neige annoncée parti
+est journalisé dans `data/alertes-neige.csv` ; l'alerte neige fraîche recalcule
+`data/alertes-neige-qa.csv` (verdict par message, lectures HN_1D J et J+1), archive les HS
+à la demi-heure de 4 stations (`data/neige-hs.csv`, l'API n'en garde que 7 jours) et écrit
+le rapport dans le résumé du job. Information seulement : aucune alerte n'en dépend.
+
 **Données QA** (`wind-qa.mjs`) : `data/forecasts/AAAA-MM.csv` par mois d'émission,
 `data/qa/AAAA-MM.csv` par mois d'échéance, colonne `modele` (`ms`, `arome`) ; le biais
 des alertes ne lit que `ms`. `data/gradient.csv` : air mesuré − eau, se joint à
