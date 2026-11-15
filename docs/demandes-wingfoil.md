@@ -225,3 +225,61 @@ suivie d'une annulation au run d'après. Cela fait deux messages, laissé tel qu
 
 Tests : 290 au vert ; revue de code par un agent indépendant, rien de sérieux, ses
 remarques mineures corrigées.
+
+---
+
+## D-003 — Boucle QA neige : verdict des alertes envoyées
+
+**Statut :** OUVERTE
+**De :** WINGFOIL/METEO-ALERT — dimanche 15.11.2026, 08h15
+**Décidé par :** Greg, 15.11.2026
+
+### Contexte
+
+`snow-qa.mjs` journalise déjà prévisions (par échéance, deux modèles, mm, pluie,
+température) et mesures SLF de plusieurs stations, avec un rapport prévu J−1 / mesuré.
+Il manque ce qui existe côté vent : savoir si **les alertes envoyées** étaient
+justifiées. L'épisode du 15 au 18.11 est le premier vrai jeu de données.
+
+### Décision 1 — verdict de chaque alerte neige envoyée
+
+- Journaliser chaque message neige parti (type, cumul annoncé, plage, horodatage,
+  échéance du premier jour) dans un fichier dédié, sur le modèle de `data/alertes.csv`
+  côté vent. Les messages retenus par le silence ou jamais partis n'y figurent pas.
+- Une fois la plage passée et mesurée, comparer au cumul **mesuré** à ILI2 sur la même
+  plage, et donner un verdict :
+  - `OK` : mesuré ≥ seuil et écart relatif |mesuré − annoncé| / annoncé ≤ 30 %
+    (même tolérance que le palier) ;
+  - `SURESTIME` / `SOUSESTIME` : mesuré ≥ seuil mais écart > 30 % ;
+  - `RATE` : annoncé ≥ seuil, mesuré < seuil ;
+  - pour une annulation : `JUSTIFIEE` si mesuré < seuil, sinon `A_TORT` ;
+  - `?` : mesures manquantes sur la plage.
+- Ajouter par épisode le **nombre de messages envoyés**. Objectif : 3 au plus. C'est ce
+  qui dira si le risque hausse/baisse relevé en fin de D-002 se produit réellement.
+- Le rapport (verdicts + messages par épisode) sort dans le résumé du job, comme le
+  QA vent. La session chat le lit dans le fichier de verdicts.
+
+### Décision 2 — trancher l'alignement de HN_1D après cet épisode
+
+- Dès que l'épisode du 15 au 18.11 est mesuré, décide si HN_1D daté J correspond à la
+  neige tombée le jour J ou la veille. Appuie-toi sur les données réelles (variation de
+  HS d'un jour à l'autre, plusieurs stations, heure du relevé) et documente la règle.
+- Les verdicts de la Décision 1 utilisent cette règle. Tant qu'elle n'est pas tranchée,
+  calcule le verdict avec les deux lectures et indique les deux.
+
+### Décision 3 — pas de correction de biais cet hiver
+
+- Aucune alerte ne doit dépendre d'une correction neige cet hiver : un épisode, c'est
+  du bruit.
+- En revanche, ajoute au rapport le **biais par échéance** (J−1 à J−4) et la
+  comparaison du rapport fixe 0,7 avec un rapport selon la température, à titre
+  d'information. On décidera d'une correction en fin de saison.
+
+### Retour attendu
+
+Les verdicts des alertes de l'épisode du 13 au 18.11 une fois mesuré, la règle
+d'alignement retenue, et le nombre de messages envoyés sur l'épisode.
+
+### Réponse
+
+_(à remplir par Weather Station)_
