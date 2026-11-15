@@ -5,7 +5,9 @@
       "fin": "2026-11-19",
       "total": 88.6,
       "duree": 5,
-      "annule": false
+      "annule": false,
+      "horizon": "2026-11-19",
+      "cmHorizon": 35.1
     }
   ],
   "updatedAt": "2026-11-15T07:03:57.965Z"

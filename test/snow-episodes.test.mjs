@@ -121,8 +121,72 @@ test('nouvelle : jugee sans le dernier jour de l\'horizon (D-002)', () => {
   // Episode annule qui revient : meme regle.
   const r = rec(ME, JE, 12, true);
   assert.deepEqual(types(decider([ep(ME, [3, 40])], [r], O)), [null]);
-  // Episode deja suivi : cumul complet, le dernier jour compte.
-  assert.deepEqual(types(decider([ep(ME, [8, 56])], [rec(ME, JE, 30)], { ...O, hausseRel: 0.3 })), ['hausse']);
+  // Episode deja suivi : depuis D-004, le dernier jour ne compte pas non plus.
+  assert.deepEqual(types(decider([ep(ME, [8, 56])], [rec(ME, JE, 30)], { ...O, hausseRel: 0.3 })), [null]);
+});
+
+// ---- D-004 : episode suivi juge sans le dernier jour de l'horizon ----------------
+
+const O4 = { ...OPT, hausseRel: 0.3 };
+test('D-004 : hausse venue du seul dernier jour -> rien ; au run suivant, hausse', () => {
+  const r = rec(ME, JE, 30);
+  assert.deepEqual(types(decider([ep(ME, [20, 10, 30])], [r], { ...O4, horizon: VE })), [null]);
+  // Le lendemain, VE n'est plus le dernier jour : il entre dans la decision.
+  const d = decider([ep(ME, [20, 10, 30])], [r], { ...O4, jour: ME, horizon: SA2 });
+  assert.deepEqual(types(d), ['hausse']);
+  assert.equal(d[0].episode.total, 60, 'message : cumul complet');
+});
+test('D-004 : cas reel du 15.11 8h03 (68 cm, jeudi 35 cm au bout) -> aucun message', () => {
+  // Alerte du 14.11 : 15 -> 18.11, 67,9 cm, horizon le 18. Le 15.11, horizon le 19.
+  const dates = ['2026-11-15', '2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19'];
+  const eps = episodes(dates, [7.28, 22.4, 0.7, 23.87, 35.07], { minJour: 1 });
+  const r = { ...rec('2026-11-15', '2026-11-18', 67.9), horizon: '2026-11-18', cmHorizon: 31.2 };
+  const d = decider(eps, [r], { ...O4, jour: '2026-11-15', horizon: '2026-11-19' });
+  assert.deepEqual(types(d), [null]);   // 54,3 contre 67,9 : baisse de 13,6 < pas 20,4
+});
+test('D-004 : run du meme jour, meme horizon -> la reference retire sa valeur de ce jour', () => {
+  // Alerte : ME-VE 60 cm dont 30 le dernier jour (VE). Meme prevision : rien.
+  const r = { ...rec(ME, VE, 60), horizon: VE, cmHorizon: 30 };
+  assert.deepEqual(types(decider([ep(ME, [20, 10, 30])], [r], { ...O4, horizon: VE })), [null]);
+  // Ancien etat sans ces champs : 30 sans VE contre 60, mais le cumul complet n'a pas
+  // baisse : pas de « revue a la baisse 60 cm (60) ».
+  assert.deepEqual(types(decider([ep(ME, [20, 10, 30])], [rec(ME, VE, 60)], { ...O4, horizon: VE })), [null]);
+  // Vraie baisse hors dernier jour, visible aussi dans le cumul complet : baisse.
+  assert.deepEqual(types(decider([ep(ME, [8, 4, 30])], [r], { ...O4, horizon: VE })), ['baisse']);
+});
+test('D-004 : baisse masquee par le dernier jour -> rien ; au run suivant, baisse', () => {
+  const r = rec(ME, JE, 40);
+  // 20 sans VE (baisse de 20 >= pas 12), mais 45 au total : le message dirait plus.
+  assert.deepEqual(types(decider([ep(ME, [12, 8, 25])], [r], { ...O4, horizon: VE })), [null]);
+  // Le dernier jour retombe au run suivant : la baisse part.
+  assert.deepEqual(types(decider([ep(ME, [12, 8, 2])], [r], { ...O4, horizon: SA2 })), ['baisse']);
+});
+test('D-004 : prolongation par le dernier jour -> attend un run', () => {
+  const r = rec(ME, JE, 12);
+  assert.deepEqual(types(decider([ep(ME, [7, 5, 3])], [r], { ...OPT, horizon: VE })), [null]);
+  const d = decider([ep(ME, [7, 5, 3])], [r], { ...OPT, horizon: SA2 });
+  assert.deepEqual(types(d), ['prolonge']);
+  assert.deepEqual([d[0].apres.fin, d[0].apres.horizon, d[0].apres.cmHorizon], [VE, SA2, 0]);
+});
+test('D-004 : meme horizon, plage finissant ce jour-la : un jour ajoute devant prolonge', () => {
+  // Alerte ME -> VE, VE dernier jour (8 cm). Meme horizon, MA ajoute avec 3 cm.
+  const r = { ...rec(ME, VE, 20), horizon: VE, cmHorizon: 8 };
+  assert.deepEqual(types(decider([ep(ME, [6, 6, 8])], [r], { ...O4, horizon: VE })), [null]);
+  const d = decider([ep(MA, [3, 6, 6, 8])], [r], { ...O4, horizon: VE });
+  assert.deepEqual(types(d), ['prolonge']);
+  // Le dernier jour retombe dans la meme plage : la baisse ne vient que de lui -> rien.
+  assert.deepEqual(types(decider([ep(ME, [6, 6, 1])], [r], { ...O4, horizon: VE })), [null]);
+});
+test('D-004 : l\'annulation garde le cumul complet', () => {
+  const r = rec(ME, JE, 30);
+  // 3 cm sans VE, 23 au total : ni annulation ni baisse (le total ne baisse que de 7).
+  assert.deepEqual(types(decider([ep(ME, [2, 1, 20])], [r], { ...O4, horizon: VE })), [null]);
+  // Cumul complet sous seuil - marge : annulation, dernier jour compris.
+  assert.deepEqual(types(decider([ep(ME, [2, 1, 4])], [r], { ...O4, horizon: VE })), ['annule']);
+});
+test('D-004 : la reference garde l\'horizon et sa neige ce jour-la', () => {
+  const d = decider([ep(ME, [12, 56])], [], { ...OPT, horizon: JE });
+  assert.deepEqual(d[0].apres, { ...rec(ME, JE, 68), horizon: JE, cmHorizon: 56 });
 });
 test('seuil de hausse parametrable', () => {
   const d = decider([ep(ME, [8, 7])], [rec(ME, JE, 12)], { ...OPT, hausse: 3 });

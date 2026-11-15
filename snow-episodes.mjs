@@ -6,7 +6,9 @@
 //             de la neige déjà tombée n'est pas « annoncée ». Cumul et « à venir »
 //             comptés SANS le dernier jour de l'horizon du modèle (`horizon`, D-002) :
 //             le 12/11/2026, 56,6 cm sur 64 tombaient à J+4 et ont oscillé de 9,8 à
-//             37,3 cm ensuite. Une fois l'épisode alerté, tout se juge sur le cumul complet
+//             37,3 cm ensuite. Depuis D-004 (Greg 2026-11-15), hausse, baisse et
+//             prolongation d'un épisode alerté aussi ; seule l'annulation garde le cumul
+//             complet. Message et écran montrent toujours le cumul complet
 //   hausse    cumul >= cumul de la dernière alerte + pas, et `hausse` cm à venir ;
 //             pas = max(`hausse`, `hausseRel` × cumul de la dernière alerte)
 //             (D-001, Greg 2026-11-14 : 28 → 37 → 44 → 59 cm donnait 3 « hausse »,
@@ -85,18 +87,26 @@ function agreger(liste) {
 const aVenir = (e, jour) =>
   (e?.jours ?? []).filter((j) => j.d >= jour).reduce((a, j) => a + j.v, 0);
 
-const reference = (e) => ({
+const somme = (jours) => jours.reduce((a, j) => a + j.v, 0);
+const arrondi = (x) => Math.round(x * 10) / 10;
+
+// `horizon` et `cmHorizon` (D-004) : dernier jour de la série au moment de l'alerte et
+// neige de l'épisode ce jour-là. Un run du même jour retire cette valeur de la référence,
+// pour comparer les mêmes jours.
+const reference = (e, horizon) => ({
   debut: e.debut,
   fin: e.fin,
-  total: Math.round(e.total * 10) / 10,
+  total: arrondi(e.total),
   duree: duree(e),
   annule: false,
+  ...(horizon ? { horizon, cmHorizon: arrondi(somme(e.jours.filter((j) => j.d === horizon))) } : {}),
 });
 
 // eps : tous les épisodes de la série, y compris ceux déjà finis.
 // opts : { jour, seuil, hausse, hausseRel, marge, prolongeMin, memoire, inconnus, horizon }
 //   hausseRel fraction du cumul de la dernière alerte (0,3 = 30 %), 0 = pas absolu
-//   horizon   dernier jour de la série du modèle (AAAA-MM-JJ) : exclu pour une nouvelle
+//   horizon   dernier jour de la série du modèle (AAAA-MM-JJ) : exclu des décisions,
+//            sauf de l'annulation (D-002, D-004)
 //   memoire  jours de passé dans la série : un épisode reste suivi tant que ses
 //            jours y figurent, sinon il reviendrait comme une « nouvelle »
 //   inconnus Set des dates sans valeur exploitable : pas d'annulation à l'aveugle
@@ -130,7 +140,6 @@ export function decider(eps, records, opts) {
     }
     touches.forEach((e) => lies.add(e));
     const c = agreger(touches);
-    const venir = aVenir(c, jour);
     const tombe = (c?.jours ?? []).filter((j) => j.d < jour).reduce((a, j) => a + j.v, 0);
     const effondre = (c?.total ?? 0) < seuil - marge;
     const finDeMemoire = r.fin < reculer(jour, memoire);
@@ -139,27 +148,40 @@ export function decider(eps, records, opts) {
     // aucune valeur inconnue sur la plage annoncée.
     const jugeable = r.fin >= jour && r.debut >= reculer(jour, memoire) &&
       ![...inconnus].some((d) => d >= r.debut && d <= r.fin);
+    // D-004 : hausse, baisse et prolongation se jugent sans le dernier jour de l'horizon,
+    // contre la dernière alerte sur les mêmes jours (même horizon, runs du même jour : sa
+    // valeur de ce jour-là est retirée). Le changement doit aussi se voir dans le cumul
+    // complet, celui du message : jamais « revue à la baisse 85 cm (89 cm…) ». Seule
+    // l'annulation garde le cumul complet seul.
+    const sJours = (c?.jours ?? []).filter((j) => j.d !== horizon);
+    const sTotal = somme(sJours);
+    const sVenir = somme(sJours.filter((j) => j.d >= jour));
+    const base = r.total - (horizon && r.horizon === horizon ? r.cmHorizon ?? 0 : 0);
+    const sDuree = sJours.length ? duree({ debut: sJours[0].d, fin: sJours.at(-1).d }) : 0;
+    // Même horizon et plage finissant ce jour-là : la durée de référence l'exclut aussi.
+    const rDuree = r.duree - (horizon && r.horizon === horizon && r.fin === horizon ? 1 : 0);
 
     let type = null;
     if (r.annule) {
       if (c && nouvelleOk(c)) type = 'nouvelle';
     } else if (effondre && tombe < hausse && jugeable) {
       type = 'annule';
-    } else if (c && !effondre && c.total <= r.total - pas && jugeable) {
+    } else if (c && !effondre && jugeable && sTotal <= base - pas && c.total <= r.total - pas) {
       type = 'baisse';
-    } else if (c && c.total >= r.total + pas && venir >= hausse) {
+    } else if (c && sTotal >= base + pas && c.total >= r.total + pas && sVenir >= hausse) {
       type = 'hausse';
-    } else if (c && !effondre && c.total > r.total - pas && duree(c) > r.duree) {
+    } else if (c && !effondre && sTotal > base - pas && c.total > r.total - pas &&
+        sDuree > rDuree) {
       // Une forte baisse n'est jamais une « prolongation », même quand une valeur
       // inconnue empêche de la notifier comme baisse.
-      const ajoutes = c.jours.filter((j) => j.d >= jour && (j.d < r.debut || j.d > r.fin));
-      if (ajoutes.reduce((a, j) => a + j.v, 0) >= prolongeMin && ajoutes.length) type = 'prolonge';
+      const ajoutes = sJours.filter((j) => j.d >= jour && (j.d < r.debut || j.d > r.fin));
+      if (somme(ajoutes) >= prolongeMin && ajoutes.length) type = 'prolonge';
     }
 
     if (type === 'annule') {
       decisions.push({ type, episode: c, record: r, apres: { ...r, annule: true } });
     } else if (type) {
-      decisions.push({ type, episode: c, record: r, apres: reference(c) });
+      decisions.push({ type, episode: c, record: r, apres: reference(c, horizon) });
     } else {
       decisions.push({ type: null, episode: c, record: r, apres: finDeMemoire ? null : r });
     }
@@ -167,7 +189,7 @@ export function decider(eps, records, opts) {
 
   for (const e of eps) {
     if (lies.has(e) || !nouvelleOk(e)) continue;
-    decisions.push({ type: 'nouvelle', episode: e, record: null, apres: reference(e) });
+    decisions.push({ type: 'nouvelle', episode: e, record: null, apres: reference(e, horizon) });
   }
 
   // Annonce déplacée sans chevauchement : un seul message plutôt que
