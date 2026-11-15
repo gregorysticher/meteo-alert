@@ -68,6 +68,9 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-15 — D-004 (décidé par Greg) : hausse, baisse et prolongation d'un épisode
+      suivi jugées sans le dernier jour de l'horizon (annulation inchangée) ; rejeu 12-19.11 :
+      3 messages au lieu de 7 (commit 9dcf1c7). CO₂ du DASHBOARD en ÉLEVÉ dès 850 ppm (900 avant).
 - [x] 2026-11-15 — Réveil du silence vérifié : les trois alertes lancées à 8h03 ; le
       « prolongé 84 cm » retenu à 5h24 a été réévalué et envoyé en « revue à la hausse 89 cm
       (68) » (Je 19.11 passé à 35 cm), un seul message.

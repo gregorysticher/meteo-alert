@@ -359,7 +359,7 @@ Tests : 309 au vert. Revue de code par un agent indépendant : rien de grave cô
 
 ## D-004 — Dernier jour de l'horizon exclu aussi des hausses et baisses ; seuil CO₂ à 850 ppm
 
-**Statut :** OUVERTE
+**Statut :** FAITE (en production le 15.11.2026 au soir ; CO₂ à 850 ppm sur l'écran)
 **De :** WINGFOIL/METEO-ALERT — dimanche 15.11.2026, 16h30
 **Décidé par :** Greg, 15.11.2026
 
@@ -396,4 +396,60 @@ après épisode, si l'objectif de 3 messages tient.
 
 ### Réponse
 
-_(à remplir par Weather Station)_
+**De :** Weather Station — dimanche 15.11.2026, 22h
+
+**Décision 1 — option (b) : en production.** Un épisode déjà alerté se juge sans le
+dernier jour de l'horizon pour la hausse, la baisse et la prolongation. L'annulation garde
+le cumul complet. Le message et l'écran montrent toujours le cumul complet.
+
+Deux précisions de mise en œuvre :
+- **Mêmes jours des deux côtés.** La dernière alerte retient son dernier jour d'horizon et
+  la neige de ce jour-là. Un run du même jour, donc avec le même horizon (réveil, run
+  manuel), la retire de la référence. Sinon, ces runs verraient une fausse baisse égale à
+  la neige de ce jour (89 → 54 cm le 15.11). L'état actuel (88,6 cm, alerte de 8h03,
+  jeudi 19 = 35,1 cm) a été complété à la main avec ces deux valeurs.
+- **Le changement doit aussi se voir dans le cumul affiché.** Une baisse hors dernier jour
+  compensée par une montée du dernier jour ne part pas : le message dirait « revue à la
+  baisse 85 cm (89 cm à la dernière alerte) ». Elle part au run suivant si elle tient. Même
+  chose pour la hausse. Le pas reste calculé sur le cumul affiché de la dernière alerte.
+
+**Rejeu du 12 au 19.11** (prévisions ICON réelles de chaque run, `data/neige.csv`, D-001 à
+D-004, silence et réveil compris, état au 15.11 à 16h24). Contrôle : avec les règles
+d'avant, le rejeu redonne les 3 messages de la Réponse D-002, puis le « revue à la hausse
+89 cm » de 8h03. Avec D-004, il reste **3 messages** :
+1. Ve 13.11, 11h28 — **Neige annoncée** : 28 cm, Di 15.11 → Ma 17.11.
+2. Ve 13.11, 17h33 — **Revue à la hausse** : 37 cm (28 cm à la dernière alerte),
+   Di 15 → Lu 16.
+3. Sa 14.11, 8h03 (réveil) — **Épisode prolongé** : 59 cm (37 cm sur 2 j à la dernière
+   alerte), Di 15 → Me 18. Ce n'est plus une hausse : sans le mercredi, dernier jour à
+   31 cm, le cumul fait 28 cm. C'est le mardi 17 (2,4 cm, au-dessus du minimum de 2 cm) qui
+   déclenche la prolongation.
+
+Le dimanche ne donne aucun message : à 8h03, 54 cm sans le jeudi contre 59, et à 13h01
+70 cm contre 59, sous le pas de 17,6 cm. Le compteur de D-003 suivra la suite.
+
+**Point d'attention, reports constatés :**
+- **Prolongation par le dernier jour** : elle attend un run, soit 11 à 13 h. Ce jour est
+  J+4 ; il entre dans la décision à J+3, au plus tard le matin. Rien d'utile ne se perd
+  pour la neige, et l'écran le montre tout de suite.
+- **Le dernier jour entre quand même dans la référence**, à travers le message que
+  déclenche un autre jour. Dans le message 3 ci-dessus, le prolongé de 2,4 cm emporte les
+  31 cm du mercredi dans le cumul annoncé et dans la référence. Si ce jour retombe le
+  lendemain, la baisse part : un aller-retour hausse puis baisse reste possible, décalé
+  d'un jour (revue de code : alerte de 97 cm dont 35 au dernier jour, puis baisse à 64 cm le
+  lendemain). C'est le prix d'un message qui montre le cumul complet. Je laisse tel quel :
+  le compteur de D-003 dira si cela arrive.
+
+**Décision 2 — CO₂ : en production.** `SEUIL_CO2_PPM` passe de **900** à **850 ppm**, dans
+le bloc de paramètres du markup du DASHBOARD 392375 (version enregistrée le 15.11 à
+21h25, copie `trmnl-sync` 4b54059). Seule cette ligne change : texte comparé avant
+l'enregistrement. Rendu vérifié dans l'aperçu TRMNL avec la mesure réelle de 594 ppm :
+- seuil temporaire à 594 → « CO₂ ppm - ÉLEVÉ » en inversé ;
+- à 595 → libellé normal ;
+- à 850 → libellé normal.
+La règle `>=` est donc confirmée.
+
+Tests : 317 au vert. Revue de code par un agent indépendant : deux défauts corrigés (état
+sans horizon exposé aux runs du jour ; prolongation retardée à tort par un run du même
+jour). L'aller-retour décalé d'un jour est décrit ci-dessus. Test à blanc sur GitHub :
+vert.
