@@ -120,7 +120,7 @@ remarques mineures corrigées.
 
 ## D-002 — Réponses aux questions de D-001 : baisse notifiée, dernier jour de l'horizon
 
-**Statut :** FAITE (en production le 14.11.2026 vers 23h ; une question en fin de Réponse)
+**Statut :** FAITE (en production le 14.11.2026 vers 23h ; question tranchée en D-004)
 **De :** WINGFOIL/METEO-ALERT — samedi 14.11.2026, 22h00
 **Décidé par :** Greg, 14.11.2026
 
@@ -354,3 +354,46 @@ une alerte. En information dans le rapport :
   −0,9 (J+1). Rapport fixe et rapport selon la température sont à égalité.
 
 Tests : 309 au vert. Revue de code par un agent indépendant : rien de grave côté alerte (ni doublon ni perte, rien écrit en DRY_RUN). Quatre défauts du calcul QA corrigés : fusion de deux épisodes reliés par un message, ATTENTE (et non verdict ou `?`) le dernier jour de la plage et avant la publication du relevé, pas de RATE pour une baisse annoncée sous le seuil, rapport neige / eau lu sur `snowfall_sum` (les averses faussaient `mm − pluie`).
+
+---
+
+## D-004 — Dernier jour de l'horizon exclu aussi des hausses et baisses ; seuil CO₂ à 850 ppm
+
+**Statut :** OUVERTE
+**De :** WINGFOIL/METEO-ALERT — dimanche 15.11.2026, 16h30
+**Décidé par :** Greg, 15.11.2026
+
+### Décision 1 — option (b) de la question de D-002
+
+- Pour un épisode **déjà alerté**, hausse, baisse et prolongation se jugent aussi **sans
+  le dernier jour de l'horizon du modèle**, comme les nouvelles alertes depuis D-002.
+- Seule l'**annulation** garde le cumul complet (règle inchangée).
+- Le message et l'écran continuent d'afficher le **cumul complet**.
+- Le jour exclu entre dans la décision au run suivant, quand il n'est plus le dernier
+  de l'horizon : il n'est pas ignoré, seulement différé d'un jour.
+
+**Pourquoi (a) a été abandonnée :** le 7e message de l'épisode, Di 15.11 à 8h03
+(« revue à la hausse 89 cm (68) »), le premier sous les nouvelles règles, a été
+déclenché par le jeudi 19.11 passé de moins de 2 cm à 35 cm, c'est-à-dire par le dernier
+jour de l'horizon. C'est le risque relevé par la revue de code en D-002. Avec (b) :
+89 − 35 = 54 cm contre 68, baisse de 14 cm sous le pas de 20,4 cm, donc aucun message.
+
+**Point d'attention :** quand la prolongation vient d'un jour ajouté qui est lui-même le
+dernier de l'horizon, elle attend aussi un run. Si tu vois un cas où ce report fait
+perdre une information utile, dis-le dans la Réponse.
+
+**Retour attendu :** rejoue l'épisode du 12 au 19.11 avec D-001 à D-004 et donne la
+liste des messages qui seraient partis. Le compteur de D-003 dira ensuite, épisode
+après épisode, si l'objectif de 3 messages tient.
+
+### Décision 2 — seuil de mise en évidence du CO₂ à 850 ppm (affichage)
+
+- Sur l'écran TRMNL (DASHBOARD 392375), la valeur de CO₂ intérieure (Netatmo) passe en
+  couleur inversée (`label--filled`) à partir de **850 ppm**, au lieu du seuil actuel.
+- Ce n'est pas une alerte : c'est l'affichage, donc ton domaine direct. Mets le seuil
+  dans les paramètres du markup (bloc de paramètres en tête), pas en dur dans le corps.
+- Indique dans la Réponse l'ancien seuil et la façon dont tu as vérifié le rendu.
+
+### Réponse
+
+_(à remplir par Weather Station)_
