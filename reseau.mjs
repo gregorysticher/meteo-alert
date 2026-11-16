@@ -12,6 +12,7 @@
 // 13/11/2026, son serveur US 51.81.167.44 ne répondait plus du tout, et les runners
 // GitHub (US) y étaient envoyés 2 fois sur 3 : réessayer 20 s plus tard retombait
 // dessus. Quand le premier essai échoue sans réponse (connexion impossible, coupure),
+// ou avec un statut listé dans `secoursSi` (404 de la meta AROME, 16/11/2026),
 // le second passe donc par d'autres serveurs, même certificat, même API : l'autre
 // serveur US 167.114.211.86, puis le serveur européen 157.90.83.168. Le 14/11, le
 // serveur européen restait parfois muet 60 s vu des runners (1 appel sur 4) : chaque
@@ -27,6 +28,7 @@
 //
 // ESSAI_ATTENTE_S : attente avant le second essai (20 s par défaut, 0 en test).
 //                   fetchEssai(url, opts, { attenteFois: n }) l'allonge n fois.
+// secoursSi       : statuts HTTP traités comme « sans réponse » (voir fetchEssai).
 // DELAI_MAX_S     : délai d'un essai, lecture du corps comprise, avant abandon.
 // delaiAdresseS   : silence toléré d'une adresse de secours avant la suivante
 //                   (15 s ; RESEAU_DELAI_ADRESSE_S le change en test).
@@ -147,7 +149,8 @@ function raisonDe(err) {
 }
 
 // Serveur de secours seulement si le premier essai n'a pas eu de réponse : un 404
-// ou un 503 vient d'un serveur joignable, on le réinterroge normalement. Dans
+// ou un 503 vient d'un serveur joignable, on le réinterroge normalement, sauf statut
+// listé par l'appelant dans `secoursSi`. Dans
 // lireEssai, une erreur de lecture du corps (coupure, JSON illisible) compte comme
 // « sans réponse » : le second essai, unique, reste sous contrôle.
 async function annoncer(url, raison, sansReponse, attenteFois = 1) {
@@ -159,12 +162,17 @@ async function annoncer(url, raison, sansReponse, attenteFois = 1) {
   return via;
 }
 
-export async function fetchEssai(url, opts = {}, { attenteFois = 1 } = {}) {
+// secoursSi : statuts qui envoient aussi le second essai par le secours. Le serveur US
+// 51.81.167.44 répond 404 à tous les /data/<modèle>/static/meta.json (constaté le
+// 16/11/2026, prévisions servies normalement) : la meta AROME passe par
+// { secoursSi: [404] }.
+export async function fetchEssai(url, opts = {}, { attenteFois = 1, secoursSi = [] } = {}) {
   let raison, sansReponse = false;
   try {
     const res = await essai(url, opts);
     if (res.ok) return res;
     raison = `HTTP ${res.status}`;
+    sansReponse = secoursSi.includes(res.status);
     await res.body?.cancel().catch(() => {});
   } catch (err) {
     // Interruption voulue par l'appelant : pas de second essai.

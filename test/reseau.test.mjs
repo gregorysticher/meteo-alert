@@ -167,6 +167,31 @@ test('secours : un 503 (serveur joignable) est réessayé normalement', async ()
   } finally { await s.fermer(); }
 });
 
+test('secours : 404 listé dans secoursSi (meta AROME, 16/11) -> second essai par le secours', async () => {
+  const s = await serveur((req, res) => res.end('{"meta":1}'));
+  try {
+    process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': '127.0.0.1' });
+    simuler(404);
+    const res = await fetchEssai(`http://secours.test:${s.port}/data/m/static/meta.json`, {}, { secoursSi: [404] });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { meta: 1 });
+    assert.equal(appels.length, 1);
+    assert.equal(s.recus.length, 1);
+    assert.match(journal[0], /HTTP 404.*par le serveur de secours 127\.0\.0\.1/);
+  } finally { await s.fermer(); }
+});
+
+test('secours : 404 hors secoursSi -> second essai normal, secours non appelé', async () => {
+  const s = await serveur((req, res) => res.end('x'));
+  try {
+    process.env.RESEAU_SECOURS = JSON.stringify({ 'secours.test': '127.0.0.1' });
+    simuler(404, 404);
+    assert.equal((await fetchEssai(`http://secours.test:${s.port}/x`, {}, { secoursSi: [503] })).status, 404);
+    assert.equal(appels.length, 2);
+    assert.equal(s.recus.length, 0);
+  } finally { await s.fermer(); }
+});
+
 test('secours : son 500 remonte tel quel, run rouge comme avant', async () => {
   const s = await serveur((req, res) => { res.statusCode = 500; res.end('panne'); });
   try {

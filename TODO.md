@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-15
+Dernière mise à jour : 2026-11-16
 Session : Weather Station — https://claude.ai/code/session_01V44DmrGmT76TSq2yZ4XBUY — PC claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
@@ -68,6 +68,9 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-16 — Runs vent rouges (« meta AROME -> HTTP 404 », 8 en 4 jours) : le serveur
+      Open-Meteo US 51.81.167.44 n'a aucune meta de modèle. Sur un 404, la meta AROME passe
+      désormais par les serveurs de secours. Alertes et écran n'étaient pas touchés.
 - [x] 2026-11-15 — D-004 (décidé par Greg) : hausse, baisse et prolongation d'un épisode
       suivi jugées sans le dernier jour de l'horizon (annulation inchangée) ; rejeu 12-19.11 :
       3 messages au lieu de 7 (commit 9dcf1c7). CO₂ du DASHBOARD en ÉLEVÉ dès 850 ppm (900 avant).

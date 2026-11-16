@@ -170,9 +170,11 @@ export async function previsions(spots) {
  * Leve une erreur si la reponse est inexploitable.
  */
 export async function previsionsArome(spots) {
-  // Meta 404 pendant plus de 20 s les 13 et 14/11 (mise à jour du modèle chez
-  // Open-Meteo, vers 05h18, 10h29 et 17h18 UTC) : second essai après 80 s.
-  const resMeta = await fetchEssai(AROME_META, {}, { attenteFois: 4 });
+  // Meta 404 : le serveur US 51.81.167.44, où GitHub envoie souvent les runners, n'a
+  // aucune meta (16/11/2026 ; les 404 des 13-15/11, crus liés aux mises à jour du
+  // modèle, venaient de là). Second essai par les serveurs de secours (reseau.mjs), après
+  // 80 s comme avant : si une mise à jour du modèle donne aussi des 404, elle est passée.
+  const resMeta = await fetchEssai(AROME_META, {}, { attenteFois: 4, secoursSi: [404] });
   if (!resMeta.ok) throw new Error('meta AROME -> HTTP ' + resMeta.status);
   const init = (await resMeta.json()).last_run_initialisation_time;
   if (!Number.isFinite(init)) throw new Error('meta AROME sans heure de run');
