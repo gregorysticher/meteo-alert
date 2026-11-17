@@ -31,6 +31,14 @@ faite, fais-la d'abord.
 - Mis à jour, commité et poussé à chaque fin de séance : le briefing
   quotidien le lit.
 
+## Agenda et rappels (règle de Greg du 17.11.2026)
+
+- Ne jamais créer, déplacer ni supprimer d'événement dans les agendas Google de
+  Greg sans le lui demander d'abord.
+- Pour un rappel ou une action datée : créer une tâche programmée Claude dans la
+  session concernée (`send_later`), et noter l'échéance dans `TODO.md`
+  (`Échéance : AAAA-MM-JJ`) pour que le briefing quotidien la reprenne.
+
 ## Conventions
 
 - Session Remote Control : Greg suit souvent depuis son téléphone. Réponses
