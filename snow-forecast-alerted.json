@@ -2,13 +2,13 @@
   "episodes": [
     {
       "debut": "2026-11-15",
-      "fin": "2026-11-19",
-      "total": 88.6,
-      "duree": 5,
+      "fin": "2026-11-21",
+      "total": 120.8,
+      "duree": 7,
       "annule": false,
-      "horizon": "2026-11-19",
-      "cmHorizon": 35.1
+      "horizon": "2026-11-21",
+      "cmHorizon": 19.6
     }
   ],
-  "updatedAt": "2026-11-15T07:03:57.965Z"
+  "updatedAt": "2026-11-17T06:03:24.243Z"
 }
