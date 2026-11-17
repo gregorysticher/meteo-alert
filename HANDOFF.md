@@ -85,7 +85,7 @@ Seul **DASHBOARD** est affiché ; il fusionne (Plugin Merge) les autres.
 |---|---|---|---|---|
 | DASHBOARD | 392375 | Plugin Merge | — | Écran affiché |
 | Netatmo Data 2 | 396948 | Polling OAuth | `D` | Intérieur / extérieur |
-| Météo Carouge | 394232 | Polling Open-Meteo | `M` | Prévisions, 7 jours, pluie, UV, phénomènes |
+| Météo Carouge | 394232 | Polling Open-Meteo | `M` | Prévisions, 7 jours, pluie, UV, phénomènes, rafales (VENT FORT) |
 | Neige Les Collines | 395305 | Polling Open-Meteo (16 j) | `S` | Chutes, hauteur au sol |
 | Détail vent et neige (ex-Vent Wingfoil, renommé le 2026-11-11) | 471074 | Webhook (alimenté par `wind-alert`) | `W` | Données du DASHBOARD ; son propre markup est la page détail vent et neige |
 

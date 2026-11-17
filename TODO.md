@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-16
+Dernière mise à jour : 2026-11-17
 Session : Weather Station — https://claude.ai/code/session_01V44DmrGmT76TSq2yZ4XBUY — PC claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
@@ -68,6 +68,9 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-17 — DASHBOARD : badge « VENT FORT » dès 50 km/h de rafale prévue à Carouge
+      (heures restantes du jour, `SEUIL_RAFALES_KMH`) ; rafales ajoutées à la requête du
+      plugin Météo Carouge. trmnl-sync eafa767.
 - [x] 2026-11-16 — Runs vent rouges (« meta AROME -> HTTP 404 », 8 en 4 jours) : le serveur
       Open-Meteo US 51.81.167.44 n'a aucune meta de modèle. Sur un 404, la meta AROME passe
       désormais par les serveurs de secours. Alertes et écran n'étaient pas touchés.
