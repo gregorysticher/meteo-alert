@@ -355,6 +355,27 @@ une alerte. En information dans le rapport :
 
 Tests : 309 au vert. Revue de code par un agent indépendant : rien de grave côté alerte (ni doublon ni perte, rien écrit en DRY_RUN). Quatre défauts du calcul QA corrigés : fusion de deux épisodes reliés par un message, ATTENTE (et non verdict ou `?`) le dernier jour de la plage et avant la publication du relevé, pas de RATE pour une baisse annoncée sous le seuil, rapport neige / eau lu sur `snowfall_sum` (les averses faussaient `mm − pluie`).
 
+**Bilan provisoire de l'épisode, 20.11.2026 (Weather Station, à la demande de Greg).**
+Bilan final, alignement HN_1D tranché, après la fin de la plage (23.11) et ses relevés.
+
+- 9 messages depuis le 12.11 (objectif 3) : les 6 d'avant D-001, puis 3 sous les règles
+  actuelles (15.11 hausse 89 cm, 17.11 prolongé 121 cm, 19.11 hausse 185 cm, plage
+  15 → 23.11).
+- Prévision nettement trop forte à ILI2 (2022 m). Du 15 au 19.11 : 89 cm annoncés,
+  19 cm mesurés en lecture J, 49 cm en lecture J+1 (HN 20.11 = 32,3 cm, publié
+  aujourd'hui). Verdicts : tous `SURESTIME` (et `RATE` en J+1 pour 15 → 16.11). Les
+  messages du 17 et du 19.11 restent `ATTENTE`.
+- Cause : limite pluie-neige à l'altitude de la station. 15 et 17.11 au-dessus de 0 °C
+  (jusqu'à +4,8 °C le 17), pluie, HS retombée à 1 cm. 16 et 18.11 vers 0 °C, neige
+  mouillée : 27 mm et 44 mm n'ont donné qu'environ +5 cm de HS chacun. Vraie
+  accumulation seulement à partir du 19.11 (HS 10 → 39 cm le 20 au matin, −2 à −3 °C).
+  FNH2 (2252 m, plus froide) : 138 cm au sol, HN 20.11 = 73 cm.
+- HN_1D : les données du 19 et du 20.11 confortent la lecture J+1 (HN daté J = 24 h
+  jusqu'au matin de J). Décision écrite avec le bilan final.
+- Décision 3 respectée, aucune correction. Piste pour la fin de saison, à décider par
+  vous : rapport cm/mm selon la température, et part pluie vers 0 °C. Le 0,7 cm/mm fixe
+  surestime nettement la neige mouillée.
+
 ---
 
 ## D-004 — Dernier jour de l'horizon exclu aussi des hausses et baisses ; seuil CO₂ à 850 ppm
