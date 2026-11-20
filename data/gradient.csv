@@ -649,3 +649,9 @@ ts,spot,station,air_c,eau_c,gradient_c
 202611200500,coppet,CGI,7.1,6.3,0.8
 202611200500,nyon,CGI,7.1,6.8,0.3
 202611200500,bouveret,BOU,8.0,10.5,-2.5
+202611200600,cologny,GVE,8.7,9.2,-0.5
+202611200600,reposoir,GVE,8.7,7.0,1.7
+202611200600,vengeron,GVE,8.7,6.6,2.1
+202611200600,coppet,CGI,6.9,6.3,0.6
+202611200600,nyon,CGI,6.9,6.7,0.2
+202611200600,bouveret,BOU,7.7,10.5,-2.8
