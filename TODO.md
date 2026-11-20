@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-17
+Dernière mise à jour : 2026-11-20
 Session : Weather Station — https://claude.ai/code/session_01V44DmrGmT76TSq2yZ4XBUY — PC claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
@@ -68,6 +68,13 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-20 — DASHBOARD « HORS LIGNE » côté prévisions : Open-Meteo avait répondu 503
+      au plugin Météo Carouge (394232), TRMNL l'a mis en état dégradé avec des variables
+      vides. API de nouveau à 200 : santé réinitialisée, réglages réenregistrés (nouvelle
+      lecture), écran rafraîchi. Prévisions, VENT FORT et 7 jours revenus.
+- [x] 2026-11-20 — D-003 : bilan provisoire de l'épisode neige écrit dans
+      `docs/demandes-wingfoil.md` (prévision 2 à 4 fois trop forte à ILI2, neige mouillée
+      vers 0 °C ; 9 messages). Bilan final et alignement HN_1D après le 23.11.
 - [x] 2026-11-17 — DASHBOARD : badge « VENT FORT » dès 40 km/h de rafale prévue à Carouge
       (heures restantes du jour, `SEUIL_RAFALES_KMH`, 50 puis 40 sur décision de Greg) ;
       rafales ajoutées à la requête du plugin Météo Carouge. trmnl-sync eafa767, 511ab40.
