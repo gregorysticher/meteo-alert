@@ -207,7 +207,7 @@ test('annoncée : silence nocturne -> rien envoyé, état gardé, run vert', () 
   const r = lancer('snow-forecast-alert.mjs', prev([0, 10, 7, 0, 0]),
     { ...REEL, SILENCE_NOCTURNE: '1', SILENCE_HORLOGE: '2026-11-16T23:00:00Z' }, etat);
   assert.equal(r.code, 0, r.out);
-  assert.match(r.out, /Silence nocturne : « Neige revue à la hausse — Les Collines » retenu, réévalué au réveil \(Ma 17\.11 07:00\)/);
+  assert.match(r.out, /Silence nocturne : « Neige revue à la hausse — Les Collines » retenu, réévalué au réveil \(Ma 17\.11 08:00\)/);
   assert.doesNotMatch(r.out, /ntfy →/);
   assert.equal(r.etat, etat, "état inchangé : l'alerte repart au réveil");
 });
