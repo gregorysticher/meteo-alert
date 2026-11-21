@@ -46,7 +46,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
 import { fetchEssai } from "./reseau.mjs";
-import { journaliserPrevision } from "./snow-qa.mjs";
+import { journaliserPrevision, lire as lireJournal } from "./snow-qa.mjs";
+import { detailJours, mesureStation, avalanche, URL_AVALANCHE, POUDRE } from "./snow-detail.mjs";
 import { episodes as decouper, decider, ecranNeige } from "./snow-episodes.mjs";
 import { journaliserEnvoi } from "./snow-verdict.mjs";
 import { neigeJournaliere, TEMP_NEIGE_C, TEMP_PLUIE_C } from "./snow-conversion.mjs";
@@ -76,6 +77,11 @@ const PROLONGE_MIN_CM = nombreEnv("PROLONGE_MIN_CM", 2);
 const AFFICHAGE_CM = nombreEnv("AFFICHAGE_CM", 5);
 const TEMP_NEIGE = nombreEnv("TEMP_NEIGE_C", TEMP_NEIGE_C);
 const TEMP_PLUIE = nombreEnv("TEMP_PLUIE_C", TEMP_PLUIE_C);
+// Page détail (snow-detail.mjs) : « jour de poudre ». Information seulement.
+const POUDRE_REGL = {
+  cm: nombreEnv("POUDRE_CM", POUDRE.cm), soleilH: nombreEnv("POUDRE_SOLEIL_H", POUDRE.soleilH),
+  rafalesKmh: nombreEnv("POUDRE_RAFALES_KMH", POUDRE.rafalesKmh), tmaxC: nombreEnv("POUDRE_TMAX_C", POUDRE.tmaxC),
+};
 const FICHIER_ECRAN = "data/neige-ecran.json";
 const SEUIL_FORCE = Boolean(process.env.SEUIL_FORCE);
 
@@ -228,7 +234,7 @@ function ecrireEcran(ecran) {
 // écran, pour mesurer ce que vaut une annonce à J+9 avant de songer à l'afficher.
 // Sa panne ne touche pas l'alerte, mais elle se voit.
 async function journaliserLong(url, jour) {
-  const long = url.replace("&models=meteoswiss_icon_seamless", "").replace("&hourly=precipitation,temperature_2m", "")
+  const long = url.replace("&models=meteoswiss_icon_seamless", "").replace(/&hourly=[^&]*/, "")
     .replace("&forecast_days=5", "&forecast_days=16").replace(/&past_days=\d+/, "");
   try {
     const res = await fetchEssai(long);
@@ -262,7 +268,9 @@ async function main() {
     "https://api.open-meteo.com/v1/forecast" +
     `?latitude=${LAT}&longitude=${LON}&elevation=${ALT}` +
     "&daily=snowfall_sum,precipitation_sum,rain_sum,temperature_2m_mean" +
-    "&hourly=precipitation,temperature_2m" +
+    // Page détail (snow-detail.mjs), information seulement :
+    ",temperature_2m_max,temperature_2m_min,showers_sum,sunshine_duration,wind_gusts_10m_max" +
+    "&hourly=precipitation,temperature_2m,freezing_level_height" +
     "&models=meteoswiss_icon_seamless" +
     `&timezone=${encodeURIComponent(TZ)}` +
     "&forecast_days=5" +  // ICON-CH2 plafonne à 120 h
@@ -377,6 +385,33 @@ async function main() {
       jour, seuil: SEUIL_CM, hausse: regl.hausse, minAffichage: regl.affichage, retenir,
     }),
   };
+  // Contexte de la page détail (snow-detail.mjs). Une panne ne touche pas l'alerte :
+  // bloc vide, run rouge.
+  try {
+    ecran.jours = detailJours(data, dates, neige, ecran.jours, POUDRE_REGL);
+  } catch (err) {
+    console.error(`ECHEC détail des jours : ${err.message}`);
+    process.exitCode = 1;
+  }
+  try {
+    // Pas encore d'archive HS (l'alerte neige fraîche n'a pas tourné) : bloc vide, run vert.
+    ecran.mesure = existsSync("data/neige-hs.csv") ? mesureStation({ lignesNeige: lireJournal() }) : null;
+    if (existsSync("data/neige-hs.csv") && !ecran.mesure) throw new Error("aucun relevé ILI2 dans data/neige-hs.csv");
+  } catch (err) {
+    console.error(`ECHEC mesures de la station : ${err.message}`);
+    ecran.mesure = null;
+    process.exitCode = 1;
+  }
+  try {
+    const res = await fetchEssai(URL_AVALANCHE);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    ecran.avalanche = avalanche(await res.json());
+    if (!ecran.avalanche) throw new Error("région absente du bulletin");
+  } catch (err) {
+    console.error(`ECHEC bulletin d'avalanches : ${err.message}`);
+    ecran.avalanche = null;
+    process.exitCode = 1;
+  }
   console.log(`\nÉcran : ${JSON.stringify(ecran)}`);
 
   if (DRY_RUN) {

@@ -12,7 +12,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fenetre, fenetres, choisirReco, profilReco, choisirAlerte, dejaEnvoye, local, decalage } from '../wind-select.mjs';
+import { fenetre, fenetres, choisirReco, profilReco, planSemaine, choisirAlerte, dejaEnvoye, local, decalage } from '../wind-select.mjs';
 
 const S = (key, court, route_min, secteurs = [[200, 260]]) =>
   ({ key, court, nom: court, route_min, secteurs });
@@ -354,4 +354,41 @@ test('decalage : heure suisse, ete et hiver', () => {
   assert.equal(decalage(new Date('2026-11-09T18:00:00Z')), 3600);
   assert.equal(decalage(new Date('2026-10-25T00:30:00Z')), 7200);   // avant le passage (01:00 UTC)
   assert.equal(decalage(new Date('2026-10-25T01:30:00Z')), 3600);   // apres
+});
+
+// ---- plan de la semaine (page detail, saison vent) ---------------------------
+
+const plan = (vent, o = {}) => planSemaine(classer(vent, o), o.cfg ?? CFG, o.biais ?? new Map(), o.maintenant ?? VEN_19H);
+
+test('plan : 7 jours depuis aujourd\'hui, spots dans l\'ordre de la route', () => {
+  const p = plan({ reposoir: [{ jour: SAM, de: 10, a: 14, kn: 14 }] });
+  assert.equal(p.jours.length, 7);
+  assert.equal(p.jours[0], '2027-05-14');                 // vendredi
+  assert.deepEqual(p.s.map((x) => x.n), ['Reposoir', 'Cologny', 'Vengeron', 'Coppet', 'Nyon', 'Joux']);
+});
+
+test('plan : meilleure moyenne sur min_heures dans le creneau, ok si une fenetre commence ce jour', () => {
+  const p = plan({ reposoir: [{ jour: SAM, de: 10, a: 14, kn: 14 }, { jour: DIM, de: 9, a: 12, kn: 9 }] });
+  const r = p.s[0];
+  const iSam = p.jours.indexOf(SAM), iDim = p.jours.indexOf(DIM), iMar = p.jours.indexOf(MAR);
+  assert.equal(r.kn[iSam], 14);
+  assert.equal(r.ok[iSam], 1);
+  assert.equal(r.kn[iDim], 9);                            // sous le seuil : valeur, pas de fenetre
+  assert.equal(r.ok[iDim], 0);
+  assert.equal(r.kn[iMar], 4);                            // mardi : creneau 8-13, vent de base
+  assert.equal(r.kn[0], null);                            // vendredi : pas de creneau
+  assert.equal(r.kn[p.jours.indexOf(MER)], null);
+});
+
+test('plan : biais corrige, hors secteur exclu', () => {
+  const p = plan({ reposoir: [{ jour: SAM, de: 9, a: 18, kn: 10 }],
+    cologny: [{ jour: SAM, de: 9, a: 18, kn: 20, dir: 120 }] }, { biais: new Map([[24, -2]]) });
+  const iSam = p.jours.indexOf(SAM);
+  assert.equal(p.s[0].kn[iSam], 12);                      // 10 + 2
+  assert.equal(p.s[1].kn[iSam], null);                    // Cologny : vent hors secteur
+});
+
+test('plan : hors saison -> null', () => {
+  assert.equal(plan({ reposoir: [{ jour: '2027-11-13', de: 9, a: 18, kn: 20 }] },
+    { maintenant: new Date('2027-11-12T17:00:00Z') }), null);
 });

@@ -21,6 +21,15 @@ if (spec) {
     if (String(url).includes('ntfy.sh') && process.env.MOCK_NTFY_STATUS) {
       return new Response('panne', { status: +process.env.MOCK_NTFY_STATUS });
     }
+    // Bulletin d'avalanches SLF (page detail neige) : MOCK_AVALANCHE = { status, body } ;
+    // sans lui, un bulletin minimal valide pour la region de Les Collines.
+    if (String(url).includes('aws.slf.ch/api/bulletin')) {
+      const { status = 200, body = { bulletins: [{ regions: [{ regionID: 'CH-1312' }],
+        dangerRatings: [{ mainValue: 'considerable' }], avalancheProblems: [{ problemType: 'wind_slab' }],
+        validTime: { endTime: '2026-11-21T16:00:00Z' } }] } } = process.env.MOCK_AVALANCHE
+        ? JSON.parse(process.env.MOCK_AVALANCHE) : {};
+      return new Response(JSON.stringify(body), { status });
+    }
     if (String(url).includes('forecast_days=16') && process.env.MOCK_LONG) {
       const { status = 200, body = null } = JSON.parse(process.env.MOCK_LONG);
       return new Response(JSON.stringify(body), { status });

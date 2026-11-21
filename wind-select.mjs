@@ -208,6 +208,38 @@ export function profilReco(classement, cfg, biais, maintenant, reco) {
   return { n: reco.n, j: reco.j, de, kn, ok };
 }
 
+// Plan de la semaine (page detail, saison vent ; demande de Greg du 21.11.2026) : pour
+// chacun des nSpots premiers spots (meme ordre que spots[], temps de route croissant)
+// et chaque jour de l'horizon, la meilleure moyenne corrigee sur min_heures heures
+// exploitables consecutives (creneau, saison, secteur, horizon : regle de meilleure()),
+// et ok = 1 si une fenetre au seuil plein commence ce jour-la (regle de fenetres()).
+// kn null : aucune suite de min_heures heures exploitables ce jour-la (pas de creneau,
+// hors saison, hors secteur, heures passees). Null si aucune valeur sur la semaine.
+// Decide ici, pas en Liquid.
+const jourPlus = (iso, n) => new Date(Date.parse(`${iso}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+export function planSemaine(classement, cfg, biais, maintenant, nSpots = 6) {
+  const n = cfg.min_heures;
+  const j0 = local(maintenant).iso;
+  const jours = Array.from({ length: cfg.horizon_jours ?? 7 }, (_, i) => jourPlus(j0, i));
+  const s = classement.slice(0, nSpots).map((c) => {
+    const hs = heures(c.lignes, c.spot, cfg, biais, maintenant);
+    const fs = fenetres(c.lignes, c.spot, cfg, cfg.seuil_kn, biais, maintenant);
+    const kn = jours.map((j) => {
+      let best = null;
+      for (const run of suites(hs.filter((h) => h.t.iso === j), (h) => h.ok)) {
+        for (let i = 0; i + n <= run.length; i++) {
+          const m = moyenne(run.slice(i, i + n), 'corrige');
+          if (best === null || m > best) best = m;
+        }
+      }
+      return best === null ? null : Math.max(0, Math.round(best));
+    });
+    const ok = jours.map((j) => (fs.some((f) => f[0].t.iso === j) ? 1 : 0));
+    return { n: c.spot.court, kn, ok };
+  });
+  return s.some((x) => x.kn.some((v) => v !== null)) ? { jours, s } : null;
+}
+
 // Etage d'alerte e = { lead_min_h, lead_max_h, marge_kn } : pour chaque spot
 // (du plus proche au plus loin), la premiere fenetre dont le debut tombe dans
 // la tranche — pas seulement la prochaine : une fenetre demain ne doit pas

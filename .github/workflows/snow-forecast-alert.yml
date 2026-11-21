@@ -41,7 +41,7 @@ jobs:
       # Chemins d'échec (API refusée, muette, vide) sur fetch simulé :
       # un test en échec bloque le run, il apparaît en rouge.
       - name: Tests
-        run: node --test test/snow.test.mjs test/snow-conversion.test.mjs test/snow-episodes.test.mjs test/reseau.test.mjs test/silence.test.mjs test/snow-verdict.test.mjs
+        run: node --test test/snow.test.mjs test/snow-conversion.test.mjs test/snow-detail.test.mjs test/snow-episodes.test.mjs test/reseau.test.mjs test/silence.test.mjs test/snow-verdict.test.mjs
 
       - name: Vérifier les chutes annoncées
         id: alerte
@@ -62,6 +62,11 @@ jobs:
           # Conversion pluie-neige (D-005) : vide = défauts du script, −5 / +5 °C.
           TEMP_NEIGE_C: ${{ vars.TEMP_NEIGE_C }}
           TEMP_PLUIE_C: ${{ vars.TEMP_PLUIE_C }}
+          # Page détail, « jour de poudre » (snow-detail.mjs) : vides = défauts 10 cm, 4 h, 50 km/h, 2 °C.
+          POUDRE_CM: ${{ vars.POUDRE_CM }}
+          POUDRE_SOLEIL_H: ${{ vars.POUDRE_SOLEIL_H }}
+          POUDRE_RAFALES_KMH: ${{ vars.POUDRE_RAFALES_KMH }}
+          POUDRE_TMAX_C: ${{ vars.POUDRE_TMAX_C }}
         run: node snow-forecast-alert.mjs
 
       - name: Commit l'état si modifié

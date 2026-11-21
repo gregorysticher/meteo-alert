@@ -33,7 +33,7 @@ import {
   biaisParEcheance, journaliserGradient,
 } from './wind-qa.mjs';
 import {
-  local, fenetre, moyenne, choisirReco, profilReco, choisirAlerte, dejaEnvoye, jourTient,
+  local, fenetre, moyenne, choisirReco, profilReco, planSemaine, choisirAlerte, dejaEnvoye, jourTient,
   ligneEau, finLocale, etatMesure, dansSaison, decalage,
 } from './wind-select.mjs';
 
@@ -136,7 +136,7 @@ async function neigeEcran(saison, maintenant) {
 
 // CONTRAT : docs/contrat-trmnl.md. Ajouter des champs, jamais en retirer ni en
 // changer le sens sans prevenir le markup (DASHBOARD 392375).
-async function versTrmnl(classement, cfg, emission, reco, profil, maintenant) {
+async function versTrmnl(classement, cfg, emission, reco, profil, maintenant, plan = null) {
   if (TEST) return 'TEST : webhook TRMNL non touche';
   if (!TRMNL && !DRY_RUN) {
     process.exitCode = 1;          // ecran fige sans le dire
@@ -163,7 +163,7 @@ async function versTrmnl(classement, cfg, emission, reco, profil, maintenant) {
       maj: emission, seuil: cfg.seuil_kn, saison, tz: decalage(maintenant),
       mesure: mesureEcran(classement, cfg),
       neige: await neigeEcran(saison, maintenant),
-      spots, reco, profil,
+      spots, reco, profil, plan,
     },
   });
   if (corps.length > 5000) {
@@ -361,7 +361,8 @@ if (QA_ONLY) {
   // Webhook injoignable : run rouge, mais la QA du run ne doit pas etre perdue.
   try {
     const profil = profilReco(classement, cfg, biais, maintenant, reco);
-    console.log(await versTrmnl(classement, cfg, emission, reco, profil, maintenant));
+    const plan = planSemaine(classement, cfg, biais, maintenant);
+    console.log(await versTrmnl(classement, cfg, emission, reco, profil, maintenant, plan));
   } catch (err) {
     console.error(`ECHEC webhook TRMNL : ${err.message}`);
     process.exitCode = 1;
