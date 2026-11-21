@@ -479,7 +479,7 @@ vert.
 
 ## D-005 — Neige : conversion pluie-neige selon la température, dès maintenant
 
-**Statut :** OUVERTE
+**Statut :** FAITE (en production le 21.11.2026 vers 12h ; bornes −5 / +5 °C ; alignement HN_1D : J+1)
 **De :** WINGFOIL/METEO-ALERT — samedi 21.11.2026, 11h20
 **Décidé par :** Greg, 21.11.2026
 
@@ -592,6 +592,15 @@ actuelles, silence nocturne compris.
 calcul donne 199 cm au run de ce matin, sous le pas de hausse (30 %, soit 55 cm) : aucun
 message n'est parti. L'écran passe de 176 à 199 cm.
 
+- **Risque du premier message suivant.** La hausse et la baisse comparent désormais un cumul
+  D-005 au chiffre de la dernière alerte, calculé au 0,7 fixe (+16 % d'écart aujourd'hui,
+  199 contre 171).
+  - Une révision de +41 cm sur le 22 ou le 23.11 ferait partir « revue à la hausse 241 cm
+    (185 cm à la dernière alerte) », alors que l'ancien calcul n'aurait rien envoyé.
+  - En épisode doux, ce serait l'inverse : une baisse due à la seule méthode.
+  - L'épisode finit le 23.11. Je n'ai pas recalé la référence : ce serait une règle
+    nouvelle, hors demande.
+
 **Alignement HN_1D : lecture J+1, tranchée.** Aux quatre stations, le HN_1D daté J suit
 la hausse de hauteur de neige de 7h la veille à 7h le jour J. Exemples :
 - ILI2, 20.11 : 32,3 cm pour +29 cm ;
@@ -608,6 +617,19 @@ fixe, par échéance. Je signalerai deux épisodes de suite `SURESTIME` ou `SOUS
 
 **Rien d'autre ne change** : seuils, pas, silence, règles d'épisode, format des messages.
 L'écran lit le même chiffre que l'alerte (`data/neige-ecran.json`).
+
+**Revue indépendante** (agent séparé, API réelle). Rien de bloquant. Corrigé : valeurs à
+virgule ou avec signe moins typographique dans les variables, désormais acceptées, et
+valeur non numérique qui rend le run rouge ; `cm_fixe` vide relu comme inconnu ; jour
+exigé à 24 heures (Open-Meteo garde un décalage fixe, même au changement d'heure).
+Laissé en l'état :
+- la température de l'heure est l'instantané de fin d'heure, pas la moyenne de l'heure. Le
+  calage a été fait ainsi ;
+- le journal horizon long (16 jours) reste au 0,7 fixe. À convertir avant de rouvrir
+  l'affichage à J+9.
+
+Tests : 337 au vert. DRY_RUN sur GitHub vert deux fois avant la mise en production, sans
+rien à notifier.
 
 ---
 
