@@ -52,7 +52,7 @@ jobs:
       # Chemins d'échec (API refusée, muette, vide) sur fetch simulé :
       # un test en échec bloque le run, il apparaît en rouge.
       - name: Tests
-        run: node --test test/snow.test.mjs test/reseau.test.mjs test/silence.test.mjs test/snow-verdict.test.mjs
+        run: node --test test/snow.test.mjs test/snow-conversion.test.mjs test/reseau.test.mjs test/silence.test.mjs test/snow-verdict.test.mjs
 
       - name: Vérifier la neige fraîche mesurée
         env:

@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { journaliserPrevision, journaliserMesures, lire, rapport } from '../snow-qa.mjs';
+import { rapportTemperature } from '../snow-conversion.mjs';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MOCK = join(RACINE, 'test', 'helpers', 'mock-fetch.mjs');
@@ -76,13 +77,28 @@ test('journal : prévisions, mesures dédoublonnées, rapport J-1', () => {
 // ---- alerte annoncée (Open-Meteo) ----------------------------------------
 
 // passes = valeurs des jours precedents, du plus ancien a hier (past_days).
-const prev = (neige, unite = 'cm', passes = []) => ({ body: {
-  daily_units: { snowfall_sum: unite },
-  daily: {
-    time: [...passes.map((_, i) => jourLocal(i - passes.length)), ...neige.map((_, i) => jourLocal(i))],
-    snowfall_sum: [...passes, ...neige],
-  },
-} });
+// Horaire (D-005) : toute la neige du jour tombe à midi à −5 °C (part neige 1), en mm
+// tels que la conversion redonne exactement la valeur ; null = jour sans données.
+// snowfall_sum (0,7 fixe, information) = la même valeur.
+const prev = (neige, unite = 'mm', passes = []) => {
+  const valeurs = [...passes, ...neige];
+  const time = [...passes.map((_, i) => jourLocal(i - passes.length)), ...neige.map((_, i) => jourLocal(i))];
+  const h = { time: [], precipitation: [], temperature_2m: [] };
+  time.forEach((d, i) => {
+    for (let k = 0; k < 24; k++) {
+      h.time.push(`${d}T${String(k).padStart(2, '0')}:00`);
+      const v = valeurs[i];
+      h.precipitation.push(v == null ? null : k === 12 ? v / rapportTemperature(-5) : 0);
+      h.temperature_2m.push(-5);
+    }
+  });
+  return { body: {
+    daily_units: { snowfall_sum: 'cm' },
+    hourly_units: { precipitation: unite, temperature_2m: '°C' },
+    daily: { time, snowfall_sum: valeurs },
+    hourly: h,
+  } };
+};
 
 const REEL = { DRY_RUN: 'false', NTFY_TOPIC_NEIGE: 'x' };
 const etatDe = (debut, fin, total, annule = false) => JSON.stringify({ episodes: [
@@ -107,7 +123,7 @@ test('annoncée : deux ratés réseau -> rouge', () => {
   assert.equal(lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), { MOCK_RATES: '2' }).code, 1);
 });
 test('annoncée : unité inattendue -> rouge', () => {
-  assert.equal(lancer('snow-forecast-alert.mjs', prev([0, 5], 'mm')).code, 1);
+  assert.equal(lancer('snow-forecast-alert.mjs', prev([0, 5], 'cm')).code, 1);
 });
 test('annoncée : réponse vide -> rouge', () => {
   assert.equal(lancer('snow-forecast-alert.mjs', { body: { daily_units: { snowfall_sum: 'cm' }, daily: {} } }).code, 1);
@@ -136,11 +152,11 @@ test('annoncée : rien de prévu -> vert, rien à notifier', () => {
 });
 
 test('annoncée : valeurs nulles dans le passé seul -> vert', () => {
-  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0], 'cm', [null, null]));
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0], 'mm', [null, null]));
   assert.equal(r.code, 0, r.out);
 });
 test('annoncée : passé renseigné mais avenir tout à null -> rouge', () => {
-  assert.equal(lancer('snow-forecast-alert.mjs', prev([null, null], 'cm', [5, 5])).code, 1);
+  assert.equal(lancer('snow-forecast-alert.mjs', prev([null, null], 'mm', [5, 5])).code, 1);
 });
 test('annoncée : envoi réel d\'une nouvelle alerte, état écrit, second run muet', () => {
   const m = prev([0, 7, 5, 0, 0]);
@@ -261,7 +277,7 @@ test('annoncée : requête avec le bon modèle et les jours passés', () => {
   assert.match(r.out, /forecast_days=5/);
 });
 test('annoncée : le journal ne reçoit que les jours à venir', () => {
-  const r = lancer('snow-forecast-alert.mjs', prev([1, 2, 0, 0, 0], 'cm', [9, 9]), { ...REEL, SEUIL_CM: '999' });
+  const r = lancer('snow-forecast-alert.mjs', prev([1, 2, 0, 0, 0], 'mm', [9, 9]), { ...REEL, SEUIL_CM: '999' });
   assert.equal(r.code, 0, r.out);
   const lignes = r.journal.trim().split('\n').slice(1).filter((l) => l.split(',')[5] === 'icon');
   assert.equal(lignes.length, 5);
@@ -287,15 +303,16 @@ test('annoncée : journal complet, modèle court et long séparés', () => {
   m.body.daily.precipitation_sum = [0, 10, 8, 0, 0];
   m.body.daily.rain_sum = [0, 0, 1, 0, 0];
   m.body.daily.temperature_2m_mean = [-1, -4, -2, 0, 1];
+  m.body.daily.snowfall_sum = [0, 9, 6, 0, 0];   // 0,7 fixe : en information, colonne cm_fixe
   const r = lancer('snow-forecast-alert.mjs', m, { ...REEL, SEUIL_CM: '999' });
   const lignes = r.journal.trim().split('\n');
-  assert.equal(lignes[0], 'run,source,jour,cm,echeance_j,modele,mm,pluie_mm,t_moy,station,hs');
-  assert.ok(lignes.some((l) => l.includes(`prev,${jourLocal(2)},5,2,icon,8,1,-2,,`)), r.journal);
+  assert.equal(lignes[0], 'run,source,jour,cm,echeance_j,modele,mm,pluie_mm,t_moy,station,hs,cm_fixe');
+  assert.ok(lignes.some((l) => l.endsWith(`prev,${jourLocal(2)},5,2,icon,8,1,-2,,,6`)), r.journal);
   assert.match(r.journal, /,long,/);
   assert.match(r.out, /horizon long : 5/);
 });
 test('annoncée : annexes alignées sur les jours à venir, malgré les jours passés', () => {
-  const m = prev([1, 2], 'cm', [9]);
+  const m = prev([1, 2], 'mm', [9]);
   m.body.daily.precipitation_sum = [90, 10, 20];
   m.body.daily.rain_sum = [0, 0, 1];
   m.body.daily.temperature_2m_mean = [-9, -1, -2];
@@ -377,7 +394,8 @@ test('annoncée : la requête longue n\'a ni modèle ni past_days, sur 16 jours'
   rmSync(urls);
   assert.equal(liste.length, 2);
   assert.match(liste[1], /forecast_days=16/);
-  assert.doesNotMatch(liste[1], /models=|past_days=/);
+  assert.doesNotMatch(liste[1], /models=|past_days=|hourly=/);
+  assert.match(liste[0], /hourly=precipitation,temperature_2m/);
 });
 test('annoncée : annonce déplacée -> un seul message « décalée »', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 7, 5, 0]), REEL, etatDe(0, 1, 12));
@@ -385,7 +403,7 @@ test('annoncée : annonce déplacée -> un seul message « décalée »', () => 
   assert.doesNotMatch(r.out, /ntfy → (Annulé|Neige annoncée)/);
 });
 test('annoncée : neige tombée, trace aujourd\'hui, premier run -> pas d\'alerte', () => {
-  const r = lancer('snow-forecast-alert.mjs', prev([1.2, 0, 0, 0, 0], 'cm', [20]), REEL);
+  const r = lancer('snow-forecast-alert.mjs', prev([1.2, 0, 0, 0, 0], 'mm', [20]), REEL);
   assert.equal(r.code, 0, r.out);
   assert.doesNotMatch(r.out, /ntfy →/);
 });
@@ -407,13 +425,13 @@ test('annoncée : réglages absurdes -> rouge, défauts appliqués', () => {
   }
 });
 test('annoncée : valeur inconnue dans la plage -> pas d\'annulation à l\'aveugle', () => {
-  const r = lancer('snow-forecast-alert.mjs', prev([0, 2, 0, 0, 0], 'cm', [null]), REEL, etatDe(-1, 1, 12));
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 2, 0, 0, 0], 'mm', [null]), REEL, etatDe(-1, 1, 12));
   assert.equal(r.code, 0, r.out);
   assert.doesNotMatch(r.out, /ntfy →/);
 });
 test('annoncée : épisode fini gardé en mémoire tant qu\'il est dans la série', () => {
   const etat = etatDe(-3, -3, 20);
-  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0], 'cm', [20, 0, 0]), REEL, etat);
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0], 'mm', [20, 0, 0]), REEL, etat);
   assert.equal(r.etat, etat, 'état inchangé');
 });
 test('annoncée : seuil forcé -> pas de « décalée » non plus', () => {
@@ -432,7 +450,7 @@ test('annoncée : sous le seuil -> annulation unique', () => {
 });
 test('annoncée : épisode en cours, jours passés comptés -> pas de fausse annulation', () => {
   // Alerte hier sur hier + aujourd'hui (12 cm), aujourd'hui n'en attend plus que 4.
-  const r = lancer('snow-forecast-alert.mjs', prev([4, 0, 0, 0, 0], 'cm', [8]), REEL, etatDe(-1, 0, 12));
+  const r = lancer('snow-forecast-alert.mjs', prev([4, 0, 0, 0, 0], 'mm', [8]), REEL, etatDe(-1, 0, 12));
   assert.equal(r.code, 0, r.out);
   assert.doesNotMatch(r.out, /ntfy →/);
 });

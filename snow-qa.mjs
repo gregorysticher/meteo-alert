@@ -4,11 +4,12 @@
 // la neige fraîche MESURÉE (SLF HN_1D, alerte neige fraîche). Données brutes
 // seulement : aucune alerte n'en dépend.
 //
-// data/neige.csv : run,source,jour,cm,echeance_j,modele,mm,pluie_mm,t_moy,station,hs
+// data/neige.csv : run,source,jour,cm,echeance_j,modele,mm,pluie_mm,t_moy,station,hs,cm_fixe
 //   run        horodatage UTC du run (AAAA-MM-JJTHH:MMZ)
-//   source     prev (snowfall_sum du jour) | mesure (HN_1D du relevé)
+//   source     prev (neige prévue du jour, voir cm) | mesure (HN_1D du relevé)
 //   jour       date locale AAAA-MM-JJ
-//   cm         valeur en cm
+//   cm         valeur en cm. prev icon : neige de l'alerte, conversion D-005 depuis le
+//              21.11.2026 (snow-conversion.mjs), snowfall_sum avant ; prev long : snowfall_sum
 //   echeance_j prev : jours entre la date du run et le jour prévu (0 = jour
 //              même) ; mesure : vide
 //   modele     prev : icon (celui de l'alerte) | long (plugin écran, 16 jours)
@@ -16,19 +17,20 @@
 //              Open-Meteo calcule snowfall = (mm - pluie) x 0,7 : rapport FIXE, vérifié
 //              le 08/11/2026. Ces colonnes permettront de tester un rapport selon la
 //              température.
+//   cm_fixe    prev icon depuis D-005 : snowfall_sum d'Open-Meteo (0,7 cm/mm fixe), gardé
+//              pour comparer. Vide avant : cm était alors lui-même le 0,7 fixe.
 //   station, hs  mesure : station IMIS et hauteur au sol. Plusieurs stations voisines,
 //              pour séparer l'erreur du modèle de la dispersion spatiale.
-// AUCUNE alerte n'en dépend (spec : ne pas corriger avant d'avoir de quoi le faire).
+// AUCUNE alerte n'en dépend.
 //
-// ALIGNEMENT (non tranché, voir docs/spec) : HN_1D daté J couvre a priori les
-// 24 h qui finissent le matin de J, soit surtout la neige tombée la veille.
-// Le rapport montre donc la mesure datée J ET celle datée J+1 en face de la
-// prévision du jour J, sans choisir.
+// ALIGNEMENT (tranché le 21.11.2026 : J+1, spec B4.1) : HN_1D daté J couvre les 24 h
+// qui finissent vers 7h le jour J, soit surtout la neige tombée la veille. Ce rapport
+// montre toujours la mesure datée J ET celle datée J+1 en face de la prévision du jour J.
 
-import { readFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
 
 export const FICHIER = 'data/neige.csv';
-const ENTETE = 'run,source,jour,cm,echeance_j,modele,mm,pluie_mm,t_moy,station,hs';
+const ENTETE = 'run,source,jour,cm,echeance_j,modele,mm,pluie_mm,t_moy,station,hs,cm_fixe';
 export const STATION_REFERENCE = 'ILI2';
 
 const runId = (d = new Date()) => d.toISOString().slice(0, 16) + 'Z';
@@ -40,10 +42,13 @@ export function lire(fichier = FICHIER) {
   return readFileSync(fichier, 'utf8').trim().split('\n').slice(1)
     .filter(Boolean)
     .map((l) => {
-      const [run, source, jour, cm, ech, modele, mm, pluie, tMoy, station, hs] = l.trimEnd().split(',');
+      const [run, source, jour, cm, ech, modele, mm, pluie, tMoy, station, hs, cmFixe] = l.trimEnd().split(',');
       const nombre = (x) => (x === undefined || x === '' ? NaN : +x);
       return { run, source, jour, cm: +cm, echeance_j: ech === '' ? null : +ech,
         mm: nombre(mm), pluie: nombre(pluie), tMoy: nombre(tMoy),
+        // Ligne d'avant D-005 (11 colonnes) : cm était le 0,7 fixe lui-même. Ligne D-005 à
+        // cm_fixe vide (snowfall_sum absent) : inconnu, surtout pas le chiffre converti.
+        cmFixe: cmFixe === undefined ? +cm : nombre(cmFixe),
         modele: modele || (source === 'prev' ? 'icon' : ''),
         station: station || (source === 'mesure' ? STATION_REFERENCE : ''), hs: hs ?? '' };
     });
@@ -54,13 +59,20 @@ function ajouter(lignes, fichier) {
   if (!existsSync(fichier)) {
     mkdirSync('data', { recursive: true });
     appendFileSync(fichier, ENTETE + '\n');
+  } else {
+    // Fichier d'avant D-005 (sans cm_fixe) : seul l'en-tête change, les lignes restent.
+    const texte = readFileSync(fichier, 'utf8');
+    const entete = texte.slice(0, texte.indexOf('\n')).trimEnd();
+    if (entete !== ENTETE && ENTETE.startsWith(entete + ',')) {
+      writeFileSync(fichier, ENTETE + texte.slice(texte.indexOf('\n')));
+    }
   }
   appendFileSync(fichier, lignes.map((l) => l.join(',')).join('\n') + '\n');
   return lignes.length;
 }
 
 // jourRun = date locale du run ; dates/neige = séries daily d'Open-Meteo.
-// annexes : séries facultatives { mm, pluie, tMoy }, de même longueur que dates.
+// annexes : séries facultatives { mm, pluie, tMoy, cmFixe }, de même longueur que dates.
 export function journaliserPrevision(jourRun, dates, neige, {
   fichier = FICHIER, maintenant = new Date(), modele = 'icon', annexes = {},
 } = {}) {
@@ -71,7 +83,7 @@ export function journaliserPrevision(jourRun, dates, neige, {
     if (typeof v === 'number' && Number.isFinite(v) && v >= 0) {
       const a = (serie) => serie?.[i] ?? '';
       lignes.push([run, 'prev', d, v, ecartJours(d, jourRun), modele,
-        a(annexes.mm), a(annexes.pluie), a(annexes.tMoy), '', '']);
+        a(annexes.mm), a(annexes.pluie), a(annexes.tMoy), '', '', a(annexes.cmFixe)]);
     }
   });
   return ajouter(lignes, fichier);
@@ -88,7 +100,7 @@ export function journaliserMesures(mesures, { fichier = FICHIER, maintenant = ne
     .filter((m) => typeof m.cm === 'number' && Number.isFinite(m.cm) && m.cm >= 0)
     .filter((m) => deja.get(`${m.station ?? STATION_REFERENCE}|${m.jour}`) !== valeur(m.cm, m.hs))
     .map((m) => [run, 'mesure', m.jour, m.cm, '', '', '', '', '',
-      m.station ?? STATION_REFERENCE, m.hs ?? '']);
+      m.station ?? STATION_REFERENCE, m.hs ?? '', '']);
   return ajouter(lignes, fichier);
 }
 

@@ -13,6 +13,10 @@
 // journée. Règles d'envoi (nouvelle, hausse, baisse, prolongation, annulation) :
 // snow-episodes.mjs.
 //
+// Neige en cm : conversion D-005 (snow-conversion.mjs), précipitation horaire × part
+// neige × rapport selon la température, et non plus snowfall_sum (0,7 cm/mm fixe), gardé
+// au journal pour comparaison.
+//
 // Saison : 15 octobre → 15 avril.
 //
 // Env requis  : NTFY_TOPIC_NEIGE
@@ -29,6 +33,9 @@
 //                          de dépôt MARGE_ANNUL_NEIGE_CM ; 0 = sous le seuil)
 //   PROLONGE_MIN_CM=2    → neige minimale sur les jours ajoutés pour une
 //                          prolongation (variable PROLONGE_MIN_NEIGE_CM)
+//   TEMP_NEIGE_C=-5      → conversion D-005 : en dessous, toute la précipitation compte
+//                          en neige (variable de dépôt TEMP_NEIGE_C)
+//   TEMP_PLUIE_C=5       → ... au-dessus, rien (variable TEMP_PLUIE_C)
 //   AFFICHAGE_CM=5       → à l'écran, chute montrée sans inversion à partir de ce
 //                          cumul à venir (variable AFFICHAGE_NEIGE_CM)
 //
@@ -42,6 +49,7 @@ import { fetchEssai } from "./reseau.mjs";
 import { journaliserPrevision } from "./snow-qa.mjs";
 import { episodes as decouper, decider, ecranNeige } from "./snow-episodes.mjs";
 import { journaliserEnvoi } from "./snow-verdict.mjs";
+import { neigeJournaliere, TEMP_NEIGE_C, TEMP_PLUIE_C } from "./snow-conversion.mjs";
 
 // ══════ PARAMÈTRES ══════
 const LAT = 46.1913556421;
@@ -50,24 +58,35 @@ const ALT = 2022;
 const LIEU = "Les Collines";
 
 const SEUIL_CM = Number(process.env.SEUIL_CM) || 20;  // cumul sur l'épisode
+// Virgule décimale et signe moins typographique acceptés (« -2,5 », « −3 ») ; une valeur
+// non vide qui n'est pas un nombre rend le run rouge, défaut utilisé.
 const nombreEnv = (nom, defaut) => {
   const v = process.env[nom];
-  return v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Number(v) : defaut;
+  if (v === undefined || v.trim() === "") return defaut;
+  const n = Number(v.trim().replace(",", ".").replace("−", "-"));
+  if (Number.isFinite(n)) return n;
+  console.error(`Variable invalide : ${nom} = « ${v} » n'est pas un nombre — défaut ${defaut} utilisé.`);
+  process.exitCode = 1;
+  return defaut;
 };
 const HAUSSE_CM = nombreEnv("HAUSSE_CM", 5);
 const HAUSSE_PCT = nombreEnv("HAUSSE_PCT", 30);
 const MARGE_CM = nombreEnv("MARGE_CM", 2);
 const PROLONGE_MIN_CM = nombreEnv("PROLONGE_MIN_CM", 2);
 const AFFICHAGE_CM = nombreEnv("AFFICHAGE_CM", 5);
+const TEMP_NEIGE = nombreEnv("TEMP_NEIGE_C", TEMP_NEIGE_C);
+const TEMP_PLUIE = nombreEnv("TEMP_PLUIE_C", TEMP_PLUIE_C);
 const FICHIER_ECRAN = "data/neige-ecran.json";
 const SEUIL_FORCE = Boolean(process.env.SEUIL_FORCE);
 
 // Réglage absurde : le script tourne avec les défauts, mais le run est rouge.
 function reglages() {
   const r = { hausse: HAUSSE_CM, hausseRel: HAUSSE_PCT / 100, marge: MARGE_CM,
-    prolongeMin: PROLONGE_MIN_CM, affichage: AFFICHAGE_CM };
+    prolongeMin: PROLONGE_MIN_CM, affichage: AFFICHAGE_CM,
+    bornes: { neige: TEMP_NEIGE, pluie: TEMP_PLUIE } };
   const refuser = (msg, cle, defaut) => {
-    console.error(`Variable invalide : ${msg} — défaut ${defaut} utilisé.`);
+    const texte = typeof defaut === "object" ? `${defaut.neige} / ${defaut.pluie} °C` : defaut;
+    console.error(`Variable invalide : ${msg} — défaut ${texte} utilisé.`);
     process.exitCode = 1;
     r[cle] = defaut;
   };
@@ -75,6 +94,10 @@ function reglages() {
   if (!(HAUSSE_PCT >= 0 && HAUSSE_PCT <= 100)) refuser(`HAUSSE_PCT = ${HAUSSE_PCT}`, "hausseRel", 0.3);
   if (r.affichage <= 0) refuser(`AFFICHAGE_CM = ${r.affichage}`, "affichage", 5);
   if (r.prolongeMin < 0) refuser(`PROLONGE_MIN_CM = ${r.prolongeMin}`, "prolongeMin", 2);
+  if (!(TEMP_NEIGE < TEMP_PLUIE && TEMP_NEIGE >= -20 && TEMP_PLUIE <= 20)) {
+    refuser(`TEMP_NEIGE_C = ${TEMP_NEIGE}, TEMP_PLUIE_C = ${TEMP_PLUIE}`, "bornes",
+      { neige: TEMP_NEIGE_C, pluie: TEMP_PLUIE_C });
+  }
   if (!SEUIL_FORCE && (r.marge < 0 || r.marge >= SEUIL_CM)) {
     refuser(`MARGE_CM = ${r.marge}, seuil ${SEUIL_CM}`, "marge", Math.min(2, SEUIL_CM / 2));
   }
@@ -205,7 +228,7 @@ function ecrireEcran(ecran) {
 // écran, pour mesurer ce que vaut une annonce à J+9 avant de songer à l'afficher.
 // Sa panne ne touche pas l'alerte, mais elle se voit.
 async function journaliserLong(url, jour) {
-  const long = url.replace("&models=meteoswiss_icon_seamless", "")
+  const long = url.replace("&models=meteoswiss_icon_seamless", "").replace("&hourly=precipitation,temperature_2m", "")
     .replace("&forecast_days=5", "&forecast_days=16").replace(/&past_days=\d+/, "");
   try {
     const res = await fetchEssai(long);
@@ -239,6 +262,7 @@ async function main() {
     "https://api.open-meteo.com/v1/forecast" +
     `?latitude=${LAT}&longitude=${LON}&elevation=${ALT}` +
     "&daily=snowfall_sum,precipitation_sum,rain_sum,temperature_2m_mean" +
+    "&hourly=precipitation,temperature_2m" +
     "&models=meteoswiss_icon_seamless" +
     `&timezone=${encodeURIComponent(TZ)}` +
     "&forecast_days=5" +  // ICON-CH2 plafonne à 120 h
@@ -267,17 +291,28 @@ async function main() {
     return;
   }
 
-  // On confirme l'unité au lieu de la supposer
-  const unite = data.daily_units?.snowfall_sum;
-  console.log(`Unité neige renvoyée : ${unite}`);
-  if (unite !== "cm") {
-    console.log(`Unité inattendue — le seuil suppose des cm. Aucune alerte.`);
+  // On confirme les unités au lieu de les supposer
+  const uP = data.hourly_units?.precipitation, uT = data.hourly_units?.temperature_2m;
+  const uF = data.daily_units?.snowfall_sum;
+  console.log(`Unités renvoyées : précipitation ${uP}, température ${uT}, neige 0,7 fixe ${uF}`);
+  if (uP !== "mm" || uT !== "°C") {
+    console.log(`Unité inattendue — la conversion suppose mm et °C. Aucune alerte.`);
     process.exitCode = 1;
     return;
   }
 
+  const regl = reglages();
   const dates = data.daily?.time || [];
-  const neige = data.daily?.snowfall_sum || [];
+  // Neige de l'alerte et de l'écran : conversion D-005. snowfall_sum (0,7 fixe) reste au
+  // journal, en information : s'il manque, l'alerte part quand même, mais le run est rouge.
+  let neigeFixe = data.daily?.snowfall_sum;
+  if (uF !== "cm" || !Array.isArray(neigeFixe) || neigeFixe.length !== dates.length) {
+    console.error(`snowfall_sum inexploitable (unité ${uF}) : 0,7 fixe absent du journal.`);
+    process.exitCode = 1;
+    neigeFixe = dates.map(() => null);
+  }
+  const neige = neigeJournaliere(data.hourly, dates, regl.bornes);
+  console.log(`Conversion D-005 : neige sous ${regl.bornes.neige} °C, rien au-dessus de ${regl.bornes.pluie} °C.`);
   // À venir seulement : c'est ce qui prouve que l'alerte voit quelque chose.
   // Réponse 200 mais vide, ou sans aucune valeur de neige exploitable :
   // l'alerte serait aveugle, le run doit être rouge.
@@ -296,12 +331,13 @@ async function main() {
 
   console.log("\nPrévisions journalières :");
   for (let i = 0; i < datesFutur.length; i++) {
-    console.log(`  ${label(datesFutur[i])} · ${neigeFutur[i]} cm`);
+    console.log(`  ${label(datesFutur[i])} · ${neigeFutur[i]} cm (0,7 fixe : ${neigeFixe[iFutur[i]]} cm)`);
   }
   if (!DRY_RUN) {
     const serie = (nom) => iFutur.map((i) => data.daily?.[nom]?.[i] ?? null);
     console.log(`Journal neige : ${journaliserPrevision(jour, datesFutur, neigeFutur, {
-      annexes: { mm: serie("precipitation_sum"), pluie: serie("rain_sum"), tMoy: serie("temperature_2m_mean") },
+      annexes: { mm: serie("precipitation_sum"), pluie: serie("rain_sum"), tMoy: serie("temperature_2m_mean"),
+        cmFixe: iFutur.map((i) => neigeFixe[i]) },
     })} ligne(s) ajoutée(s).`);
   }
 
@@ -318,7 +354,6 @@ async function main() {
   }
 
   const avant = chargerEtat();
-  const regl = reglages();
   const retenir = (d) => enSaison(d) || IGNORER_SAISON;
   const inconnus = new Set(dates.filter((_, i) => typeof neige[i] !== "number" || !Number.isFinite(neige[i])));
   let decisions = decider(episodes, avant, {

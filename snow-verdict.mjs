@@ -21,13 +21,16 @@
 //   J+1 : la neige tombée le jour J est le HN_1D daté J+1 (HN_1D daté J couvre les
 //         24 h qui finissent le matin de J).
 // Une fois tranché, ALIGNEMENT vaut 'J' ou 'J+1' et la colonne verdict le reprend.
+// Tranché le 21.11.2026 (D-005) : J+1. Aux quatre stations, HN_1D daté J suit la hausse de
+// HS de 7h la veille à 7h le jour J (ILI2 20.11 : HN 32,3, HS +29 ; FNH2 13.11 : 12,3 et +13 ;
+// GRA2 20.11 : 10,6 et +10). Les deux lectures restent calculées, en information.
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { STATION_REFERENCE } from './snow-qa.mjs';
 
 export const ALERTES = 'data/alertes-neige.csv';
 export const ALERTES_QA = 'data/alertes-neige-qa.csv';
-export const ALIGNEMENT = null;           // null = pas encore tranché (D-003, Décision 2)
+export const ALIGNEMENT = 'J+1';          // tranché le 21.11.2026 (D-005 ; D-003, Décision 2)
 export const OBJECTIF_MESSAGES = 3;       // par épisode, au plus (D-003)
 
 const ENT_ALERTES = 'envoye_le,type,debut,fin,annonce_cm,avant_cm,echeance_j,seuil_cm';
@@ -167,13 +170,10 @@ export function ecrireVerdicts(lignes, fichier = ALERTES_QA) {
     .join('\n') + '\n');
 }
 
-// ---- biais par échéance et rapport neige / eau (Décision 3, information) ---------
+// ---- biais par échéance : alerte (D-005) contre l'ancien 0,7 fixe (information) ----
 
-// Hedstrom et Pomeroy (1998) : masse volumique de la neige fraîche selon la
-// température de l'air, ρ = 67,92 + 51,25·exp(T/2,59) kg/m³, T ≤ 0 °C (plafonnée à 0).
-// 1 mm d'eau donne 100/ρ cm. Open-Meteo applique 0,7 cm/mm fixe (ρ ≈ 143 kg/m³).
-export const rapportTemperature = (t) => 100 / (67.92 + 51.25 * Math.exp(Math.min(t, 0) / 2.59));
-export const RAPPORT_FIXE = 0.7;
+// La conversion vit dans snow-conversion.mjs ; réexportée pour les appels existants.
+export { rapportTemperature, RAPPORT_FIXE } from './snow-conversion.mjs';
 
 // Prévision ICON la plus récente à l'échéance k pour chaque jour. lignes = snow-qa.lire().
 function prevParEcheance(lignes, k) {
@@ -189,7 +189,9 @@ function prevParEcheance(lignes, k) {
 const mesureDuJour = (mesures, j, lecture) => mesures.get(lecture === 'J+1' ? decaler(j, 1) : j);
 
 // Jours retenus : prévu ou mesuré ≥ 1 cm (sinon les jours secs noient l'écart).
-export function biaisParEcheance(lignes, mesures, { echeances = [1, 2, 3, 4], minCm = 1 } = {}) {
+// champ : 'cm' = chiffre de l'alerte (conversion D-005 depuis le 21.11.2026, 0,7 fixe
+// avant) ; 'cmFixe' = 0,7 fixe d'Open-Meteo, toujours (D-005, surveillance continue).
+export function biaisParEcheance(lignes, mesures, { echeances = [1, 2, 3, 4], minCm = 1, champ = 'cm' } = {}) {
   const out = [];
   for (const k of echeances) {
     const p = prevParEcheance(lignes, k);
@@ -197,37 +199,15 @@ export function biaisParEcheance(lignes, mesures, { echeances = [1, 2, 3, 4], mi
       const ecarts = [];
       for (const [j, l] of p) {
         const m = mesureDuJour(mesures, j, lecture);
-        if (m == null || (l.cm < minCm && m < minCm)) continue;
-        ecarts.push(l.cm - m);
+        const v = l[champ];
+        if (m == null || !Number.isFinite(v) || (v < minCm && m < minCm)) continue;
+        ecarts.push(v - m);
       }
       const n = ecarts.length;
       out.push({ echeance: k, lecture, n,
         biais: n ? arrondi(ecarts.reduce((a, b) => a + b, 0) / n) : null,
         mae: n ? arrondi(ecarts.reduce((a, b) => a + Math.abs(b), 0) / n) : null });
     }
-  }
-  return out;
-}
-
-// Prévision à J-1 recalculée avec le rapport fixe et le rapport selon la température.
-export function comparerRapports(lignes, mesures, { minCm = 1 } = {}) {
-  const p = prevParEcheance(lignes, 1);
-  const out = [];
-  for (const lecture of ['J', 'J+1']) {
-    const fixe = [], temp = [];
-    for (const [j, l] of p) {
-      const m = mesureDuJour(mesures, j, lecture);
-      if (m == null || !Number.isFinite(l.tMoy)) continue;
-      // Eau tombée en neige déduite de snowfall_sum lui-même (= eau × 0,7) : mm − pluie
-      // la surestimerait les jours d'averses (showers_sum, non journalisé).
-      const eau = l.cm / RAPPORT_FIXE;
-      const f = l.cm, t = eau * rapportTemperature(l.tMoy);
-      if (f < minCm && t < minCm && m < minCm) continue;
-      fixe.push(f - m); temp.push(t - m);
-    }
-    const r = (e) => (e.length ? { biais: arrondi(e.reduce((a, b) => a + b, 0) / e.length),
-      mae: arrondi(e.reduce((a, b) => a + Math.abs(b), 0) / e.length) } : { biais: null, mae: null });
-    out.push({ lecture, n: fixe.length, fixe: r(fixe), temperature: r(temp) });
   }
   return out;
 }
@@ -254,16 +234,14 @@ export function rapport(lignesQa, lignesNeige, mesures) {
         ` (${g.messages.map((m) => m.type).join(', ')})`);
     }
   }
-  out.push('', 'Biais de la prévision ICON par échéance, prévu − mesuré en cm (information, D-003) :', '',
-    '| échéance | lecture | n | biais | écart moyen |', '|---|---|---|---|---|');
-  for (const b of biaisParEcheance(lignesNeige, mesures)) {
-    out.push(`| J-${b.echeance} | ${b.lecture} | ${b.n} | ${fmt(b.biais)} | ${fmt(b.mae)} |`);
-  }
-  out.push('', 'Rapport neige / eau à J-1, fixe 0,7 cm/mm contre selon la température (Hedstrom et Pomeroy) :', '',
-    '| lecture | n | biais fixe | écart fixe | biais température | écart température |', '|---|---|---|---|---|---|');
-  for (const c of comparerRapports(lignesNeige, mesures)) {
-    out.push(`| ${c.lecture} | ${c.n} | ${fmt(c.fixe.biais)} | ${fmt(c.fixe.mae)} | ` +
-      `${fmt(c.temperature.biais)} | ${fmt(c.temperature.mae)} |`);
-  }
+  out.push('', 'Biais de la prévision ICON par échéance, prévu − mesuré en cm : chiffre de l\'alerte ' +
+    '(conversion D-005 depuis le 21.11.2026, 0,7 fixe avant) et 0,7 cm/mm fixe, en information :', '',
+    '| échéance | lecture | n | biais alerte | écart alerte | biais 0,7 fixe | écart 0,7 fixe |',
+    '|---|---|---|---|---|---|---|');
+  const fixe = biaisParEcheance(lignesNeige, mesures, { champ: 'cmFixe' });
+  biaisParEcheance(lignesNeige, mesures).forEach((b, i) => {
+    out.push(`| J-${b.echeance} | ${b.lecture} | ${b.n} | ${fmt(b.biais)} | ${fmt(b.mae)} | ` +
+      `${fmt(fixe[i].biais)} | ${fmt(fixe[i].mae)} |`);
+  });
   return out.join('\n');
 }
