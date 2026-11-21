@@ -392,3 +392,11 @@ test('plan : hors saison -> null', () => {
   assert.equal(plan({ reposoir: [{ jour: '2027-11-13', de: 9, a: 18, kn: 20 }] },
     { maintenant: new Date('2027-11-12T17:00:00Z') }), null);
 });
+
+test('plan : fenetre en cours aujourd\'hui -> case qui tient, avec la moyenne de la fenetre', () => {
+  const samMidi = new Date('2027-05-15T10:30:00Z');       // samedi 12h30
+  const p = plan({ reposoir: [{ jour: SAM, de: 10, a: 14, kn: 14 }] }, { maintenant: samMidi });
+  assert.equal(p.jours[0], SAM);
+  assert.equal(p.s[0].ok[0], 1);
+  assert.equal(p.s[0].kn[0], 14);
+});

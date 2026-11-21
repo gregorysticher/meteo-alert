@@ -326,7 +326,10 @@ test('contrat : neige jointe en saison neige, nulle en saison vent ou si absente
     episode: { cm: 23, de: '2026-11-10', a: '2026-11-12', ok: true } };
   const fichiers = { 'data/neige-ecran.json': JSON.stringify(ecran) };
   const hiver = { now: '2026-11-08T10:00:00Z' };
-  assert.deepEqual(lancer(hiver, { ...HOOK, fichiers }).payload.neige, ecran);
+  // Page detail : bulletin et releves ajoutes a chaque envoi (pas d'archive HS ici).
+  assert.deepEqual(lancer(hiver, { ...HOOK, fichiers }).payload.neige, { ...ecran, mesure: null,
+    avalanche: { niveau: 3, sous: '', nom: 'marqué', pb: ['neige soufflée dès 2400 m'],
+      debut: Date.parse('2026-11-08T16:00:00Z') / 1000, fin: Date.parse('2026-11-09T16:00:00Z') / 1000 } });
   assert.equal(lancer(hiver, HOOK).payload.neige, null);
   assert.equal(lancer({}, { ...HOOK, fichiers }).payload.neige, null);
   // 6 jours : encore joint.
@@ -350,4 +353,41 @@ test('alerte : le message annonce la vraie fin de la fenetre', () => {
   const r = lancer({ vent: venteSamedi('Bellevue') });
   const conf = r.notifs.find((n) => n.title.startsWith('Confirme'));
   assert.match(conf.message, /→ 18:00/);
+});
+
+// ---- page detail : bulletin, releves ILI2, plan ------------------------------------
+
+test('page detail : bulletin en panne ou region absente -> rouge, envoi parti ; aucun bulletin -> vert', () => {
+  const ecran = { maj: '202611081000', lieu: 'Les Collines', episode: null };
+  const fichiers = { 'data/neige-ecran.json': JSON.stringify(ecran) };
+  const panne = lancer({ now: '2026-11-08T10:00:00Z', avalanche: 'panne' }, { ...HOOK, fichiers });
+  assert.equal(panne.code, 1, panne.out);
+  assert.match(panne.out, /ECHEC bulletin d'avalanches : HTTP 503/);
+  assert.equal(panne.payload.neige.avalanche, null);
+  assert.equal(panne.payload.neige.maj, '202611081000');
+  const autre = lancer({ now: '2026-11-08T10:00:00Z', avalanche: 'autre' }, { ...HOOK, fichiers });
+  assert.equal(autre.code, 1, autre.out);
+  assert.match(autre.out, /région CH-1312 absente/);
+  const vide = lancer({ now: '2026-11-08T10:00:00Z', avalanche: 'vide' }, { ...HOOK, fichiers });
+  assert.equal(vide.code, 0, vide.out);
+  assert.equal(vide.payload.neige.avalanche, null);
+});
+
+test('page detail : releves ILI2 joints, trop vieux -> null', () => {
+  const ecran = { maj: '202611081000', lieu: 'Les Collines', episode: null };
+  const hs = 'ts,station,hs,ta\n2026-11-07T09:00Z,ILI2,20,-1\n2026-11-08T09:00Z,ILI2,31,-3.4\n';
+  const neige = 'run,source,jour,cm,echeance_j,modele,mm,pluie_mm,t_moy,station,hs,cm_fixe\n' +
+    '2026-11-08T07:00Z,mesure,2026-11-08,11,,,,,,ILI2,,\n';
+  const f = { 'data/neige-ecran.json': JSON.stringify(ecran), 'data/neige-hs.csv': hs, 'data/neige.csv': neige };
+  const m = lancer({ now: '2026-11-08T10:00:00Z' }, { ...HOOK, fichiers: f }).payload.neige.mesure;
+  assert.deepEqual(m, { h: Date.parse('2026-11-08T09:00Z') / 1000, hs: 31, d24: 11, ta: -3.4, hn: [{ d: '2026-11-08', cm: 11 }] });
+  assert.equal(lancer({ now: '2026-11-11T10:00:00Z' }, { ...HOOK, fichiers: f }).payload.neige.mesure, null);
+});
+
+test('contrat : plan aligne sur spots[], 7 jours', () => {
+  const p = lancer({ vent: venteSamedi('Bellevue') }, HOOK).payload;
+  assert.ok(p.plan, 'plan present en saison vent');
+  assert.equal(p.plan.jours.length, 7);
+  assert.deepEqual(p.plan.s.map((x) => x.n), p.spots.map((x) => x.n));
+  assert.ok(p.plan.s.every((x) => x.kn.length === 7 && x.ok.length === 7));
 });

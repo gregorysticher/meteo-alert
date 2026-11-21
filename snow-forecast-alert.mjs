@@ -46,8 +46,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
 import { fetchEssai } from "./reseau.mjs";
-import { journaliserPrevision, lire as lireJournal } from "./snow-qa.mjs";
-import { detailJours, heures48, mesureStation, avalanche, URL_AVALANCHE, POUDRE } from "./snow-detail.mjs";
+import { journaliserPrevision } from "./snow-qa.mjs";
+import { detailJours, heuresDetail, POUDRE } from "./snow-detail.mjs";
 import { episodes as decouper, decider, ecranNeige } from "./snow-episodes.mjs";
 import { journaliserEnvoi } from "./snow-verdict.mjs";
 import { neigeJournaliere, neigeHoraire, TEMP_NEIGE_C, TEMP_PLUIE_C } from "./snow-conversion.mjs";
@@ -385,34 +385,15 @@ async function main() {
       jour, seuil: SEUIL_CM, hausse: regl.hausse, minAffichage: regl.affichage, retenir,
     }),
   };
-  // Contexte de la page détail (snow-detail.mjs). Une panne ne touche pas l'alerte :
-  // bloc vide, run rouge.
+  // Contexte de la page détail (snow-detail.mjs), même prévision que l'alerte. Une panne ne
+  // touche pas l'alerte : bloc vide, run rouge. Bulletin d'avalanches et relevés ILI2 :
+  // ajoutés par wind-alert à chaque envoi vers TRMNL (ils vieillissent plus vite).
+  ecran.alt = ALT;
   try {
     ecran.jours = detailJours(data, dates, neige, ecran.jours, POUDRE_REGL);
-    const ici = new Intl.DateTimeFormat("sv-SE", { timeZone: TZ, year: "numeric", month: "2-digit",
-      day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date()).replace(" ", "T");
-    ecran.h48 = heures48(data, ici, neigeHoraire, regl.bornes);
+    ecran.h = heuresDetail(data, Date.now(), neigeHoraire, regl.bornes);
   } catch (err) {
     console.error(`ECHEC détail des jours : ${err.message}`);
-    process.exitCode = 1;
-  }
-  try {
-    // Pas encore d'archive HS (l'alerte neige fraîche n'a pas tourné) : bloc vide, run vert.
-    ecran.mesure = existsSync("data/neige-hs.csv") ? mesureStation({ lignesNeige: lireJournal() }) : null;
-    if (existsSync("data/neige-hs.csv") && !ecran.mesure) throw new Error("aucun relevé ILI2 dans data/neige-hs.csv");
-  } catch (err) {
-    console.error(`ECHEC mesures de la station : ${err.message}`);
-    ecran.mesure = null;
-    process.exitCode = 1;
-  }
-  try {
-    const res = await fetchEssai(URL_AVALANCHE);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    ecran.avalanche = avalanche(await res.json());
-    if (!ecran.avalanche) throw new Error("région absente du bulletin");
-  } catch (err) {
-    console.error(`ECHEC bulletin d'avalanches : ${err.message}`);
-    ecran.avalanche = null;
     process.exitCode = 1;
   }
   console.log(`\nÉcran : ${JSON.stringify(ecran)}`);

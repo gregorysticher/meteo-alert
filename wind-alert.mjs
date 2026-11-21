@@ -26,6 +26,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { notifier, sortieSiEchecs } from './notify.mjs';
 import { apresSilence } from './silence.mjs';
 import { fetchEssai } from './reseau.mjs';
+import { mesureStation, lireAvalanche } from './snow-detail.mjs';
+import { lire as lireJournalNeige } from './snow-qa.mjs';
 import { previsions, previsionsArome, mesures, tempLac } from './wind-sources.mjs';
 import {
   archiver, apparier, rapport, versDate, versCle,
@@ -125,7 +127,24 @@ async function neigeEcran(saison, maintenant) {
   try {
     const n = JSON.parse(await readFile('data/neige-ecran.json', 'utf8'));
     // Fichier de la saison passee, si les premiers runs de l'hiver ont echoue.
-    return (maintenant - versDate(n.maj)) / 864e5 > NEIGE_AGE_MAX_J ? null : n;
+    if ((maintenant - versDate(n.maj)) / 864e5 > NEIGE_AGE_MAX_J) return null;
+    // Page detail (snow-detail.mjs) : releves ILI2 et bulletin d'avalanches lus a chaque
+    // envoi, ils vieillissent plus vite que la prevision. Panne : bloc vide, run rouge,
+    // l'envoi part quand meme.
+    try {
+      n.mesure = mesureStation({ lignesNeige: lireJournalNeige(), maintenant });
+    } catch (err) {
+      console.error(`ECHEC releves ILI2 : ${err.message}`);
+      n.mesure = null;
+      process.exitCode = 1;
+    }
+    const av = await lireAvalanche(fetchEssai);
+    n.avalanche = av.avalanche;
+    if (av.erreur) {
+      console.error(`ECHEC bulletin d'avalanches : ${av.erreur}`);
+      process.exitCode = 1;
+    }
+    return n;
   } catch (err) {
     if (err.code === 'ENOENT') return null;
     console.error(`ECHEC data/neige-ecran.json : ${err.message}`);
@@ -361,7 +380,14 @@ if (QA_ONLY) {
   // Webhook injoignable : run rouge, mais la QA du run ne doit pas etre perdue.
   try {
     const profil = profilReco(classement, cfg, biais, maintenant, reco);
-    const plan = planSemaine(classement, cfg, biais, maintenant);
+    // Plan de la page detail : sa panne ne doit pas geler l'ecran.
+    let plan = null;
+    try {
+      plan = planSemaine(classement, cfg, biais, maintenant);
+    } catch (err) {
+      console.error(`ECHEC plan de la semaine : ${err.message}`);
+      process.exitCode = 1;
+    }
     console.log(await versTrmnl(classement, cfg, emission, reco, profil, maintenant, plan));
   } catch (err) {
     console.error(`ECHEC webhook TRMNL : ${err.message}`);

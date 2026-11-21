@@ -1,29 +1,30 @@
 // snow-detail.mjs — contexte de la page détail neige (TRMNL, saison neige), demandé par
 // Greg le 21.11.2026 : de quoi choisir une journée de ski depuis l'écran.
 //
-// Tout est décidé ici, rien en Liquid (docs/contrat-trmnl.md). Trois blocs, joints à
-// data/neige-ecran.json par snow-forecast-alert.mjs :
-//   detailJours : par jour à venir, températures, pluie, isotherme 0 °C, rafales, soleil
-//                 et « jour de poudre » (même prévision ICON que l'alerte, à 2022 m) ;
-//   mesureStation : hauteur de neige et neige fraîche mesurées à ILI2 (journaux du dépôt) ;
-//   avalanche   : bulletin SLF de la région de Les Collines.
+// Tout est décidé ici, rien en Liquid (docs/contrat-trmnl.md). Deux origines :
+//   - au run neige annoncée (snow-forecast-alert.mjs), avec la prévision ICON de l'alerte :
+//     detailJours (températures, pluie, isotherme 0 °C, rafales, soleil, jour de poudre)
+//     et heuresDetail (60 heures, l'écran masque celles déjà passées) ;
+//   - à chaque envoi vers TRMNL (wind-alert.mjs, toutes les 4 h), parce qu'elles vieillissent
+//     vite : mesureStation (relevés ILI2 des journaux du dépôt) et avalanche (bulletin SLF).
 // Aucune alerte n'en dépend : une panne laisse le bloc vide et rend le run rouge.
 
 import { readFileSync, existsSync } from 'node:fs';
+
+const nb = (x) => typeof x === 'number' && Number.isFinite(x);
+const arr = (x, pas = 1) => (nb(x) ? Math.round(x / pas) * pas : null);
 
 // ---- jours à venir --------------------------------------------------------------
 
 // Jour de poudre : la neige de la veille (conversion D-005, celle de l'alerte) atteint
 // POUDRE_CM, le jour est ensoleillé (POUDRE_SOLEIL_H), peu venté (rafales sous
-// POUDRE_RAFALES_KMH à 2022 m) et pas doux (maximum sous POUDRE_TMAX_C : neige qui
-// reste sèche). Seuils en variables de dépôt, valeurs par défaut ci-dessous.
+// POUDRE_RAFALES_KMH à 2022 m) et pas doux (maximum au plus POUDRE_TMAX_C : neige qui
+// reste sèche). Jugé sur les valeurs affichées (arrondies), pour que l'écran ne montre
+// jamais « 4 h » de soleil sans POUDRE. Seuils en variables de dépôt.
 export const POUDRE = { cm: 10, soleilH: 4, rafalesKmh: 50, tmaxC: 2 };
 
-// Isotherme 0 °C : le plus haut entre 9h et 16h locales (heures de ski).
+// Isotherme 0 °C : le plus haut entre 9h et 16h locales (heures de ski ; valeur instantanée).
 const ISO_HEURES = [9, 16];
-
-const nb = (x) => typeof x === 'number' && Number.isFinite(x);
-const arr = (x, pas = 1) => (nb(x) ? Math.round(x / pas) * pas : null);
 
 // data = réponse Open-Meteo (daily et hourly, heure locale) ; dates/neige = série de
 // l'alerte (jours passés compris) ; jours = [{ d, cm }] de ecranNeige. Renvoie les mêmes
@@ -49,33 +50,39 @@ export function detailJours(data, dates, neige, jours, poudre = POUDRE) {
     const v = (nom) => (i >= 0 ? d[nom]?.[i] : null);
     const pluie = nb(v('rain_sum')) || nb(v('showers_sum'))
       ? (v('rain_sum') ?? 0) + (v('showers_sum') ?? 0) : null;
-    const sol = nb(v('sunshine_duration')) ? v('sunshine_duration') / 3600 : null;
-    const raf = v('wind_gusts_10m_max');
-    const tx = v('temperature_2m_max');
+    const sol = arr(nb(v('sunshine_duration')) ? v('sunshine_duration') / 3600 : null);
+    const raf = arr(v('wind_gusts_10m_max'));
+    const tx = arr(v('temperature_2m_max'));
     const nv = veille(x.d);
-    const p = nv != null && nb(sol) && nb(raf) && nb(tx) &&
+    const p = nv != null && sol != null && raf != null && tx != null &&
       nv >= poudre.cm && sol >= poudre.soleilH && raf < poudre.rafalesKmh && tx <= poudre.tmaxC;
     return {
       ...x,
-      tn: arr(v('temperature_2m_min')), tx: arr(tx),
-      pl: arr(pluie), iso: arr(isoMax.get(x.d), 100), raf: arr(raf), sol: arr(sol),
+      tn: arr(v('temperature_2m_min')), tx,
+      pl: arr(pluie), iso: arr(isoMax.get(x.d), 100), raf, sol,
       p: p ? 1 : 0,
     };
   });
 }
 
-// ---- les 48 prochaines heures ----------------------------------------------------
+// ---- heure par heure ---------------------------------------------------------------
 
-// À partir de l'heure locale en cours (étiquette Open-Meteo = fin de l'heure) : neige
-// convertie (D-005, la même que l'alerte), pluie du modèle (rain + showers) et
-// température, heure par heure. { de: 'AAAA-MM-JJTHH:00' local de la première valeur,
-// cm: [cm au dixième], pl: [mm au dixième], t: [°C entier] } ; null si les heures
-// manquent. Une heure absente vaut null, jamais 0.
-export const HEURES_DETAIL = 48;
-export function heures48(data, maintenantLocal, neigeHoraire, bornes, n = HEURES_DETAIL) {
+// HEURES_DETAIL heures à partir de l'heure en cours au moment du run. L'écran masque
+// celles déjà finies au moment du rendu et en montre 48 : le fichier n'arrive à l'écran
+// qu'au run vent suivant (jusqu'à 4 h plus tard), d'où la marge.
+// { h0: début de la première heure, epoch UTC en secondes, cm: [neige convertie D-005, au
+// dixième], pl: [pluie du modèle rain + showers, mm au dixième], t: [°C entiers] } ;
+// null si les heures manquent. Une heure absente vaut null, jamais 0.
+// Étiquette Open-Meteo = fin de l'heure, en heure locale à décalage fixe
+// (utc_offset_seconds, le même pour toute la réponse).
+export const HEURES_DETAIL = 60;
+export function heuresDetail(data, maintenantMs, neigeHoraire, bornes, n = HEURES_DETAIL) {
   const h = data?.hourly ?? {};
   const time = h.time ?? [];
-  const debut = time.findIndex((t) => t > maintenantLocal);
+  const decal = nb(data?.utc_offset_seconds) ? data.utc_offset_seconds : null;
+  if (decal === null) return null;
+  const fin = (t) => Date.parse(`${t}:00Z`) - decal * 1000;   // epoch ms de la fin de l'heure
+  const debut = time.findIndex((t) => fin(t) > maintenantMs);
   if (debut < 0) return null;
   const cm = [], pl = [], t = [];
   for (let i = debut; i < debut + n && i < time.length; i++) {
@@ -86,18 +93,21 @@ export function heures48(data, maintenantLocal, neigeHoraire, bornes, n = HEURES
     pl.push(nb(r) ? Math.round(r * 10) / 10 : null);
     t.push(nb(T) ? Math.round(T) : null);
   }
-  return cm.length ? { de: time[debut], cm, pl, t } : null;
+  return cm.length ? { h0: Math.round(fin(time[debut]) / 1000) - 3600, cm, pl, t } : null;
 }
 
 // ---- mesures à la station --------------------------------------------------------
 
 // HS à la demi-heure (data/neige-hs.csv, écrit par l'alerte neige fraîche) et HN_1D
-// (data/neige.csv). Renvoie { h, hs, d24, ta, hn: [{ d, cm }] } ou null.
+// (data/neige.csv). Renvoie { h, hs, d24, ta, hn: [{ d, cm }] } ou null (pas de relevé,
+// ou dernier relevé de plus de AGE_MESURE_H : archive d'une autre saison).
 //   h   : relevé HS le plus récent, epoch UTC en secondes (l'écran le montre en local) ;
 //   d24 : HS maintenant − HS 24 h avant (± 1 h), null sans relevé assez ancien ;
 //   hn  : les trois derniers HN_1D publiés, du plus ancien au plus récent. Lecture J+1
 //         (B4.1) : le HN daté J est la neige tombée de la veille 7h au jour J 7h.
-export function mesureStation({ fichierHs = 'data/neige-hs.csv', lignesNeige = [], station = 'ILI2' } = {}) {
+export const AGE_MESURE_H = 48;
+export function mesureStation({ fichierHs = 'data/neige-hs.csv', lignesNeige = [], station = 'ILI2',
+  maintenant = new Date() } = {}) {
   if (!existsSync(fichierHs)) return null;
   const rel = readFileSync(fichierHs, 'utf8').trim().split('\n').slice(1)
     .map((l) => l.trimEnd().split(','))
@@ -107,6 +117,7 @@ export function mesureStation({ fichierHs = 'data/neige-hs.csv', lignesNeige = [
     .sort((a, b) => a.t - b.t);
   if (!rel.length) return null;
   const der = rel.at(-1);
+  if (maintenant - der.t > AGE_MESURE_H * 36e5) return null;
   const cible = der.t - 864e5;
   const avant = rel.filter((r) => Math.abs(r.t - cible) <= 36e5)
     .sort((a, b) => Math.abs(a.t - cible) - Math.abs(b.t - cible))[0];
@@ -133,34 +144,56 @@ export function mesureStation({ fichierHs = 'data/neige-hs.csv', lignesNeige = [
 export const REGION_AVALANCHE = 'CH-1312';
 export const URL_AVALANCHE = 'https://aws.slf.ch/api/bulletin/caaml/fr/json';
 const NIVEAUX = { low: 1, moderate: 2, considerable: 3, high: 4, very_high: 5 };
-const SOUS = { minus: '-', neutral: '=', plus: '+' };
+const NOMS = ['', 'faible', 'limité', 'marqué', 'fort', 'très fort'];
+const SOUS = { minus: ['-', 0], neutral: ['', 1], plus: ['+', 2] };
 const PROBLEMES = {
   new_snow: 'neige fraîche', wind_slab: 'neige soufflée', persistent_weak_layers: 'neige ancienne',
   wet_snow: 'neige mouillée', gliding_snow: 'avalanches de glissement',
   favourable_situation: 'situation favorable', no_distinct_avalanche_problem: 'pas de problème marqué',
 };
 
-// json = bulletin CAAML v6 (bulletins[]). Renvoie { niveau, sous, pb, alt, fin } ou null
-// si la région n'y est pas. niveau = le plus haut de la journée ; pb = problèmes, sans
-// doublon, dans l'ordre du bulletin ; alt = limite basse de l'altitude du premier
-// problème (m) ; fin = fin de validité, epoch UTC en secondes.
+// json = bulletin CAAML v6 (bulletins[]). Renvoie :
+//   { niveau, sous, nom, pb, debut, fin } : niveau = le plus haut de la journée (sous-degré
+//     − < = < +), nom en français, pb = deux problèmes au plus, « dès X m » collé à celui qui
+//     a une limite basse d'altitude ; debut / fin = validité, epoch UTC en secondes ;
+//   'vide' si le bulletin ne contient aucune région (hors saison, pas de publication) ;
+//   null si des bulletins existent mais pas cette région (région renommée : à corriger).
 export function avalanche(json, region = REGION_AVALANCHE) {
-  const b = (json?.bulletins ?? []).find((x) => (x.regions ?? []).some((r) => r.regionID === region));
+  const tous = json?.bulletins ?? [];
+  if (!tous.length) return 'vide';
+  const b = tous.find((x) => (x.regions ?? []).some((r) => r.regionID === region));
   if (!b) return null;
-  let niveau = 0, sous = '';
+  let niveau = 0, rang = -1, sous = '';
   for (const r of b.dangerRatings ?? []) {
     const n = NIVEAUX[r.mainValue] ?? 0;
-    const s = SOUS[r.customData?.CH?.subdivision] ?? '';
-    if (n > niveau || (n === niveau && s === '+')) { niveau = n; sous = s; }
+    const [s, k] = SOUS[r.customData?.CH?.subdivision] ?? ['', 1];
+    if (n > niveau || (n === niveau && k > rang)) { niveau = n; rang = k; sous = s; }
   }
   if (!niveau) return null;
-  const pbs = b.avalancheProblems ?? [];
-  const pb = [...new Set(pbs.map((p) => PROBLEMES[p.problemType] ?? p.problemType))].slice(0, 2);
-  const lb = pbs[0]?.elevation?.lowerBound;
-  const fin = Date.parse(b.validTime?.endTime ?? '');
-  return {
-    niveau, sous: sous === '=' ? '' : sous, pb,
-    alt: lb != null && nb(+lb) ? +lb : null,
-    fin: nb(fin) ? Math.round(fin / 1000) : null,
-  };
+  const pb = [];
+  for (const p of b.avalancheProblems ?? []) {
+    const nom = PROBLEMES[p.problemType] ?? p.problemType;
+    if (pb.some((x) => x.startsWith(nom))) continue;
+    const lb = p.elevation?.lowerBound;
+    pb.push(lb != null && nb(+lb) ? `${nom} dès ${+lb} m` : nom);
+    if (pb.length === 2) break;
+  }
+  const t = (x) => { const v = Date.parse(x ?? ''); return nb(v) ? Math.round(v / 1000) : null; };
+  return { niveau, sous, nom: NOMS[niveau], pb, debut: t(b.validTime?.startTime), fin: t(b.validTime?.endTime) };
+}
+
+// Lu à chaque envoi vers TRMNL (wind-alert.mjs). Renvoie { avalanche, erreur } : erreur
+// (texte) rend le run rouge ; bulletin vide (hors saison) : avalanche null, sans erreur.
+export async function lireAvalanche(fetchEssai) {
+  try {
+    const res = await fetchEssai(URL_AVALANCHE);
+    if (res.status === 404) return { avalanche: null };
+    if (!res.ok) return { avalanche: null, erreur: `HTTP ${res.status}` };
+    const a = avalanche(await res.json());
+    if (a === 'vide') return { avalanche: null };
+    if (!a) return { avalanche: null, erreur: `région ${REGION_AVALANCHE} absente du bulletin` };
+    return { avalanche: a };
+  } catch (err) {
+    return { avalanche: null, erreur: err.message };
+  }
 }

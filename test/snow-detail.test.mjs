@@ -52,6 +52,9 @@ test('jours : valeurs absentes -> null, jamais 0', () => {
 
 // ---- mesures ILI2 --------------------------------------------------------------
 
+
+const MAINTENANT = new Date('2026-11-21T10:00:00Z');
+
 test('mesures : dernier HS, variation sur 24 h, trois derniers HN publiés', () => {
   const dir = mkdtempSync(join(tmpdir(), 'det-'));
   const f = join(dir, 'hs.csv');
@@ -61,12 +64,14 @@ test('mesures : dernier HS, variation sur 24 h, trois derniers HN publiés', () 
       '2026-11-21T06:30Z,FNH2,140,-5\n' +          // autre station : ignorée
       '2026-11-21T06:00Z,ILI2,38.6,-2.94\n2026-11-21T05:30Z,ILI2,37,-3\n');
     const hn = (jour, cm, run = '2026-11-21T07:00Z', station = 'ILI2') => ({ source: 'mesure', jour, cm, run, station });
-    const m = mesureStation({ fichierHs: f, lignesNeige: [
+    const m = mesureStation({ fichierHs: f, maintenant: MAINTENANT, lignesNeige: [
       hn('2026-11-18', 5), hn('2026-11-19', 2.3), hn('2026-11-20', 30), hn('2026-11-20', 32.3, '2026-11-21T08:00Z'),
       hn('2026-11-21', 21.2), hn('2026-11-21', 99, '2026-11-21T09:00Z', 'FNH2'),
     ] });
     assert.deepEqual(m, { h: Date.parse('2026-11-21T06:00Z') / 1000, hs: 39, d24: 29, ta: -2.9,
       hn: [{ d: '2026-11-19', cm: 2 }, { d: '2026-11-20', cm: 32 }, { d: '2026-11-21', cm: 21 }] });
+    // Plus de 48 h : archive d'une autre saison, pas montrée comme actuelle.
+    assert.equal(mesureStation({ fichierHs: f, maintenant: new Date('2026-11-23T07:00:00Z') }), null);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -77,7 +82,7 @@ test('mesures : pas de relevé 24 h avant -> d24 null ; fichier absent -> null',
   const f = join(dir, 'hs.csv');
   try {
     writeFileSync(f, 'ts,station,hs,ta\n2026-11-21T06:00Z,ILI2,38,\n');
-    const m = mesureStation({ fichierHs: f });
+    const m = mesureStation({ fichierHs: f, maintenant: MAINTENANT });
     assert.equal(m.d24, null);
     assert.equal(m.ta, null);
     assert.deepEqual(m.hn, []);
@@ -92,49 +97,74 @@ test('mesures : pas de relevé 24 h avant -> d24 null ; fichier absent -> null',
 const bulletin = (ratings, problems = [], region = 'CH-1312') => ({ bulletins: [
   { regions: [{ regionID: 'CH-9999' }], dangerRatings: [{ mainValue: 'low' }] },
   { regions: [{ regionID: region }], dangerRatings: ratings, avalancheProblems: problems,
-    validTime: { endTime: '2026-11-21T16:00:00Z' } },
+    validTime: { startTime: '2026-11-21T07:00:00Z', endTime: '2026-11-21T16:00:00Z' } },
 ] });
 
-test('avalanches : degré de la région, sous-degré, problèmes en français, altitude', () => {
+test('avalanches : degré, sous-degré, nom, problèmes avec leur altitude, validité', () => {
   const a = avalanche(bulletin(
     [{ mainValue: 'high', customData: { CH: { subdivision: 'minus' } } }],
     [{ problemType: 'new_snow', elevation: { lowerBound: '2200' } }, { problemType: 'wind_slab' }, { problemType: 'new_snow' }]));
-  assert.deepEqual(a, { niveau: 4, sous: '-', pb: ['neige fraîche', 'neige soufflée'], alt: 2200,
-    fin: Date.parse('2026-11-21T16:00:00Z') / 1000 });
+  assert.deepEqual(a, { niveau: 4, sous: '-', nom: 'fort', pb: ['neige fraîche dès 2200 m', 'neige soufflée'],
+    debut: Date.parse('2026-11-21T07:00:00Z') / 1000, fin: Date.parse('2026-11-21T16:00:00Z') / 1000 });
 });
 
-test('avalanches : le plus haut de la journée ; région absente -> null', () => {
+test('avalanches : le plus haut de la journée, sous-degré − < = < +', () => {
   const a = avalanche(bulletin([{ mainValue: 'moderate', validTimePeriod: 'earlier' },
     { mainValue: 'considerable', validTimePeriod: 'later', customData: { CH: { subdivision: 'neutral' } } }]));
   assert.equal(a.niveau, 3);
   assert.equal(a.sous, '');
-  assert.equal(a.alt, null);
+  assert.equal(a.nom, 'marqué');
+  const b = avalanche(bulletin([{ mainValue: 'considerable', customData: { CH: { subdivision: 'minus' } } },
+    { mainValue: 'considerable', customData: { CH: { subdivision: 'neutral' } } }]));
+  assert.equal(b.sous, '', '3= l\'emporte sur 3−');
+  const c = avalanche(bulletin([{ mainValue: 'considerable', customData: { CH: { subdivision: 'plus' } } },
+    { mainValue: 'considerable' }]));
+  assert.equal(c.sous, '+');
+});
+
+test('avalanches : aucun bulletin -> « vide » ; région absente ou degré inconnu -> null', () => {
+  assert.equal(avalanche({ bulletins: [] }), 'vide');
+  assert.equal(avalanche({}), 'vide');
   assert.equal(avalanche(bulletin([{ mainValue: 'high' }], [], 'CH-4115')), null);
-  assert.equal(avalanche({}), null);
   assert.equal(avalanche(bulletin([{ mainValue: 'inconnu' }])), null);
 });
 
-// ---- 48 heures -------------------------------------------------------------------
+test('avalanches : lecture réseau, 404 et vide verts, panne et région absente rouges', async () => {
+  const { lireAvalanche } = await import('../snow-detail.mjs');
+  const rep = (status, body) => async () => new Response(JSON.stringify(body), { status });
+  assert.deepEqual(await lireAvalanche(rep(404, {})), { avalanche: null });
+  assert.deepEqual(await lireAvalanche(rep(200, { bulletins: [] })), { avalanche: null });
+  assert.equal((await lireAvalanche(rep(503, {}))).erreur, 'HTTP 503');
+  assert.match((await lireAvalanche(rep(200, bulletin([{ mainValue: 'high' }], [], 'CH-4115')))).erreur, /CH-1312 absente/);
+  assert.equal((await lireAvalanche(async () => { throw new Error('ECONNRESET'); })).erreur, 'ECONNRESET');
+  assert.equal((await lireAvalanche(rep(200, bulletin([{ mainValue: 'high' }])))).avalanche.niveau, 4);
+});
 
-test('48 h : depuis l\'heure en cours, neige convertie, pluie du modèle, température', async () => {
-  const { heures48 } = await import('../snow-detail.mjs');
+// ---- heure par heure ---------------------------------------------------------------
+
+test('heures : depuis l\'heure en cours, h0 = début de la première heure (étiquette − 1 h)', async () => {
+  const { heuresDetail } = await import('../snow-detail.mjs');
   const { neigeHoraire, rapportTemperature } = await import('../snow-conversion.mjs');
   const time = [], precipitation = [], temperature_2m = [], rain = [], showers = [];
-  for (let k = 0; k < 72; k++) {
-    const j = k < 24 ? '21' : k < 48 ? '22' : '23';
-    time.push(`2026-11-${j}T${String(k % 24).padStart(2, '0')}:00`);
+  for (let k = 0; k < 96; k++) {
+    // étiquettes locales à décalage fixe +1 h (utc_offset_seconds = 3600)
+    time.push(new Date(Date.UTC(2026, 10, 21, k)).toISOString().slice(0, 16));
     precipitation.push(k === 14 ? 2 : 0); temperature_2m.push(k === 14 ? -6 : 1.6);
     rain.push(k === 15 ? 1.25 : 0); showers.push(k === 15 ? 0.5 : null);
   }
-  const r = heures48({ hourly: { time, precipitation, temperature_2m, rain, showers } }, '2026-11-21T13:42', neigeHoraire);
-  assert.equal(r.de, '2026-11-21T14:00');               // heure 13-14 en cours
-  assert.equal(r.cm.length, 48);
+  const data = { utc_offset_seconds: 3600, hourly: { time, precipitation, temperature_2m, rain, showers } };
+  // 12:42 UTC = 13:42 locale : heure en cours 13h-14h locale, étiquette « 14:00 ».
+  const r = heuresDetail(data, Date.parse('2026-11-21T12:42:00Z'), neigeHoraire);
+  assert.equal(r.h0, Date.parse('2026-11-21T12:00:00Z') / 1000);   // 13:00 locale
+  assert.equal(r.cm.length, 60);
   assert.equal(r.cm[0], Math.round(2 * rapportTemperature(-6) * 10) / 10);
   assert.equal(r.pl[1], 1.8);
   assert.equal(r.t[0], -6);
   assert.equal(r.t[1], 2);
-  assert.equal(heures48({ hourly: { time } }, '2026-11-30T00:00', neigeHoraire), null);
-  const trou = heures48({ hourly: { time, precipitation: precipitation.map((v, k) => (k === 14 ? null : v)), temperature_2m } }, '2026-11-21T13:42', neigeHoraire);
+  assert.equal(heuresDetail({ ...data, utc_offset_seconds: undefined }, Date.now(), neigeHoraire), null);
+  assert.equal(heuresDetail(data, Date.parse('2026-12-30T00:00:00Z'), neigeHoraire), null);
+  const trou = heuresDetail({ ...data, hourly: { time, precipitation: precipitation.map((v, k) => (k === 14 ? null : v)), temperature_2m } },
+    Date.parse('2026-11-21T12:42:00Z'), neigeHoraire);
   assert.equal(trou.cm[0], null);
   assert.equal(trou.pl[0], null);
 });

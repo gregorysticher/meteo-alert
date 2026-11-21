@@ -225,6 +225,10 @@ export function planSemaine(classement, cfg, biais, maintenant, nSpots = 6) {
     const hs = heures(c.lignes, c.spot, cfg, biais, maintenant);
     const fs = fenetres(c.lignes, c.spot, cfg, cfg.seuil_kn, biais, maintenant);
     const kn = jours.map((j) => {
+      // Jour qui tient : la moyenne de la fenetre, meme deja commencee (une fenetre
+      // 10-14 h vue a 12h30 n'a plus min_heures heures a venir, mais elle tient).
+      const fj = fs.filter((f) => f[0].t.iso === j);
+      if (fj.length) return Math.max(0, Math.round(Math.max(...fj.map((f) => moyenne(f, 'corrige')))));
       let best = null;
       for (const run of suites(hs.filter((h) => h.t.iso === j), (h) => h.ok)) {
         for (let i = 0; i + n <= run.length; i++) {

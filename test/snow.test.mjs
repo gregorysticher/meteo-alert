@@ -586,20 +586,15 @@ test('rapport : modèle de l\'alerte et station de référence seuls', () => {
 
 // ---- page detail neige (contexte) -------------------------------------------------
 
-test('annoncée : bulletin d\'avalanches en panne -> rouge, MAIS alerte partie et écran écrit sans le bloc', () => {
-  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]),
-    { ...REEL, MOCK_AVALANCHE: JSON.stringify({ status: 503, body: {} }) });
-  assert.equal(r.code, 1, r.out);
-  assert.match(r.out, /ECHEC bulletin d'avalanches : HTTP 503/);
-  assert.match(r.out, /À notifier : 1/);
-  assert.equal(r.ecran.avalanche, null);
-  assert.equal(r.ecran.episode.cm, 12);
-});
-test('annoncée : écran enrichi (jours détaillés, bulletin), vert sans archive HS', () => {
-  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), REEL);
+test('annoncée : écran enrichi (jours détaillés, altitude), sans bulletin ni relevés (ajoutés par wind-alert)', () => {
+  const m = prev([0, 7, 5, 0, 0]);
+  m.body.utc_offset_seconds = 3600;
+  const r = lancer('snow-forecast-alert.mjs', m, REEL);
   assert.equal(r.code, 0, r.out);
-  assert.deepEqual(r.ecran.avalanche, { niveau: 3, sous: '', pb: ['neige soufflée'], alt: null,
-    fin: Date.parse('2026-11-21T16:00:00Z') / 1000 });
-  assert.equal(r.ecran.mesure, null);
+  assert.equal(r.ecran.alt, 2022);
   assert.ok(['tn', 'tx', 'pl', 'iso', 'raf', 'sol', 'p'].every((k) => k in r.ecran.jours[0]), JSON.stringify(r.ecran.jours[0]));
+  assert.equal(r.ecran.h.cm.length > 0, true);
+  assert.equal('avalanche' in r.ecran, false);
+  assert.equal('mesure' in r.ecran, false);
+  assert.doesNotMatch(r.out, /aws\.slf\.ch|bulletin/);
 });

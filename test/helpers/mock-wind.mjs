@@ -117,6 +117,16 @@ globalThis.fetch = async (url, opts = {}) => {
     const age = M.arome === 'fige' ? 30 : 3;
     return reponse({ last_run_initialisation_time: Math.floor((NOW - age * 36e5) / 1000) });
   }
+  // Bulletin d'avalanches SLF (page detail neige). M.avalanche : 'panne' (HTTP 503),
+  // 'vide' (aucun bulletin), 'autre' (region absente) ; sinon un bulletin CH-1312 degre 3.
+  if (u.includes('aws.slf.ch')) {
+    if (M.avalanche === 'panne') return reponse({}, 503);
+    if (M.avalanche === 'vide') return reponse({ bulletins: [] });
+    const region = M.avalanche === 'autre' ? 'CH-9999' : 'CH-1312';
+    return reponse({ bulletins: [{ regions: [{ regionID: region }], dangerRatings: [{ mainValue: 'considerable' }],
+      avalancheProblems: [{ problemType: 'wind_slab', elevation: { lowerBound: '2400' } }],
+      validTime: { startTime: '2026-11-08T16:00:00Z', endTime: '2026-11-09T16:00:00Z' } }] });
+  }
   if (u.includes('open-meteo')) {
     if (M.arome === 'vide') return reponse([]);
     if (M.arome_strict && !(u.includes('models=meteofrance_arome_france_hd') &&
