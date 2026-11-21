@@ -58,9 +58,16 @@ const ALT = 2022;
 const LIEU = "Les Collines";
 
 const SEUIL_CM = Number(process.env.SEUIL_CM) || 20;  // cumul sur l'épisode
+// Virgule décimale et signe moins typographique acceptés (« -2,5 », « −3 ») ; une valeur
+// non vide qui n'est pas un nombre rend le run rouge, défaut utilisé.
 const nombreEnv = (nom, defaut) => {
   const v = process.env[nom];
-  return v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Number(v) : defaut;
+  if (v === undefined || v.trim() === "") return defaut;
+  const n = Number(v.trim().replace(",", ".").replace("−", "-"));
+  if (Number.isFinite(n)) return n;
+  console.error(`Variable invalide : ${nom} = « ${v} » n'est pas un nombre — défaut ${defaut} utilisé.`);
+  process.exitCode = 1;
+  return defaut;
 };
 const HAUSSE_CM = nombreEnv("HAUSSE_CM", 5);
 const HAUSSE_PCT = nombreEnv("HAUSSE_PCT", 30);
@@ -78,7 +85,8 @@ function reglages() {
     prolongeMin: PROLONGE_MIN_CM, affichage: AFFICHAGE_CM,
     bornes: { neige: TEMP_NEIGE, pluie: TEMP_PLUIE } };
   const refuser = (msg, cle, defaut) => {
-    console.error(`Variable invalide : ${msg} — défaut ${defaut} utilisé.`);
+    const texte = typeof defaut === "object" ? `${defaut.neige} / ${defaut.pluie} °C` : defaut;
+    console.error(`Variable invalide : ${msg} — défaut ${texte} utilisé.`);
     process.exitCode = 1;
     r[cle] = defaut;
   };

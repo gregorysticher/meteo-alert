@@ -394,7 +394,8 @@ test('annoncée : la requête longue n\'a ni modèle ni past_days, sur 16 jours'
   rmSync(urls);
   assert.equal(liste.length, 2);
   assert.match(liste[1], /forecast_days=16/);
-  assert.doesNotMatch(liste[1], /models=|past_days=/);
+  assert.doesNotMatch(liste[1], /models=|past_days=|hourly=/);
+  assert.match(liste[0], /hourly=precipitation,temperature_2m/);
 });
 test('annoncée : annonce déplacée -> un seul message « décalée »', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 7, 5, 0]), REEL, etatDe(0, 1, 12));

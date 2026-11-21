@@ -6,7 +6,7 @@
 //
 // data/neige.csv : run,source,jour,cm,echeance_j,modele,mm,pluie_mm,t_moy,station,hs,cm_fixe
 //   run        horodatage UTC du run (AAAA-MM-JJTHH:MMZ)
-//   source     prev (snowfall_sum du jour) | mesure (HN_1D du relevé)
+//   source     prev (neige prévue du jour, voir cm) | mesure (HN_1D du relevé)
 //   jour       date locale AAAA-MM-JJ
 //   cm         valeur en cm. prev icon : neige de l'alerte, conversion D-005 depuis le
 //              21.11.2026 (snow-conversion.mjs), snowfall_sum avant ; prev long : snowfall_sum
@@ -23,10 +23,9 @@
 //              pour séparer l'erreur du modèle de la dispersion spatiale.
 // AUCUNE alerte n'en dépend.
 //
-// ALIGNEMENT (non tranché, voir docs/spec) : HN_1D daté J couvre a priori les
-// 24 h qui finissent le matin de J, soit surtout la neige tombée la veille.
-// Le rapport montre donc la mesure datée J ET celle datée J+1 en face de la
-// prévision du jour J, sans choisir.
+// ALIGNEMENT (tranché le 21.11.2026 : J+1, spec B4.1) : HN_1D daté J couvre les 24 h
+// qui finissent vers 7h le jour J, soit surtout la neige tombée la veille. Ce rapport
+// montre toujours la mesure datée J ET celle datée J+1 en face de la prévision du jour J.
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
 
@@ -47,8 +46,9 @@ export function lire(fichier = FICHIER) {
       const nombre = (x) => (x === undefined || x === '' ? NaN : +x);
       return { run, source, jour, cm: +cm, echeance_j: ech === '' ? null : +ech,
         mm: nombre(mm), pluie: nombre(pluie), tMoy: nombre(tMoy),
-        // Avant D-005, cm était le 0,7 fixe lui-même.
-        cmFixe: Number.isFinite(nombre(cmFixe)) ? nombre(cmFixe) : +cm,
+        // Ligne d'avant D-005 (11 colonnes) : cm était le 0,7 fixe lui-même. Ligne D-005 à
+        // cm_fixe vide (snowfall_sum absent) : inconnu, surtout pas le chiffre converti.
+        cmFixe: cmFixe === undefined ? +cm : nombre(cmFixe),
         modele: modele || (source === 'prev' ? 'icon' : ''),
         station: station || (source === 'mesure' ? STATION_REFERENCE : ''), hs: hs ?? '' };
     });

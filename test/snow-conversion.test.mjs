@@ -64,9 +64,10 @@ test('journalier : heure manquante, nulle ou négative -> jour inconnu (null), j
   assert.deepEqual(neigeJournaliere(undefined, dates), [null, null, null, null]);
 });
 
-test('journalier : jour de changement d\'heure (23 ou 25 h) accepté', () => {
-  const h = horaire([...heures('2026-03-29', 23, 0, -5), ...heures('2026-10-25', 25, 0, -5)]);
-  assert.deepEqual(neigeJournaliere(h, ['2026-03-29', '2026-10-25']), [0, 0]);
+test('journalier : 24 heures exigées (Open-Meteo : décalage fixe, même au changement d\'heure)', () => {
+  const h = horaire([...heures('2026-03-29', 23, 0, -5), ...heures('2026-10-25', 25, 0, -5),
+    ...heures('2026-11-01', 24, 0, -5)]);
+  assert.deepEqual(neigeJournaliere(h, ['2026-03-29', '2026-10-25', '2026-11-01']), [null, null, 0]);
 });
 
 // ---- journal : en-tête d'avant D-005 complété, lignes gardées --------------------
@@ -180,6 +181,35 @@ test('script : snowfall_sum absent -> alerte quand même, run rouge, cm_fixe vid
   assert.match(r.out, /snowfall_sum inexploitable/);
   assert.match(r.out, /À notifier : 1/);
   assert.ok(r.journal.split('\n').some((l) => l.includes(`prev,${jourLocal(1)},`) && l.endsWith(',,')), r.journal);
+});
+
+test('relecture : cm_fixe vide sur une ligne D-005 -> inconnu, pas le chiffre converti', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'conv-'));
+  const fichier = join(dir, 'neige.csv');
+  try {
+    journaliserPrevision('2026-11-20', ['2026-11-21'], [30], {
+      fichier, maintenant: new Date('2026-11-20T05:00:00Z'), annexes: { cmFixe: [null] } });
+    const [l] = lire(fichier);
+    assert.equal(l.cm, 30);
+    assert.ok(Number.isNaN(l.cmFixe), String(l.cmFixe));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('script : virgule décimale et signe moins typographique acceptés', () => {
+  const r = lancer(reponse([{ mm: 0, t: 0 }, { mm: 20, t: 0 }]), { TEMP_NEIGE_C: '−2,5', TEMP_PLUIE_C: '2,5' });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /neige sous -2\.5 °C, rien au-dessus de 2\.5 °C/);
+});
+
+test('script : borne non numérique -> rouge, défaut annoncé lisiblement', () => {
+  const r = lancer(reponse([{ mm: 0, t: 0 }, { mm: 20, t: 0 }]), { TEMP_NEIGE_C: 'froid' });
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /Variable invalide : TEMP_NEIGE_C = « froid » n'est pas un nombre — défaut -5 utilisé/);
+  const b = lancer(reponse([{ mm: 0, t: 0 }]), { TEMP_NEIGE_C: '4', TEMP_PLUIE_C: '1' });
+  assert.match(b.out, /défaut -5 \/ 5 °C utilisé/);
+  assert.doesNotMatch(b.out, /object Object/);
 });
 
 test('script : bornes de température absurdes -> rouge, défauts −5 / +5 utilisés', () => {

@@ -50,9 +50,10 @@ export function neigeJournaliere(hourly, dates, bornes) {
     if (!nombre(p[i]) || p[i] < 0 || !nombre(t[i])) { j.ok = false; return; }
     j.cm += neigeHoraire(p[i], t[i], bornes);
   });
-  // 23 ou 25 heures les jours de changement d'heure : seul un jour incomplet est refusé.
+  // Open-Meteo applique un décalage fixe à toute la réponse : 24 heures par jour, même
+  // aux changements d'heure (vérifié le 21.11.2026). Un jour à 23 heures est tronqué.
   return dates.map((d) => {
     const j = parJour.get(d);
-    return j.ok && j.heures >= 23 ? Math.round(j.cm * 100) / 100 : null;
+    return j.ok && j.heures === 24 ? Math.round(j.cm * 100) / 100 : null;
   });
 }
