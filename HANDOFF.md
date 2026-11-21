@@ -98,6 +98,8 @@ l'appareil, *Special...*). Playlist en *Repeat screen* : DASHBOARD, puis Détail
 (page détail) avec un horaire 7h-22h tous les jours (depuis le 2026-11-21, après deux faux
 réveils nocturnes, 14.11 à 5h50 et 21.11 à 3h00, qui l'avaient laissée affichée des heures).
 Milieu deux fois (*Next Screen*) → page détail fraîche ; laissée là, l'écran y reste.
+Retour au DASHBOARD à 22h pas encore vérifié : le 21.11, de 21h30 à 22h20, l'écran était
+déjà sur le DASHBOARD (test sans conclusion, à refaire un soir avec la page détail affichée).
 Guest Mode reste réglé en secours (*Special… › Guest Mode*, page détail 30 min). Les deux
 faux réveils sont une seconde requête de l'appareil quelques secondes après la normale
 (le 21.11, firmware 1.8.19 puis 1.8.18 : redémarrage probable), pas un appui. La droite ne fait qu'avancer dans l'historique

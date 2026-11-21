@@ -21,7 +21,9 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 - [ ] **Page détail** : de nouveau par le bouton du milieu (deux fois), visible de 7h à
       22h seulement ; contenu enrichi le 2026-11-21 (neige : mesures, avalanches, 5 jours,
       48 h, POUDRE ; vent l'été : plan de la semaine). Me dire ce qui manque ou gêne, et si
-      l'écran quitte encore le DASHBOARD sans appui (avec l'heure).
+      l'écran quitte encore le DASHBOARD sans appui (avec l'heure). Pour vérifier le
+      retour au DASHBOARD à 22h : un soir, laisser l'écran sur la page détail vers 21h45
+      et me le dire (test du 21.11 sans conclusion, l'écran était sur le DASHBOARD).
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
 
@@ -64,6 +66,10 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ## Fait récemment
 
+- [x] 2026-11-21 — Vérification 22h (page détail en rotation 7h-22h) : sans conclusion.
+      Timeline TRMNL de 21h30 à 22h20 : que des livraisons DASHBOARD (21h39, 21h54, 22h01,
+      22h16) ; la page détail n'a plus été livrée depuis 11h22. Il faut un soir où l'écran
+      est laissé sur la page détail avant 22h.
 - [x] 2026-11-21 — Page détail : remise en rotation 7h-22h (choix B de Greg) et enrichie
       (`snow-detail.mjs` : jours détaillés, 48 h, mesures ILI2, bulletin SLF, poudre ;
       `planSemaine` : plan vent de la semaine). Markup enregistré dans TRMNL, contrat à jour.
