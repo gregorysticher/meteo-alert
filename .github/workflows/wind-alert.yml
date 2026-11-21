@@ -72,7 +72,7 @@ jobs:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || '0' }}
           QA_ONLY: ${{ inputs.qa_only || '0' }}
           SEUIL_TEST: ${{ inputs.seuil_test || '' }}
-          # Silence nocturne 22h30-7h/8h (silence.mjs) : actif si la variable vaut 1.
+          # Silence nocturne 23h-8h/9h (D-006) (silence.mjs) : actif si la variable vaut 1.
           SILENCE_NOCTURNE: ${{ vars.SILENCE_NOCTURNE }}
         run: node wind-alert.mjs | tee -a "$GITHUB_STEP_SUMMARY"
 

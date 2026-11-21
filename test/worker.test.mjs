@@ -152,9 +152,9 @@ test('scheduled : panne, ntfy absent ou en panne -> l\'echec reste celui de GitH
 
 // ---- réveil après le silence nocturne (D-001) ----
 
-test('réveil : lundi 7h03 (hiver), les trois alertes en vrai run', async () => {
+test('réveil : lundi 8h03 (hiver), les trois alertes en vrai run', async () => {
   const a = simuler(204);
-  await declencher(REVEIL, ENV, new Date('2026-11-16T06:03:00Z'));
+  await declencher(REVEIL, ENV, new Date('2026-11-16T07:03:00Z'));
   assert.deepEqual(a.map((x) => x.url.split('/').at(-2)),
     ['wind-alert.yml', 'snow-forecast-alert.yml', 'snow-fresh-alert.yml']);
   assert.deepEqual(a.map((x) => x.corps.inputs.dry_run), ['0', 'false', 'false']);
@@ -162,30 +162,30 @@ test('réveil : lundi 7h03 (hiver), les trois alertes en vrai run', async () => 
 
 test('réveil : hors de l\'heure de fin, rien', async () => {
   const a = simuler(204);
-  await declencher(REVEIL, ENV, new Date('2026-11-16T07:03:00Z'));  // lundi 8h03
-  await declencher(REVEIL, ENV, new Date('2026-11-14T06:03:00Z'));  // samedi 7h03
-  await declencher(REVEIL, ENV, new Date('2026-11-16T05:03:00Z'));  // lundi 6h03
+  await declencher(REVEIL, ENV, new Date('2026-11-16T08:03:00Z'));  // lundi 9h03
+  await declencher(REVEIL, ENV, new Date('2026-11-14T07:03:00Z'));  // samedi 8h03
+  await declencher(REVEIL, ENV, new Date('2026-11-16T06:03:00Z'));  // lundi 7h03
   assert.equal(a.length, 0);
 });
 
-test('réveil : samedi et Noël 8h03, été 7h03', async () => {
+test('réveil : samedi et Noël 9h03, été 8h03', async () => {
   const a = simuler(204);
-  await declencher(REVEIL, ENV, new Date('2026-11-14T07:03:00Z'));
-  await declencher(REVEIL, ENV, new Date('2026-12-25T07:03:00Z'));
-  await declencher(REVEIL, ENV, new Date('2027-06-14T05:03:00Z'));
+  await declencher(REVEIL, ENV, new Date('2026-11-14T08:03:00Z'));
+  await declencher(REVEIL, ENV, new Date('2026-12-25T08:03:00Z'));
+  await declencher(REVEIL, ENV, new Date('2027-06-14T06:03:00Z'));
   assert.equal(a.length, 9);
 });
 
 test('réveil : un lancement refusé, les autres partent, échec visible', async () => {
   const a = simuler(401, 204, 204);
-  await assert.rejects(declencher(REVEIL, ENV, new Date('2026-11-16T06:03:00Z')), /wind-alert.yml : HTTP 401/);
+  await assert.rejects(declencher(REVEIL, ENV, new Date('2026-11-16T07:03:00Z')), /wind-alert.yml : HTTP 401/);
   assert.equal(a.length, 3);
 });
 
 test('scheduled : le réveil reçoit l\'heure prévue du cron', async () => {
   const a = simuler(204);
-  await worker.scheduled({ cron: REVEIL, scheduledTime: Date.parse('2026-11-16T06:03:00Z') }, ENV);
-  assert.equal(a.length, 3);
   await worker.scheduled({ cron: REVEIL, scheduledTime: Date.parse('2026-11-16T07:03:00Z') }, ENV);
+  assert.equal(a.length, 3);
+  await worker.scheduled({ cron: REVEIL, scheduledTime: Date.parse('2026-11-16T08:03:00Z') }, ENV);
   assert.equal(a.length, 3);
 });

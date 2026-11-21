@@ -14,10 +14,10 @@ export const TACHES = {
 };
 
 // Réveil après le silence nocturne (silence.mjs, D-001) : les trois alertes à HH:03,
-// HH = 7 h un jour ouvré, 8 h sinon, heure de Genève. Le cron couvre 5, 6 et 7 h UTC
+// HH = 8 h un jour ouvré, 9 h sinon, heure de Genève (D-006). Le cron couvre 6, 7 et 8 h UTC
 // (heure d'hiver et d'été) ; seul celui qui tombe dans l'heure de fin déclenche. Pas
 // de cron GitHub de secours : avec ses heures de retard, il ne réveillerait rien.
-export const REVEIL = '3 5,6,7 * * *';
+export const REVEIL = '3 6,7,8 * * *';
 
 const ESSAIS = 2;
 

@@ -1,4 +1,5 @@
-// silence.mjs — silence nocturne des trois alertes (demande D-001, Greg 2026-11-14).
+// silence.mjs — silence nocturne des trois alertes (D-001, Greg 2026-11-14 ; horaires D-006,
+// 2026-11-21 : 23h00 → 8h00 avant un jour ouvré, 23h00 → 9h00 avant un jour de repos).
 //
 // Pendant la fenêtre, notifier() n'envoie rien et répond « pas envoyé » : l'alerte
 // n'est donc pas mémorisée et le premier run après la fin la réévalue avec les
@@ -7,17 +8,17 @@
 //
 // Réveil : le Worker Cloudflare lance les trois alertes à HH:03, HH étant l'heure de
 // fin du jour (worker/src/taches.mjs, REVEIL). Sans lui, le premier run après 7h
-// serait 10h17 pour le vent et 16h23 pour la neige annoncée.
+// serait 9h17 pour le vent et 16h23 pour la neige annoncée.
 //
 // Jour de repos = samedi, dimanche, férié genevois. Les vacances de Greg sont dans
 // son agenda Google, que ni un runner ni le Worker ne lisent : un jour de vacances en
-// semaine finit à 7h00, pas 8h00 (écart signalé à la session chat, D-001).
+// semaine finit à 8h00, pas 9h00 (écart signalé à la session chat, D-001).
 //
 // Réglage ici (partagé par les runs et le Worker, qui l'embarque au déploiement :
 // changer ces heures demande de redéployer le Worker). Heures pleines pour FIN_* :
 // le réveil part à la minute 3 de l'heure de fin.
 
-export const SILENCE = { debut: '22:30', finOuvre: '07:00', finRepos: '08:00' };
+export const SILENCE = { debut: '23:00', finOuvre: '08:00', finRepos: '09:00' };
 
 const TZ = 'Europe/Zurich';
 
@@ -83,7 +84,7 @@ export function jourOuvre(jourIso) {
 // Heure de fin du silence pour le matin du jour donné.
 export const finDu = (jourIso) => (jourOuvre(jourIso) ? SILENCE.finOuvre : SILENCE.finRepos);
 
-// { actif, reprise } : reprise = « Lu 16.11 07:00 », pour le journal du run.
+// { actif, reprise } : reprise = « Lu 16.11 08:00 », pour le journal du run.
 export function silence(d = new Date()) {
   const l = local(d);
   const soir = l.minutes >= minutesDe(SILENCE.debut);
