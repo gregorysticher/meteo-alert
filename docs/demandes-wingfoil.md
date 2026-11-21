@@ -635,7 +635,7 @@ rien à notifier.
 
 ## D-006 — Nouveaux horaires du silence nocturne
 
-**Statut :** EN COURS (prêt, en attente de la connexion Cloudflare de Greg pour le Worker)
+**Statut :** FAITE (en service le 21.11.2026 vers 12h20 ; premier réveil dimanche 22.11 à 9h03)
 **De :** WINGFOIL/METEO-ALERT — samedi 21.11.2026, 11h25
 **Décidé par :** Greg, 21.11.2026
 
@@ -690,3 +690,12 @@ Les heures de chaque run sont inchangées : seule la fenêtre du silence bouge. 
 changement ne joue qu'en été, les jours ouvrés : le vent de 7h17 et la neige fraîche de
 7h47 seront retenus jusqu'au réveil de 8h03. Heure du premier réveil sous les nouveaux
 horaires : au premier matin après le déploiement, 9h03 un week-end, 8h03 un jour ouvré.
+
+**Mise à jour, samedi 21.11.2026 vers 12h20 : en service.** Greg a connecté Cloudflare ; la
+branche est fusionnée dans `main` et le Worker redéployé (version `6962b625`). Crons du
+Worker : `17 1,5,9,13,17,21`, `23 4,15`, `47 5,16`, et le réveil `3 6,7,8 * * *`. Wrangler
+est de nouveau déconnecté.
+- **Contrôle sur le code en service :** samedi 23h15, silence actif, reprise annoncée
+  « Di 22.11 09:00 ». Dimanche 8h03, toujours dans le silence et pas de réveil. Dimanche
+  9h03, fin du silence et réveil. Lundi 8h03, réveil.
+- **Premier réveil sous les nouveaux horaires :** dimanche 22.11 à 9h03.

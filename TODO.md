@@ -11,13 +11,6 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ## À faire par Greg
 
-- [ ] **Connexion Cloudflare pour D-006** (nouveaux horaires du silence, 23h → 8h / 9h) :
-      me dire quand tu as 5 minutes, je lance `wrangler login --device` et je te donne le
-      code à valider sur Cloudflare. Le code est prêt (branche `d006-silence`) ; d'ici là,
-      l'ancien silence (22h30 → 7h / 8h) reste en service.
-Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
-
-
 - [ ] **Signaler fausses alertes et manques** (vent au printemps, neige cet
       hiver) — seule matière pour calibrer seuils, secteurs et ratio de rafales.
 - [ ] **Valider le format d'alerte vent** sur une vraie journée ventée (rendu
@@ -71,6 +64,8 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-21 — D-006 en service : silence 23h → 8h (jour ouvré) / 9h (repos), réveil du
+      Worker à 8h03 / 9h03 (`3 6,7,8 * * *`, version 6962b625), Wrangler déconnecté.
 - [x] 2026-11-21 — D-005 en production : neige de l'alerte et de l'écran convertie heure par
       heure selon la température (`snow-conversion.mjs`, bornes −5 / +5 °C calées sur 4
       stations), 0,7 fixe gardé au journal (`cm_fixe`) et au rapport QA. Alignement HN_1D
