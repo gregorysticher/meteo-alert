@@ -1,5 +1,5 @@
 // Verdict QA des alertes neige envoyées (D-003) : règles, lectures J / J+1, épisodes,
-// biais par échéance, rapport neige / eau, archive des HS.
+// biais par échéance (alerte et 0,7 fixe), archive des HS.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   verdict, mesurePlage, verdicts, episodes, ligneEnvoi, journaliserEnvoi, lireEnvois,
-  ecrireVerdicts, mesuresReference, biaisParEcheance, comparerRapports, rapportTemperature,
+  ecrireVerdicts, mesuresReference, biaisParEcheance, rapportTemperature,
   rapport, ALIGNEMENT,
 } from '../snow-verdict.mjs';
 import { journaliserHs } from '../snow-qa.mjs';
@@ -88,14 +88,15 @@ test('épisodes : un message qui relie deux épisodes les fusionne', () => {
   assert.deepEqual(g[0].messages.map((m) => m.envoye_le.slice(8, 10)), ['12', '13', '14']);
 });
 
-test('verdicts : deux lectures tant que l\'alignement n\'est pas tranché', () => {
-  assert.equal(ALIGNEMENT, null);
+test('verdicts : deux lectures, colonne verdict selon l\'alignement (J+1 depuis le 21.11)', () => {
+  assert.equal(ALIGNEMENT, 'J+1');
   const m = new Map([['2026-11-15', 0], ['2026-11-16', 30], ['2026-11-17', 35]]);
   const e = [envoi('hausse', 40)];
   const [v] = verdicts(e, m, { jour: '2026-11-18' });  // plage 15-16, J+1 lit le 17
   assert.equal(v.mesure_j_cm, 30); assert.equal(v.verdict_j, 'OK');
   assert.equal(v.mesure_j1_cm, 65); assert.equal(v.verdict_j1, 'SOUSESTIME');
-  assert.equal(v.verdict, '');
+  assert.equal(v.verdict, 'SOUSESTIME', 'lecture J+1 retenue');
+  assert.equal(verdicts(e, m, { jour: '2026-11-18', alignement: null })[0].verdict, '');
   assert.equal(v.episode, '2026-11-15');
   assert.equal(verdicts(e, m, { jour: '2026-11-18', alignement: 'J+1' })[0].verdict, 'SOUSESTIME');
 });
@@ -136,7 +137,7 @@ test('fichier des verdicts : réécrit en entier', () => {
     ecrireVerdicts(verdicts([envoi('hausse', 40)], m, { jour: '2026-11-20' }), fichier);
     assert.equal(readFileSync(fichier, 'utf8'),
       'envoye_le,episode,type,debut,fin,annonce_cm,seuil_cm,mesure_j_cm,verdict_j,mesure_j1_cm,verdict_j1,verdict\n' +
-      '2026-11-13T10:00Z,2026-11-15,hausse,2026-11-15,2026-11-16,40,10,35,OK,,?,\n');
+      '2026-11-13T10:00Z,2026-11-15,hausse,2026-11-15,2026-11-16,40,10,35,OK,,?,?\n');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -161,16 +162,25 @@ test('biais par échéance : dernière prévision de l\'échéance, jours secs �
   assert.equal(de(2, 'J').biais, 15);
 });
 
-test('rapport neige / eau : Hedstrom et Pomeroy contre 0,7 fixe', () => {
+test('Hedstrom et Pomeroy : 0,84 cm/mm à 0 °C, plafonné au-dessus', () => {
   assert.ok(Math.abs(rapportTemperature(0) - 100 / 119.17) < 1e-9);
   assert.ok(rapportTemperature(-10) > 1.4 && rapportTemperature(-10) < 1.5);
   assert.equal(rapportTemperature(3), rapportTemperature(0), 'plafonné à 0 °C');
-  // snowfall_sum 7 cm = 10 mm d'eau ; mm − pluie (14) n'est pas lu : averses possibles.
-  const lignes = [prevL('2026-11-15', 7, 1, 'x', { mm: 16, pluie: 2, tMoy: -5 })];
-  const [j] = comparerRapports(lignes, new Map([['2026-11-15', 10]]));
-  assert.equal(j.n, 1);
-  assert.equal(j.fixe.biais, -3);
-  assert.equal(j.temperature.biais, Math.round((10 * rapportTemperature(-5) - 10) * 10) / 10);
+});
+
+test('biais : chiffre de l\'alerte et 0,7 fixe côte à côte (D-005)', () => {
+  // Ligne D-005 : cm = conversion, cmFixe = snowfall_sum. Ligne d'avant : cmFixe = cm (lire()).
+  const lignes = [
+    prevL('2026-11-15', 6, 1, 'a', { cmFixe: 14 }),
+    prevL('2026-11-16', 9, 1, 'a', { cmFixe: 9 }),
+  ];
+  const m = new Map([['2026-11-15', 5], ['2026-11-16', 10]]);
+  const alerte = biaisParEcheance(lignes, m, { echeances: [1] }).find((x) => x.lecture === 'J');
+  const fixe = biaisParEcheance(lignes, m, { echeances: [1], champ: 'cmFixe' }).find((x) => x.lecture === 'J');
+  assert.equal(alerte.biais, 0);     // (1 − 1) / 2
+  assert.equal(fixe.biais, 4);       // (9 − 1) / 2
+  const r = rapport([], lignes, m);
+  assert.match(r, /\| J-1 \| J \| 2 \| 0 \| 1 \| 4 \| 5 \|/);
 });
 
 test('rapport du job : verdicts, messages par épisode au-delà de l\'objectif', () => {
@@ -179,7 +189,7 @@ test('rapport du job : verdicts, messages par épisode au-delà de l\'objectif',
   const r = rapport(verdicts(e, new Map(), { jour: '2026-11-14' }), [], new Map());
   assert.match(r, /\| 2026-11-12T04:24Z \| hausse \| 2026-11-15 → 2026-11-16 \| 40 \| — \| ATTENTE \|/);
   assert.match(r, /2026-11-15 → 2026-11-16 : 4 message\(s\) — au-delà de l'objectif/);
-  assert.match(r, /Alignement HN_1D : non tranché/);
+  assert.ok(r.includes("Alignement HN_1D : J+1."), r);
   assert.match(rapport([], [], new Map()), /Aucune alerte neige envoyée journalisée/);
 });
 
