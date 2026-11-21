@@ -474,3 +474,58 @@ Tests : 317 au vert. Revue de code par un agent indépendant : deux défauts cor
 sans horizon exposé aux runs du jour ; prolongation retardée à tort par un run du même
 jour). L'aller-retour décalé d'un jour est décrit ci-dessus. Test à blanc sur GitHub :
 vert.
+
+---
+
+## D-005 — Neige : conversion pluie-neige selon la température, dès maintenant
+
+**Statut :** OUVERTE
+**De :** WINGFOIL/METEO-ALERT — samedi 21.11.2026, 11h20
+**Décidé par :** Greg, 21.11.2026
+
+### Pourquoi maintenant
+
+Le bilan provisoire de D-003 montre que l'erreur n'est pas un biais statistique à mesurer
+sur la saison, mais une règle fausse : 0,7 cm/mm fixe, quelle que soit la température.
+Du 15 au 19.11 à ILI2, 89 cm annoncés pour 19 à 49 cm mesurés ; jusqu'à +4,8 °C le 17.11,
+donc de la pluie comptée comme de la neige. La Décision 3 de D-003 (« pas de correction
+cet hiver ») est levée pour ce point précis : c'est une correction physique, pas un
+ajustement sur du bruit.
+
+### Décision — une seule conversion, simple, partagée par l'alerte et l'écran
+
+- **Remplacer le 0,7 cm/mm fixe** par une conversion qui dépend de la température prévue
+  à l'altitude de la station (2022 m) :
+  1. **part neige** des précipitations : 100 % sous une température basse, 0 % au-dessus
+     d'une température haute, linéaire entre les deux ;
+  2. **rapport cm/mm** de cette part neige selon la température (Hedstrom et Pomeroy,
+     déjà dans le rapport QA).
+- **Pas horaire** si les données horaires de précipitation et de température sont
+  disponibles au point, sinon journalier. La limite pluie-neige bouge dans la journée.
+- **Les deux bornes de température** : pars d'une valeur courante de la littérature, puis
+  ajuste-les sur l'épisode du 15 au 23.11 avec **les quatre stations** (ILI2, FNH2, GRA2,
+  CHA3), pas ILI2 seule : quatre altitudes donnent quatre points de la transition, et
+  évitent de caler la règle sur une seule station. Deux paramètres, pas plus.
+- **Un seul calcul** pour l'alerte et pour le payload TRMNL : l'écran et la notification
+  doivent toujours annoncer le même cumul (contrat `docs/contrat-trmnl.md`).
+- **Rien d'autre ne change** : seuils, palier, silence, règles d'épisode, format du
+  message. Pas de ligne d'avertissement ajoutée : si le chiffre est juste, il suffit.
+
+### Surveillance continue
+
+- Le rapport QA de D-003 garde, à côté du nouveau calcul, l'**ancien 0,7 fixe** en
+  information, épisode après épisode : c'est ce qui montrera si la correction tient.
+- Si les verdicts dérivent (deux épisodes de suite `SURESTIME` ou `SOUSESTIME`), signale-le
+  dans ta réponse au bilan ; on réajustera les deux bornes à ce moment-là, pas avant.
+
+### Retour attendu
+
+- Les deux bornes retenues et l'écart avant / après sur l'épisode du 15 au 23.11, par
+  station.
+- Le rejeu des messages de l'épisode avec la nouvelle conversion (nombre et cumuls
+  annoncés).
+- La règle d'alignement HN_1D, comme prévu dans D-003.
+
+### Réponse
+
+_(à remplir par Weather Station)_
