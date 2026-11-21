@@ -287,7 +287,9 @@ Voir [`TODO.md`](TODO.md).
   désormais actifs).
 - Liquid : `0` est truthy ; `{% if x %}` distingue zéro et nil.
 - Le rendu Liquid TRMNL est en UTC ; `nows = now_s + M.utc_offset_seconds`.
-- Open-Meteo : `snowfall_sum` en cm, `snow_depth_max` en m.
+- Open-Meteo : `snowfall_sum` en cm, `snow_depth_max` en m. Depuis D-005 (21.11.2026),
+  l'alerte neige et l'écran ne lisent plus `snowfall_sum` (0,7 cm/mm fixe, gardé au
+  journal) : `snow-conversion.mjs`, précipitation et température horaires.
 - Netatmo : 503 intermittents, connus.
 
 ### Accès

@@ -116,7 +116,7 @@ Depuis le 2026-11-09. Pour la page détail : le spot et le jour de `reco`, heure
 | `lieu` | texte | Nom du lieu |
 | `min` | cm | Cumul à venir minimal pour montrer une chute sans inversion (`AFFICHAGE_NEIGE_CM`) |
 | `jour` | `AAAA-MM-JJ` local | Date du run |
-| `jours` | tableau de `{ d, cm }` | Série prévue depuis le jour du run. L'écran en tire « 24 h » et « 5 j » selon la date du rendu |
+| `jours` | tableau de `{ d, cm }` | Série prévue depuis le jour du run, en cm de neige selon la conversion D-005 (`snow-conversion.mjs`), la même que l'alerte. L'écran en tire « 24 h » et « 5 j » selon la date du rendu |
 | `episodes` | tableau | Épisodes ouverts par ordre de priorité, mêmes champs que `episode`. L'écran prend le premier qui n'est pas fini au moment du rendu |
 | `j0` | cm, entier | Chute prévue le jour du run |
 | `j5` | cm, entier | Chute prévue sur les 5 jours, jour du run compris |

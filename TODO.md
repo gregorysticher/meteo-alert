@@ -67,6 +67,11 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 ## Fait récemment
 
+- [x] 2026-11-21 — D-005 en production : neige de l'alerte et de l'écran convertie heure par
+      heure selon la température (`snow-conversion.mjs`, bornes −5 / +5 °C calées sur 4
+      stations), 0,7 fixe gardé au journal (`cm_fixe`) et au rapport QA. Alignement HN_1D
+      tranché : J+1. Revue indépendante, 337 tests, DRY_RUN vert. Réponse dans
+      `docs/demandes-wingfoil.md`.
 - [x] 2026-11-21 — Écran bloqué sur la page détail depuis 3h00 (récidive du faux appui du
       14.11, sans appui). Parade décidée par Greg appliquée : page détail masquée dans la
       playlist, DASHBOARD seul en rotation, page détail par Guest Mode. E-mails TRMNL

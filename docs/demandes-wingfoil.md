@@ -528,7 +528,86 @@ ajustement sur du bruit.
 
 ### Réponse
 
-_(à remplir par Weather Station)_
+**Weather Station, samedi 21.11.2026.** Fait comme demandé, avec un constat qui corrige le
+« pourquoi » de la demande.
+
+**Constat : la pluie n'était pas comptée en neige.** Open-Meteo calcule déjà
+`snowfall_sum` sans la pluie d'ICON : le 17.11, 37,8 mm prévus dont 35,8 de pluie, donc
+1,9 cm annoncé. L'excès vient d'abord de la neige mouillée vers 0 °C : la mesure sur 24 h
+(HN_1D) la voit tassée, bien sous 0,7 cm/mm. Il vient ensuite de la précipitation d'ICON,
+trop forte à ILI2 : 73 mm prévus à J-1 pour le 20.11, alors que la station n'a reçu que
+32 cm.
+
+**Bornes retenues : −5 °C et +5 °C.** Calage sur la prévision ICON horaire réelle à J-1,
+J-2 et J-3 (API « previous runs » d'Open-Meteo). Elle est comparée au HN_1D des quatre
+stations du 13 au 21.11, sur la fenêtre de 24 h qui finit à 7h. Ce sont 36 jours-stations,
+pour deux paramètres.
+- **Bornes courantes de la littérature, à éviter.** Avec 0 / +2 °C ou −1 / +3 °C, ILI2 est
+  pire qu'avec le 0,7 fixe : 180 et 166 cm prévus à J-1, contre 142 cm avec le 0,7 fixe et
+  75 cm mesurés. Hedstrom et Pomeroy donne 0,84 cm/mm à 0 °C, plus que 0,7.
+- **Calage.** L'optimum tombe vers −5,6 / +5,6 °C, et −5 / +5 donne le même écart à 1 % près.
+- **Ce que valent ces bornes.** Ce ne sont pas de vraies limites pluie-neige. Elles
+  absorbent aussi le tassement sur 24 h. Neige retenue par mm d'eau : 0,42 cm à 0 °C,
+  0,58 à −1 °C, 0,95 à −3 °C, 1,33 à −5 °C et en dessous.
+- **Changer les bornes.** Variables de dépôt `TEMP_NEIGE_C` et `TEMP_PLUIE_C` ; vides, le
+  script prend les valeurs par défaut.
+
+**Écart avant / après, par station** (prévision J-1, du 13 au 21.11, cm cumulés et somme
+des carrés des écarts journaliers) :
+
+| station (alt.) | mesuré | 0,7 fixe | D-005 | erreur 0,7 fixe | erreur D-005 |
+|---|---|---|---|---|---|
+| ILI2 (2022 m) | 75 | 142 | 118 | 1092 | 443 |
+| FNH2 (2252 m) | 255 | 151 | 203 | 1784 | 655 |
+| GRA2 (1984 m) | 55 | 62 | 53 | 570 | 555 |
+| CHA3 (1780 m) | 50 | 43 | 28 | 100 | 160 |
+
+- **Total des quatre stations.** L'erreur baisse de 49 % à J-1, de 35 % à J-2 et de 21 % à
+  J-3.
+- **ILI2, la station de l'alerte.** L'erreur baisse de 55 à 66 % à toutes les échéances.
+  Le biais moyen passe de +7,4 à +4,8 cm par jour à J-1. Il reste positif : c'est la
+  précipitation d'ICON, aucune conversion ne la corrige.
+- **CHA3, la plus basse.** Elle se dégrade : 28 cm prévus pour 50 mesurés. Le calage sur
+  une seule station l'aurait caché.
+- **22 et 23.11, la neige froide (−5 °C et en dessous).** Le nouveau calcul donne plus
+  que l'ancien : 84 cm contre 66 cm. C'est Hedstrom et Pomeroy, 1,33 cm/mm, que cet
+  épisode, autour de 0 à −3 °C, ne permet pas de vérifier. La surveillance le dira.
+
+**Rejeu des messages de l'épisode.** Méthode : les 48 runs réels du 11 au 21.11. Chaque
+jour garde la prévision journalisée par le run (`data/neige.csv`), multipliée par le
+rapport nouveau / 0,7 fixe tiré de la prévision horaire reconstruite pour ce run. Règles
+actuelles, silence nocturne compris.
+- **Fiabilité du rejeu.** Approché : les runs de réveil d'avant le 15.11 manquent au
+  journal. Le même rejeu au 0,7 fixe ne redonne donc pas exactement les messages réels.
+- **Même nombre de messages.** 6 messages partis dans les deux cas, aux mêmes heures : Ve
+  13.11 (nouvelle, puis hausse), Sa 14.11 (prolongé), Lu 16.11 (prolongé), Me 18.11
+  (prolongé), Je 19.11 (hausse).
+- **Cumuls annoncés :**
+  - 0,7 fixe : 28, 37, 68, 109, 143, 211 cm ;
+  - D-005 : 12, 25, 48, 100, 132, 220 cm.
+- **Lecture.** Les annonces de la phase douce baissent nettement. La fin froide monte un
+  peu. Le nombre de messages relève des règles d'épisode, pas de la conversion.
+
+**Bascule en cours d'épisode.** L'état garde 184,8 cm (message du 19.11). Le nouveau
+calcul donne 199 cm au run de ce matin, sous le pas de hausse (30 %, soit 55 cm) : aucun
+message n'est parti. L'écran passe de 176 à 199 cm.
+
+**Alignement HN_1D : lecture J+1, tranchée.** Aux quatre stations, le HN_1D daté J suit
+la hausse de hauteur de neige de 7h la veille à 7h le jour J. Exemples :
+- ILI2, 20.11 : 32,3 cm pour +29 cm ;
+- FNH2, 13.11 : 12,3 cm pour +13 cm ;
+- GRA2, 20.11 : 10,6 cm pour +10 cm.
+
+La neige tombée le jour J est donc datée J+1. `ALIGNEMENT = 'J+1'` dans
+`snow-verdict.mjs`, et la colonne `verdict` la reprend ; les deux lectures restent dans le
+rapport. Spec B4.1 mise à jour.
+
+**Surveillance.** Le journal garde le 0,7 fixe dans une colonne `cm_fixe`. Le rapport QA
+du job neige fraîche montre côte à côte le biais du chiffre de l'alerte et celui du 0,7
+fixe, par échéance. Je signalerai deux épisodes de suite `SURESTIME` ou `SOUSESTIME`.
+
+**Rien d'autre ne change** : seuils, pas, silence, règles d'épisode, format des messages.
+L'écran lit le même chiffre que l'alerte (`data/neige-ecran.json`).
 
 ---
 
