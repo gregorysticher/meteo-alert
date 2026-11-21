@@ -46,7 +46,7 @@ données ne changent qu'à chaque run. À revoir si un second consommateur appar
 | `reco` | objet ou null | Spot et fenêtre à afficher, voir plus bas. Null s'il n'y a aucune heure exploitable dans l'horizon. Indépendant de `saison` | Oui, en saison vent |
 | `spots` | tableau | Les 6 spots les plus proches, voir plus bas | Page détail, en saison vent |
 | `profil` | objet ou null | Profil horaire du spot et du jour de `reco`, voir plus bas. Null si `reco` est null | Page détail, en saison vent |
-| `plan` | objet ou null | Plan de la semaine par spot, voir plus bas. Depuis le 2026-11-21. Null hors saison vent ou sans heure exploitable | Page détail, en saison vent |
+| `plan` | objet ou null | Plan de la semaine par spot, voir plus bas. Depuis le 2026-11-21. Null sans aucune heure exploitable sur la semaine (hors saison vent en pratique ; il peut exister du 8 au 14 avril, saison encore « neige ») | Page détail, en saison vent |
 
 ### `mesure`
 
@@ -145,9 +145,10 @@ L'écran grise les jours déjà passés au moment du rendu.
 | `jours[].raf` | km/h entiers, ou null | Rafale maximale à 2022 m |
 | `jours[].sol` | h entières, ou null | Ensoleillement |
 | `jours[].p` | 0 ou 1 | Jour de poudre : neige de la veille (conversion D-005) ≥ `POUDRE_CM`, soleil ≥ `POUDRE_SOLEIL_H`, rafales < `POUDRE_RAFALES_KMH`, maximum ≤ `POUDRE_TMAX_C` (10 cm, 4 h, 50 km/h, 2 °C par défaut). Libellé inversé |
-| `h48` | objet ou null | Les 48 heures à partir de l'heure en cours : `de` (`AAAA-MM-JJTHH:MM` local, première étiquette Open-Meteo, soit la fin de la première heure), `cm` (neige convertie D-005, au dixième), `pl` (pluie du modèle, mm au dixième), `t` (°C entiers). Null dans un tableau : heure absente |
-| `mesure` | objet ou null | Station ILI2 : `h` (dernier relevé HS, epoch UTC s), `hs` (cm), `d24` (HS − HS 24 h avant, ou null), `ta` (°C au dixième, ou null), `hn` (trois derniers HN_1D publiés, `{ d, cm }`, lecture J+1 : 24 h jusqu'à 7h le jour `d`). Null sans archive HS |
-| `avalanche` | objet ou null | Bulletin SLF, région CH-1312 Monthey - Val d'Illiez : `niveau` (1 à 5, le plus haut de la journée), `sous` (`-`, `+` ou vide), `pb` (deux problèmes au plus, en français), `alt` (limite basse du premier problème, m, ou null), `fin` (fin de validité, epoch UTC s). Null si le bulletin manque : run rouge, l'alerte part quand même |
+| `alt` | m | Altitude du lieu (2022), pour le titre |
+| `h` | objet ou null | Heure par heure, 60 heures à partir de l'heure en cours au run neige : `h0` (début de la première heure, epoch UTC s), `cm` (neige convertie D-005, au dixième), `pl` (pluie du modèle `rain` + `showers`, mm au dixième, sur la même eau que la neige : affichée à part, jamais empilée), `t` (°C entiers). Null dans un tableau : heure absente. L'écran masque les heures finies au moment du rendu et en montre 48 |
+| `mesure` | objet ou null | Ajouté par `wind-alert` à chaque envoi (relevés du dépôt). Station ILI2 : `h` (dernier relevé HS, epoch UTC s), `hs` (cm), `d24` (HS − HS 24 h avant, ou null), `ta` (°C au dixième, ou null), `hn` (trois derniers HN_1D publiés, `{ d, cm }`, lecture J+1 : 24 h jusqu'à 7h le jour `d`). Null sans archive HS ou si le dernier relevé a plus de 48 h |
+| `avalanche` | objet ou null | Ajouté par `wind-alert` à chaque envoi (bulletin SLF du moment, région CH-1312 Monthey - Val d'Illiez) : `niveau` (1 à 5, le plus haut de la journée), `sous` (`-`, `+` ou vide ; − < = < +), `nom` (« fort »…), `pb` (deux problèmes au plus, en français, « dès X m » collé au problème concerné), `debut`, `fin` (validité, epoch UTC s). Null : pas de bulletin publié (vert) ou panne / région absente (run rouge, l'envoi part quand même) |
 
 Priorité : au seuil avec au moins `min` cm à venir, puis au seuil, puis les autres ; à rang
 égal, le plus proche. Le fichier s'écrit à chaque run, y compris si un envoi ntfy a échoué :

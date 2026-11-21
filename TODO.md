@@ -67,6 +67,9 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 - [x] 2026-11-21 — Page détail : remise en rotation 7h-22h (choix B de Greg) et enrichie
       (`snow-detail.mjs` : jours détaillés, 48 h, mesures ILI2, bulletin SLF, poudre ;
       `planSemaine` : plan vent de la semaine). Markup enregistré dans TRMNL, contrat à jour.
+      Revue indépendante : bulletin d'avalanches et relevés ILI2 désormais lus à chaque
+      envoi (toutes les 4 h, plus d'ancien bulletin le soir), 48 h glissantes sans décalage
+      d'heure, pluie dessinée à part, plan juste pour une fenêtre en cours.
 - [x] 2026-11-21 — D-006 en service : silence 23h → 8h (jour ouvré) / 9h (repos), réveil du
       Worker à 8h03 / 9h03 (`3 6,7,8 * * *`, version 6962b625), Wrangler déconnecté.
 - [x] 2026-11-21 — D-005 en production : neige de l'alerte et de l'écran convertie heure par
