@@ -11,6 +11,10 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ## À faire par Greg
 
+- [ ] **Connexion Cloudflare pour D-006** (nouveaux horaires du silence, 23h → 8h / 9h) :
+      me dire quand tu as 5 minutes, je lance `wrangler login --device` et je te donne le
+      code à valider sur Cloudflare. Le code est prêt (branche `d006-silence`) ; d'ici là,
+      l'ancien silence (22h30 → 7h / 8h) reste en service.
 Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
 
 
@@ -47,8 +51,8 @@ Ce que Greg seul peut faire ou décider. Échéance quand elle est connue.
       workers:write workers_scripts:write workers_tail:read`, code valable 5 minutes.
 - [ ] Début de saison B5 : après 4 à 6 semaines d'archive AROME, comparer les modèles
       (rapport « Erreur absolue par spot, 12-36 h »).
-- [ ] Neige : après 3 ou 4 épisodes, trancher l'alignement (B4.1) et regarder la
-      fréquence des révisions du passé (`snowfall_sum`) et des oscillations.
+- [ ] Neige : regarder la fréquence des révisions du passé et des oscillations
+      (alignement B4.1 tranché le 2026-11-21 : J+1).
 - [ ] Fin de l'hiver 2026-27 : analyser `data/neige.csv` (alignement, dispersion entre
       stations, rapport cm/mm selon la température, annonces à J+9). Aucune correction
       de la neige avant au moins deux hivers (spec B4).

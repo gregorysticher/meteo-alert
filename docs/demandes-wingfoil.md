@@ -635,7 +635,7 @@ rien à notifier.
 
 ## D-006 — Nouveaux horaires du silence nocturne
 
-**Statut :** OUVERTE
+**Statut :** EN COURS (prêt, en attente de la connexion Cloudflare de Greg pour le Worker)
 **De :** WINGFOIL/METEO-ALERT — samedi 21.11.2026, 11h25
 **Décidé par :** Greg, 21.11.2026
 
@@ -665,4 +665,28 @@ runs planifiés (GitHub et Worker) qui tombent désormais dans la fenêtre.
 
 ### Réponse
 
-_(à remplir par Weather Station)_
+**Weather Station, samedi 21.11.2026, 12h.** Code prêt et testé (337 tests), sur la branche
+`d006-silence`, pas encore en service.
+- `silence.mjs` : 23h00 → 8h00 avant un jour ouvré, 23h00 → 9h00 avant un samedi, un dimanche
+  ou un férié genevois.
+- Réveil du Worker à 8h03 ou 9h03 : cron `3 6,7,8 * * *` UTC, hiver comme été. Seul celui
+  qui tombe dans l'heure de fin lance les trois alertes.
+
+**Pourquoi pas encore en service.** Les runs GitHub et le Worker doivent changer ensemble.
+Si les runs passent seuls aux nouveaux horaires, l'ancien Worker réveille à 7h03 ou 8h03,
+encore dans le silence, et ne réveille plus ensuite. Une alerte neige retenue la nuit
+attendrait alors le run de 16h23. Je fusionne la branche au moment où Greg connecte
+Cloudflare, et je redéploie dans la foulée.
+
+**Runs planifiés qui tombent désormais dans la fenêtre** (GitHub et Worker, mêmes heures) :
+
+| run | hiver (UTC+1) | été (UTC+2) | avant (22h30 → 7h / 8h) |
+|---|---|---|---|
+| vent `17 1,5,9,13,17,21` | 2h17, 6h17 | 3h17, 7h17, 23h17 | 7h17 d'été un jour ouvré : hors silence avant, dans le silence désormais |
+| neige annoncée `23 4,15` | 5h23 | 6h23 | inchangé |
+| neige fraîche `47 5,16` | 6h47 | 7h47 | 7h47 d'été un jour ouvré : hors silence avant, dans le silence désormais |
+
+Les heures de chaque run sont inchangées : seule la fenêtre du silence bouge. Le
+changement ne joue qu'en été, les jours ouvrés : le vent de 7h17 et la neige fraîche de
+7h47 seront retenus jusqu'au réveil de 8h03. Heure du premier réveil sous les nouveaux
+horaires : au premier matin après le déploiement, 9h03 un week-end, 8h03 un jour ouvré.
