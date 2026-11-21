@@ -583,3 +583,23 @@ test('rapport : modèle de l\'alerte et station de référence seuls', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---- page detail neige (contexte) -------------------------------------------------
+
+test('annoncée : bulletin d\'avalanches en panne -> rouge, MAIS alerte partie et écran écrit sans le bloc', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]),
+    { ...REEL, MOCK_AVALANCHE: JSON.stringify({ status: 503, body: {} }) });
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /ECHEC bulletin d'avalanches : HTTP 503/);
+  assert.match(r.out, /À notifier : 1/);
+  assert.equal(r.ecran.avalanche, null);
+  assert.equal(r.ecran.episode.cm, 12);
+});
+test('annoncée : écran enrichi (jours détaillés, bulletin), vert sans archive HS', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), REEL);
+  assert.equal(r.code, 0, r.out);
+  assert.deepEqual(r.ecran.avalanche, { niveau: 3, sous: '', pb: ['neige soufflée'], alt: null,
+    fin: Date.parse('2026-11-21T16:00:00Z') / 1000 });
+  assert.equal(r.ecran.mesure, null);
+  assert.ok(['tn', 'tx', 'pl', 'iso', 'raf', 'sol', 'p'].every((k) => k in r.ecran.jours[0]), JSON.stringify(r.ecran.jours[0]));
+});
