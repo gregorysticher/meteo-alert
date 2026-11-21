@@ -94,12 +94,14 @@ Wind Forecast (392131), recette obsolète, a été désinstallé le 2026-11-08.
 E-mails de santé TRMNL activés sur les 5 plugins actifs (07/11/2026).
 
 Appareil : TRMNL X, firmware 1.8.18 (special functions disponibles via le menu de
-l'appareil, *Special...*). Depuis le 2026-11-09 : playlist en *Hold screen* sur le
-DASHBOARD, Détail vent et neige (page détail) visible juste après, le reste masqué. Milieu deux
-fois (*Next Screen*) → page détail fraîche, gauche → retour. La droite ne fait qu'avancer dans
-l'historique de l'appareil (images en mémoire, doc TRMNL) : elle ne marche qu'après un
-retour à gauche, montre l'image gardée (données possiblement anciennes) et cesse dès
-qu'un nouvel écran arrive. Laissé sur la page détail, l'écran y reste. Guest Mode : Détail vent et neige, 30 min. Le handoff Cowork qui les disait
+l'appareil, *Special...*). Depuis le 2026-11-21 (récidive du faux appui, spec) : playlist
+en *Repeat screen* avec le DASHBOARD seul visible ; Détail vent et neige (page détail)
+masquée, ouverte par *Special… › Guest Mode* (30 min, retour seul au DASHBOARD). Du 09 au
+21.11, la page détail était visible juste après le DASHBOARD (milieu deux fois, *Next
+Screen*) et, laissée là, l'écran y restait. La droite ne fait qu'avancer dans l'historique
+de l'appareil (images en mémoire, doc TRMNL) : elle ne marche qu'après un retour à gauche,
+montre l'image gardée (données possiblement anciennes) et cesse dès qu'un nouvel écran
+arrive. Le handoff Cowork qui les disait
 indisponibles et citait 392131 ou le Col de Cou est périmé.
 
 ### Notifications
