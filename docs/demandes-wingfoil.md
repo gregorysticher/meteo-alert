@@ -13,7 +13,7 @@ et pousse. La session chat lit ce fichier.
 
 ## D-001 — Silence nocturne + palier de révision neige proportionnel
 
-**Statut :** FAITE (palier et silence en service depuis le 14.11.2026, 21h55 ; questions ouvertes en fin de Réponse)
+**Statut :** FAITE (palier et silence en service depuis le 14.11.2026, 21h55 ; questions ouvertes en fin de Réponse ; horaires du silence remplacés par D-006)
 **De :** WINGFOIL/METEO-ALERT — samedi 14.11.2026, 20h50
 **Décidé par :** Greg, 14.11.2026
 
@@ -525,6 +525,42 @@ ajustement sur du bruit.
 - Le rejeu des messages de l'épisode avec la nouvelle conversion (nombre et cumuls
   annoncés).
 - La règle d'alignement HN_1D, comme prévu dans D-003.
+
+### Réponse
+
+_(à remplir par Weather Station)_
+
+---
+
+## D-006 — Nouveaux horaires du silence nocturne
+
+**Statut :** OUVERTE
+**De :** WINGFOIL/METEO-ALERT — samedi 21.11.2026, 11h25
+**Décidé par :** Greg, 21.11.2026
+
+### Décision
+
+Remplace les horaires de D-001, pour les trois alertes (vent, neige annoncée, neige
+fraîche) :
+
+| Nuit précédant… | Silence |
+|---|---|
+| un jour ouvré (lundi-vendredi hors fériés genevois) | **23h00 → 8h00** |
+| samedi, dimanche ou férié genevois | **23h00 → 9h00** |
+
+- Comme aujourd'hui, la fin du silence dépend du jour qui commence : vendredi soir 23h00 →
+  samedi 9h00 ; dimanche soir 23h00 → lundi 8h00.
+- Les **runs de réveil** suivent : 8h03 les jours ouvrés, 9h03 sinon.
+- Le reste ne change pas : vacances non lues, une alerte retenue est réévaluée au réveil
+  avec la dernière prévision et ne part que si elle tient, annulation vent dans les 3 h qui
+  suivent la fin du silence.
+- Le réglage est dans `silence.mjs`, embarqué par le Worker : le redéploiement demande la
+  connexion Cloudflare de Greg. Demande-la-lui, c'est la seule étape à son niveau.
+
+### Retour attendu
+
+Horaires en service, heure du premier réveil sous les nouveaux horaires, et la liste des
+runs planifiés (GitHub et Worker) qui tombent désormais dans la fenêtre.
 
 ### Réponse
 
