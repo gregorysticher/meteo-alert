@@ -94,11 +94,13 @@ Wind Forecast (392131), recette obsolète, a été désinstallé le 2026-11-08.
 E-mails de santé TRMNL activés sur les 5 plugins actifs (07/11/2026).
 
 Appareil : TRMNL X, firmware 1.8.18 (special functions disponibles via le menu de
-l'appareil, *Special...*). Depuis le 2026-11-21 (récidive du faux appui, spec) : playlist
-en *Repeat screen* avec le DASHBOARD seul visible ; Détail vent et neige (page détail)
-masquée, ouverte par *Special… › Guest Mode* (30 min, retour seul au DASHBOARD). Du 09 au
-21.11, la page détail était visible juste après le DASHBOARD (milieu deux fois, *Next
-Screen*) et, laissée là, l'écran y restait. La droite ne fait qu'avancer dans l'historique
+l'appareil, *Special...*). Playlist en *Repeat screen* : DASHBOARD, puis Détail vent et neige
+(page détail) avec un horaire 7h-22h tous les jours (depuis le 2026-11-21, après deux faux
+réveils nocturnes, 14.11 à 5h50 et 21.11 à 3h00, qui l'avaient laissée affichée des heures).
+Milieu deux fois (*Next Screen*) → page détail fraîche ; laissée là, l'écran y reste.
+Guest Mode reste réglé en secours (*Special… › Guest Mode*, page détail 30 min). Les deux
+faux réveils sont une seconde requête de l'appareil quelques secondes après la normale
+(le 21.11, firmware 1.8.19 puis 1.8.18 : redémarrage probable), pas un appui. La droite ne fait qu'avancer dans l'historique
 de l'appareil (images en mémoire, doc TRMNL) : elle ne marche qu'après un retour à gauche,
 montre l'image gardée (données possiblement anciennes) et cesse dès qu'un nouvel écran
 arrive. Le handoff Cowork qui les disait

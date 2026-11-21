@@ -8,8 +8,8 @@ copie.
 - **`meteo-alert`** est la seule source de vérité sur les conditions : prévisions
   MétéoSuisse, correction du biais, fenêtres, choix du spot, seuils, saison. Il publie
   deux sorties : l'alerte ntfy et ce payload.
-- **Les markups** (DASHBOARD 392375, dépôt `trmnl-markup` ; page détail du plugin Vent
-  Wingfoil 471074, pour le Guest Mode) ne font que rendre. Il ne
+- **Les markups** (DASHBOARD 392375, dépôt `trmnl-markup` ; page détail du plugin « Détail vent et neige »
+  471074, dans la playlist de 7h à 22h et en Guest Mode) ne font que rendre. Il ne
   recalcule rien, ne retrie rien, ne convertit aucune unité et ne copie aucune valeur.
   Il garde seulement ce qui dépend de l'heure du rendu (fenêtre finie, âge des données)
   et la mise en forme.
@@ -46,6 +46,7 @@ données ne changent qu'à chaque run. À revoir si un second consommateur appar
 | `reco` | objet ou null | Spot et fenêtre à afficher, voir plus bas. Null s'il n'y a aucune heure exploitable dans l'horizon. Indépendant de `saison` | Oui, en saison vent |
 | `spots` | tableau | Les 6 spots les plus proches, voir plus bas | Page détail, en saison vent |
 | `profil` | objet ou null | Profil horaire du spot et du jour de `reco`, voir plus bas. Null si `reco` est null | Page détail, en saison vent |
+| `plan` | objet ou null | Plan de la semaine par spot, voir plus bas. Depuis le 2026-11-21. Null hors saison vent ou sans heure exploitable | Page détail, en saison vent |
 
 ### `mesure`
 
@@ -104,6 +105,20 @@ Depuis le 2026-11-09. Pour la page détail : le spot et le jour de `reco`, heure
 | `kn` | tableau de nœuds au dixième, ou null | Prévision corrigée du biais. Au dixième, pour qu'une barre grise ne touche pas la ligne du seuil (10,6 arrondi à 11). Null : heure absente des données |
 | `ok` | tableau de 0 ou 1 | 1 : l'heure est exploitable (créneau, saison, secteur, horizon de 7 jours) et au seuil plein. C'est la règle des fenêtres sans la durée minimale : une heure isolée peut valoir 1. Au-delà de l'horizon, une heure au-dessus du seuil vaut 0 |
 
+### `plan`
+
+Depuis le 2026-11-21 (`planSemaine`, `wind-select.mjs`). Pour les 6 spots de `spots[]`, dans le
+même ordre, et les 7 jours de l'horizon à partir du jour du run.
+
+| Champ | Type | Sens |
+|---|---|---|
+| `jours` | tableau de `AAAA-MM-JJ` local | Les 7 jours, du jour du run à J+6 |
+| `s[i].n` | texte | Nom court, celui de `spots[i].n` |
+| `s[i].kn` | tableau de nœuds entiers, ou null | Meilleure moyenne corrigée du biais sur `min_heures` heures exploitables consécutives du jour (créneau, saison, secteur, horizon, heures pas finies). Null : aucune suite assez longue ce jour-là |
+| `s[i].ok` | tableau de 0 ou 1 | 1 : une fenêtre au seuil plein commence ce jour-là (règle de `fenetres()`). Libellé inversé |
+
+L'écran grise les jours déjà passés au moment du rendu.
+
 ### `neige`
 
 Écrit par l'alerte neige annoncée (`data/neige-ecran.json`), joint au payload par
@@ -124,6 +139,15 @@ Depuis le 2026-11-09. Pour la page détail : le spot et le jour de `reco`, heure
 | `episode.cm` | cm, entier | Cumul, jours passés compris : somme des épisodes qui chevauchent l'annonce, comme l'alerte. Au moment d'une alerte, c'est son chiffre ; ensuite, c'est la valeur courante de la prévision, qui peut monter de moins que `HAUSSE_NEIGE_CM` ou baisser sans message |
 | `episode.de`, `episode.a` | `AAAA-MM-JJ` local | Premier et dernier jour |
 | `episode.ok` | booléen | Vrai : le cumul atteint le seuil. Libellé inversé. Dans la marge d'annulation : faux, sans message |
+| `jours[].tn`, `jours[].tx` | °C entiers, ou null | Depuis le 2026-11-21 (`snow-detail.mjs`, page détail). Minimum et maximum à 2022 m |
+| `jours[].pl` | mm entiers, ou null | Pluie du modèle (`rain_sum` + `showers_sum`) |
+| `jours[].iso` | m, à 100 m, ou null | Isotherme 0 °C le plus haut entre 9h et 16h locales |
+| `jours[].raf` | km/h entiers, ou null | Rafale maximale à 2022 m |
+| `jours[].sol` | h entières, ou null | Ensoleillement |
+| `jours[].p` | 0 ou 1 | Jour de poudre : neige de la veille (conversion D-005) ≥ `POUDRE_CM`, soleil ≥ `POUDRE_SOLEIL_H`, rafales < `POUDRE_RAFALES_KMH`, maximum ≤ `POUDRE_TMAX_C` (10 cm, 4 h, 50 km/h, 2 °C par défaut). Libellé inversé |
+| `h48` | objet ou null | Les 48 heures à partir de l'heure en cours : `de` (`AAAA-MM-JJTHH:MM` local, première étiquette Open-Meteo, soit la fin de la première heure), `cm` (neige convertie D-005, au dixième), `pl` (pluie du modèle, mm au dixième), `t` (°C entiers). Null dans un tableau : heure absente |
+| `mesure` | objet ou null | Station ILI2 : `h` (dernier relevé HS, epoch UTC s), `hs` (cm), `d24` (HS − HS 24 h avant, ou null), `ta` (°C au dixième, ou null), `hn` (trois derniers HN_1D publiés, `{ d, cm }`, lecture J+1 : 24 h jusqu'à 7h le jour `d`). Null sans archive HS |
+| `avalanche` | objet ou null | Bulletin SLF, région CH-1312 Monthey - Val d'Illiez : `niveau` (1 à 5, le plus haut de la journée), `sous` (`-`, `+` ou vide), `pb` (deux problèmes au plus, en français), `alt` (limite basse du premier problème, m, ou null), `fin` (fin de validité, epoch UTC s). Null si le bulletin manque : run rouge, l'alerte part quand même |
 
 Priorité : au seuil avec au moins `min` cm à venir, puis au seuil, puis les autres ; à rang
 égal, le plus proche. Le fichier s'écrit à chaque run, y compris si un envoi ntfy a échoué :

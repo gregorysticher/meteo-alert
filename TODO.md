@@ -18,9 +18,9 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
       alerte de la saison 2027 (dès le 2027-04-15).
 - [ ] **Foil 1600 cm²** : si tu le prends, me le dire — `seuil_kn` passe à 9,5.
       Échéance : avant le 2027-04-15.
-- [ ] **Page détail : nouveau chemin** (depuis le 2026-11-21). L'écran ne passe plus
-      à la page détail par « écran suivant » : menu de l'appareil › *Special…* ›
-      *Guest Mode* (30 min, retour seul au DASHBOARD). Me dire si ça ne marche pas ou si
+- [ ] **Page détail** : de nouveau par le bouton du milieu (deux fois), visible de 7h à
+      22h seulement ; contenu enrichi le 2026-11-21 (neige : mesures, avalanches, 5 jours,
+      48 h, POUDRE ; vent l'été : plan de la semaine). Me dire ce qui manque ou gêne, et si
       l'écran quitte encore le DASHBOARD sans appui (avec l'heure).
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
@@ -64,6 +64,9 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ## Fait récemment
 
+- [x] 2026-11-21 — Page détail : remise en rotation 7h-22h (choix B de Greg) et enrichie
+      (`snow-detail.mjs` : jours détaillés, 48 h, mesures ILI2, bulletin SLF, poudre ;
+      `planSemaine` : plan vent de la semaine). Markup enregistré dans TRMNL, contrat à jour.
 - [x] 2026-11-21 — D-006 en service : silence 23h → 8h (jour ouvré) / 9h (repos), réveil du
       Worker à 8h03 / 9h03 (`3 6,7,8 * * *`, version 6962b625), Wrangler déconnecté.
 - [x] 2026-11-21 — D-005 en production : neige de l'alerte et de l'écran convertie heure par
