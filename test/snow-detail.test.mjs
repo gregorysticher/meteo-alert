@@ -113,3 +113,28 @@ test('avalanches : le plus haut de la journée ; région absente -> null', () =>
   assert.equal(avalanche({}), null);
   assert.equal(avalanche(bulletin([{ mainValue: 'inconnu' }])), null);
 });
+
+// ---- 48 heures -------------------------------------------------------------------
+
+test('48 h : depuis l\'heure en cours, neige convertie, pluie du modèle, température', async () => {
+  const { heures48 } = await import('../snow-detail.mjs');
+  const { neigeHoraire, rapportTemperature } = await import('../snow-conversion.mjs');
+  const time = [], precipitation = [], temperature_2m = [], rain = [], showers = [];
+  for (let k = 0; k < 72; k++) {
+    const j = k < 24 ? '21' : k < 48 ? '22' : '23';
+    time.push(`2026-11-${j}T${String(k % 24).padStart(2, '0')}:00`);
+    precipitation.push(k === 14 ? 2 : 0); temperature_2m.push(k === 14 ? -6 : 1.6);
+    rain.push(k === 15 ? 1.25 : 0); showers.push(k === 15 ? 0.5 : null);
+  }
+  const r = heures48({ hourly: { time, precipitation, temperature_2m, rain, showers } }, '2026-11-21T13:42', neigeHoraire);
+  assert.equal(r.de, '2026-11-21T14:00');               // heure 13-14 en cours
+  assert.equal(r.cm.length, 48);
+  assert.equal(r.cm[0], Math.round(2 * rapportTemperature(-6) * 10) / 10);
+  assert.equal(r.pl[1], 1.8);
+  assert.equal(r.t[0], -6);
+  assert.equal(r.t[1], 2);
+  assert.equal(heures48({ hourly: { time } }, '2026-11-30T00:00', neigeHoraire), null);
+  const trou = heures48({ hourly: { time, precipitation: precipitation.map((v, k) => (k === 14 ? null : v)), temperature_2m } }, '2026-11-21T13:42', neigeHoraire);
+  assert.equal(trou.cm[0], null);
+  assert.equal(trou.pl[0], null);
+});

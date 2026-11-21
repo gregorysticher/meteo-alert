@@ -64,6 +64,31 @@ export function detailJours(data, dates, neige, jours, poudre = POUDRE) {
   });
 }
 
+// ---- les 48 prochaines heures ----------------------------------------------------
+
+// À partir de l'heure locale en cours (étiquette Open-Meteo = fin de l'heure) : neige
+// convertie (D-005, la même que l'alerte), pluie du modèle (rain + showers) et
+// température, heure par heure. { de: 'AAAA-MM-JJTHH:00' local de la première valeur,
+// cm: [cm au dixième], pl: [mm au dixième], t: [°C entier] } ; null si les heures
+// manquent. Une heure absente vaut null, jamais 0.
+export const HEURES_DETAIL = 48;
+export function heures48(data, maintenantLocal, neigeHoraire, bornes, n = HEURES_DETAIL) {
+  const h = data?.hourly ?? {};
+  const time = h.time ?? [];
+  const debut = time.findIndex((t) => t > maintenantLocal);
+  if (debut < 0) return null;
+  const cm = [], pl = [], t = [];
+  for (let i = debut; i < debut + n && i < time.length; i++) {
+    const p = h.precipitation?.[i], T = h.temperature_2m?.[i];
+    const r = (h.rain?.[i] ?? null) === null && (h.showers?.[i] ?? null) === null
+      ? null : (h.rain?.[i] ?? 0) + (h.showers?.[i] ?? 0);
+    cm.push(nb(p) && nb(T) && p >= 0 ? Math.round(neigeHoraire(p, T, bornes) * 10) / 10 : null);
+    pl.push(nb(r) ? Math.round(r * 10) / 10 : null);
+    t.push(nb(T) ? Math.round(T) : null);
+  }
+  return cm.length ? { de: time[debut], cm, pl, t } : null;
+}
+
 // ---- mesures à la station --------------------------------------------------------
 
 // HS à la demi-heure (data/neige-hs.csv, écrit par l'alerte neige fraîche) et HN_1D

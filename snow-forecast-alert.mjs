@@ -47,10 +47,10 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } fr
 import { notifier, sortieSiEchecs } from "./notify.mjs";
 import { fetchEssai } from "./reseau.mjs";
 import { journaliserPrevision, lire as lireJournal } from "./snow-qa.mjs";
-import { detailJours, mesureStation, avalanche, URL_AVALANCHE, POUDRE } from "./snow-detail.mjs";
+import { detailJours, heures48, mesureStation, avalanche, URL_AVALANCHE, POUDRE } from "./snow-detail.mjs";
 import { episodes as decouper, decider, ecranNeige } from "./snow-episodes.mjs";
 import { journaliserEnvoi } from "./snow-verdict.mjs";
-import { neigeJournaliere, TEMP_NEIGE_C, TEMP_PLUIE_C } from "./snow-conversion.mjs";
+import { neigeJournaliere, neigeHoraire, TEMP_NEIGE_C, TEMP_PLUIE_C } from "./snow-conversion.mjs";
 
 // ══════ PARAMÈTRES ══════
 const LAT = 46.1913556421;
@@ -270,7 +270,7 @@ async function main() {
     "&daily=snowfall_sum,precipitation_sum,rain_sum,temperature_2m_mean" +
     // Page détail (snow-detail.mjs), information seulement :
     ",temperature_2m_max,temperature_2m_min,showers_sum,sunshine_duration,wind_gusts_10m_max" +
-    "&hourly=precipitation,temperature_2m,freezing_level_height" +
+    "&hourly=precipitation,temperature_2m,freezing_level_height,rain,showers" +
     "&models=meteoswiss_icon_seamless" +
     `&timezone=${encodeURIComponent(TZ)}` +
     "&forecast_days=5" +  // ICON-CH2 plafonne à 120 h
@@ -389,6 +389,9 @@ async function main() {
   // bloc vide, run rouge.
   try {
     ecran.jours = detailJours(data, dates, neige, ecran.jours, POUDRE_REGL);
+    const ici = new Intl.DateTimeFormat("sv-SE", { timeZone: TZ, year: "numeric", month: "2-digit",
+      day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date()).replace(" ", "T");
+    ecran.h48 = heures48(data, ici, neigeHoraire, regl.bornes);
   } catch (err) {
     console.error(`ECHEC détail des jours : ${err.message}`);
     process.exitCode = 1;
