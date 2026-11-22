@@ -8,7 +8,16 @@
       "annule": false,
       "horizon": "2026-11-23",
       "cmHorizon": 19.2
+    },
+    {
+      "debut": "2026-11-25",
+      "fin": "2026-11-26",
+      "total": 29.3,
+      "duree": 2,
+      "annule": false,
+      "horizon": "2026-11-26",
+      "cmHorizon": 15.1
     }
   ],
-  "updatedAt": "2026-11-19T06:03:24.271Z"
+  "updatedAt": "2026-11-22T08:03:25.152Z"
 }
