@@ -22,7 +22,11 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
       22h seulement ; contenu enrichi le 2026-11-21 (neige : mesures, avalanches, 5 jours,
       48 h, POUDRE ; vent l'été : plan de la semaine). Me dire ce qui manque ou gêne, et si
       l'écran quitte encore le DASHBOARD sans appui (avec l'heure). Retour au DASHBOARD
-      à 22h : second essai le 23.11 (page détail laissée vers 21h45), vérifié à 22h23.
+      à 22h : le 23.11, la timeline ne montre aucune livraison de la page détail après
+      21h21 (DASHBOARD à 21h51, 22h01, 22h16). Me dire quel bouton tu as utilisé vers
+      21h45 : milieu deux fois (Next Screen, visible dans la timeline) ou droite (image
+      gardée en mémoire, invisible pour TRMNL). Pour refaire le test : milieu deux fois
+      vers 21h45, puis noter ce que montre l'écran après 22h15.
 - [ ] **D-007, neige annoncée par MeteoSuisse** : dire oui ou non au journal en parallèle
       (prévision MeteoSuisse Planachaux convertie D-005, comparée à ILI2, sans toucher à
       l'alerte), puis décider de la bascule après 4 à 6 épisodes. Détail chiffré dans la
@@ -69,6 +73,11 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ## Fait récemment
 
+- [x] 2026-11-23 — Vérification 22h, second essai : sans conclusion. Aucune livraison de
+      la page détail entre 21h30 et 22h20 (la dernière date de 21h21) ; DASHBOARD livré à
+      21h51, 22h01 et 22h16. Si la page détail était affichée vers 21h45 par la touche de
+      droite (image en mémoire), TRMNL ne l'a pas vue et le rafraîchissement de 21h51 a
+      remis le DASHBOARD avant 22h.
 - [x] 2026-11-23 — D-007 : deux niveaux de gravité (`gravite.mjs`). Sources critiques
       (prévision de l'alerte, ntfy, webhook TRMNL, état) en rouge ; sources informatives
       (lac, gradient, AROME, QA, archives, page détail) en vert avec avertissement, rouge
