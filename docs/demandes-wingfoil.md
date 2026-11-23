@@ -699,3 +699,78 @@ est de nouveau déconnecté.
   « Di 22.11 09:00 ». Dimanche 8h03, toujours dans le silence et pas de réveil. Dimanche
   9h03, fin du silence et réveil. Lundi 8h03, réveil.
 - **Premier réveil sous les nouveaux horaires :** dimanche 22.11 à 9h03.
+
+---
+
+## D-007 — Runs rouges : deux niveaux de gravité, quota Open-Meteo
+
+**Statut :** OUVERTE
+**De :** WINGFOIL/METEO-ALERT — lundi 23.11.2026, 17h30
+**Décidé par :** Greg, 23.11.2026
+
+### Contexte
+
+Greg reçoit des mails d'échec GitHub. Quatre runs rouges depuis le 20.11 :
+
+| Run | Cause (vue par la session chat) | Impact réel |
+|---|---|---|
+| Lu 23.11, 14h17 — vent (`45182392001`) | Alplakes injoignable (`UND_ERR_CONNECT_TIMEOUT`), 8 essais sur 5 min, puis « ECHEC journal gradient : température du lac indisponible » | **Aucun** : alertes évaluées, TRMNL HTTP 200, archive et QA écrites |
+| Di 22.11, 13h40 — neige annoncée (`45023536861`) | Open-Meteo **HTTP 429** : « Daily API request limit exceeded » | **Réel** : aucune évaluation neige sur ce run |
+| Di 22.11, 22h06 — vent | non analysé | ? |
+| Ve 20.11, 23h15 — vent | non analysé | ? |
+
+Deux problèmes distincts : trop de fausses alarmes (une source décorative fait passer le
+run au rouge), et une vraie fragilité sur le quota Open-Meteo, dont dépend l'alerte neige.
+
+### Décision 1 — deux niveaux de gravité
+
+- **Critique → run rouge, donc mail.** Ce dont dépend la décision ou la livraison :
+  - la source de prévision de l'alerte (MétéoSuisse pour le vent, Open-Meteo pour la
+    neige, ou ce qui la remplacera, voir Décision 2) ;
+  - l'envoi ntfy ;
+  - le webhook TRMNL ;
+  - l'écriture de l'état d'alerte (anti-spam) et son commit.
+- **Informatif → run vert, avertissement dans le journal et le résumé du job.** Ce qui
+  n'enrichit que le message, l'écran ou le QA : température du lac (Alplakes), gradient,
+  AROME en second avis, appariements et rapports QA, archives (HS SLF, mesures).
+- **Escalade.** Une source informative qui échoue **plus de 24 h de suite** passe au rouge
+  au run suivant : une panne durable doit se voir, une coupure de 5 minutes non.
+- **Essais.** Pour une source informative, un seul nouvel essai, pas huit : le run du
+  23.11 a perdu 5 minutes sur Alplakes.
+- Établis toi-même la liste complète des sources et de leur niveau ; mets-la dans la
+  Réponse et dans la spec. Si une source te paraît mal classée ci-dessus, dis-le.
+
+### Décision 2 — quota Open-Meteo
+
+- **Mesurer** combien d'appels Open-Meteo les trois alertes font par jour (et le Worker,
+  s'il en fait), et dire si le 429 du 22.11 vient de notre volume ou de l'adresse IP
+  partagée des runners GitHub.
+- **Proposer une solution gratuite.** Piste à évaluer en priorité : prendre les
+  précipitations et la température de la neige dans les prévisions locales MétéoSuisse
+  (`ogd-local-forecasting`), déjà utilisées pour le vent, ce qui supprimerait la
+  dépendance de l'alerte à Open-Meteo. Dis si un point de prévision convient pour Les
+  Collines à 2022 m (altitude du point, écart avec ILI2) et ce que ça changerait aux
+  bornes de D-005, calées sur ICON via Open-Meteo. Autres pistes possibles : réduire le
+  nombre d'appels, regrouper les requêtes, passer les appels par le Worker. Pas de clé
+  payante.
+- **En attendant**, un 429 ne doit rien perdre : vérifie que l'état d'épisode, l'écran et
+  le journal restent cohérents quand un run neige est refusé, et que le run suivant
+  rattrape.
+- Ne change pas de source sans que je l'aie validée : donne la proposition dans la
+  Réponse, avec son impact sur la qualité (QA neige) avant de basculer.
+
+### Décision 3 — bilan des échecs
+
+- Analyse les deux runs non analysés ci-dessus.
+- Liste tous les runs rouges des 30 derniers jours (les trois alertes et le Worker) avec
+  leur cause, l'impact réel (alerte manquée ou non) et ce qu'ils deviendraient avec la
+  Décision 1 (rouge ou vert).
+
+### Retour attendu
+
+La liste des sources classées, le nombre de mails qui seraient partis sur 30 jours avec la
+nouvelle règle, la mesure du quota Open-Meteo et la proposition chiffrée pour la neige.
+
+### Réponse
+
+_(à remplir par Weather Station)_
