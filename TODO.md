@@ -22,11 +22,9 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
       22h seulement ; contenu enrichi le 2026-11-21 (neige : mesures, avalanches, 5 jours,
       48 h, POUDRE ; vent l'été : plan de la semaine). Me dire ce qui manque ou gêne, et si
       l'écran quitte encore le DASHBOARD sans appui (avec l'heure). Retour au DASHBOARD
-      à 22h : le 23.11, la timeline ne montre aucune livraison de la page détail après
-      21h21 (DASHBOARD à 21h51, 22h01, 22h16). Me dire quel bouton tu as utilisé vers
-      21h45 : milieu deux fois (Next Screen, visible dans la timeline) ou droite (image
-      gardée en mémoire, invisible pour TRMNL). Pour refaire le test : milieu deux fois
-      vers 21h45, puis noter ce que montre l'écran après 22h15.
+      à 22h : probable, pas encore prouvé. TRMNL force un rafraîchissement à chaque bord de
+      l'horaire (7h00 et 22h01, hors du rythme de 15 min, vu les 21 et 23.11). Pour le
+      prouver : un soir, milieu deux fois vers 21h45, puis regarder l'écran après 22h05.
 - [ ] **D-007, neige annoncée par MeteoSuisse** : dire oui ou non au journal en parallèle
       (prévision MeteoSuisse Planachaux convertie D-005, comparée à ILI2, sans toucher à
       l'alerte), puis décider de la bascule après 4 à 6 épisodes. Détail chiffré dans la
@@ -73,11 +71,10 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ## Fait récemment
 
-- [x] 2026-11-23 — Vérification 22h, second essai : sans conclusion. Aucune livraison de
-      la page détail entre 21h30 et 22h20 (la dernière date de 21h21) ; DASHBOARD livré à
-      21h51, 22h01 et 22h16. Si la page détail était affichée vers 21h45 par la touche de
-      droite (image en mémoire), TRMNL ne l'a pas vue et le rafraîchissement de 21h51 a
-      remis le DASHBOARD avant 22h.
+- [x] 2026-11-23 — Vérification 22h, second essai : sans conclusion, l'écran n'a pas été
+      touché (Greg) et restait sur le DASHBOARD. Indice : livraison hors rythme à chaque
+      bord de l'horaire de la page détail (22h01 les 21 et 23.11, 7h00 le 23.11). TRMNL
+      réévalue donc la playlist à 7h et à 22h ; le retour au DASHBOARD à 22h est probable.
 - [x] 2026-11-23 — D-007 : deux niveaux de gravité (`gravite.mjs`). Sources critiques
       (prévision de l'alerte, ntfy, webhook TRMNL, état) en rouge ; sources informatives
       (lac, gradient, AROME, QA, archives, page détail) en vert avec avertissement, rouge
