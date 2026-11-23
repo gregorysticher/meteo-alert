@@ -52,7 +52,7 @@ jobs:
       # Chemins d'échec (API refusée, muette, vide) sur fetch simulé :
       # un test en échec bloque le run, il apparaît en rouge.
       - name: Tests
-        run: node --test test/snow.test.mjs test/snow-conversion.test.mjs test/reseau.test.mjs test/silence.test.mjs test/snow-verdict.test.mjs
+        run: node --test test/gravite.test.mjs test/snow.test.mjs test/snow-conversion.test.mjs test/reseau.test.mjs test/silence.test.mjs test/snow-verdict.test.mjs
 
       - name: Vérifier la neige fraîche mesurée
         env:
@@ -73,7 +73,7 @@ jobs:
           git config --global user.name "snow-alert-bot"
           git config --global user.email "snow-alert-bot@users.noreply.github.com"
           # Un par un : un git add avec un chemin absent n'ajoute RIEN.
-          for f in snow-fresh-alerted.json data/neige.csv data/alertes-neige-qa.csv data/neige-hs.csv; do
+          for f in snow-fresh-alerted.json data/neige.csv data/alertes-neige-qa.csv data/neige-hs.csv data/sources-neige-fraiche.json; do
             if [ -f "$f" ]; then git add "$f"; fi
           done
           if git diff --staged --quiet; then

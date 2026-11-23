@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,11 +20,15 @@ const MOCK = join(RACINE, 'test', 'helpers', 'mock-fetch.mjs');
 // cwd = dossier temporaire vide : un script qui écrirait malgré DRY_RUN le
 // ferait là (le test « aucun fichier écrit » le voit), jamais dans le vrai
 // journal du dépôt.
-function lancer(script, mock, env = {}, etat = null) {
+function lancer(script, mock, env = {}, etat = null, fichiers = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'neige-run-'));
   const fichierEtat = join(dir, 'snow-forecast-alerted.json');
   try {
     if (etat !== null) writeFileSync(fichierEtat, etat);
+    for (const [f, texte] of Object.entries(fichiers)) {
+      mkdirSync(dirname(join(dir, f)), { recursive: true });
+      writeFileSync(join(dir, f), texte);
+    }
     const r = spawnSync(process.execPath,
       ['--import', 'file:///' + MOCK.replace(/\\/g, '/'), join(RACINE, script)], {
         cwd: dir, encoding: 'utf8',
@@ -40,6 +44,8 @@ function lancer(script, mock, env = {}, etat = null) {
       alertes: existsSync(join(dir, 'data/alertes-neige.csv')) ? readFileSync(join(dir, 'data/alertes-neige.csv'), 'utf8') : '',
       qa: existsSync(join(dir, 'data/alertes-neige-qa.csv')) ? readFileSync(join(dir, 'data/alertes-neige-qa.csv'), 'utf8') : '',
       hs: existsSync(join(dir, 'data/neige-hs.csv')) ? readFileSync(join(dir, 'data/neige-hs.csv'), 'utf8') : '',
+      sources: ['annoncee', 'fraiche'].map((n) => join(dir, `data/sources-neige-${n}.json`))
+        .map((p) => (existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : null)),
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -128,10 +134,12 @@ test('annoncée : unité inattendue -> rouge', () => {
 test('annoncée : réponse vide -> rouge', () => {
   assert.equal(lancer('snow-forecast-alert.mjs', { body: { daily_units: { snowfall_sum: 'cm' }, daily: {} } }).code, 1);
 });
-test('annoncée : snowfall_sum absent -> rouge', () => {
+test('annoncée : snowfall_sum absent -> avertissement, vert (journal seulement depuis D-005)', () => {
   const m = prev([0, 5]);
   delete m.body.daily.snowfall_sum;
-  assert.equal(lancer('snow-forecast-alert.mjs', m).code, 1);
+  const r = lancer('snow-forecast-alert.mjs', m);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /AVERTISSEMENT snowfall_sum \(journal\)/);
 });
 test('annoncée : snowfall_sum tout à null -> rouge', () => {
   assert.equal(lancer('snow-forecast-alert.mjs', prev([null, null, null])).code, 1);
@@ -324,11 +332,11 @@ test('annoncée : colonnes annexes demandées à l\'API', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 0, 0, 0, 0]));
   assert.match(r.out, /daily=snowfall_sum,precipitation_sum,rain_sum,temperature_2m_mean/);
 });
-test('annoncée : panne du journal long -> rouge, MAIS alerte partie et écran écrit', () => {
+test('annoncée : panne du journal long -> avertissement, vert, alerte partie et écran écrit', () => {
   for (const long of ['{"status":503,"body":{}}', '{"body":{"daily":{"time":["2026-11-08"]}}}']) {
     const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), { ...REEL, MOCK_LONG: long });
-    assert.equal(r.code, 1, r.out);
-    assert.match(r.out, /ECHEC journal neige horizon long/);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /AVERTISSEMENT journal neige horizon long/);
     assert.match(r.out, /ntfy → Neige annoncée/);
     assert.equal(r.ecran.episode.cm, 12);
   }
@@ -556,10 +564,10 @@ test('fraîche : HAUSSE_PCT absurde -> verdict à 30 %, run rouge', () => {
   assert.equal(r.code, 1);
   assert.match(r.out, /Variable invalide : HAUSSE_PCT = -5/);
 });
-test('fraîche : archive HS en panne -> rouge', () => {
+test("fraîche : relevé absent et réponse inattendue de l'archive HS -> rouge (alerte aveugle), HS en avertissement", () => {
   const r = lancer('snow-fresh-alert.mjs', { body: {} }, { DRY_RUN: 'false', NTFY_TOPIC_NEIGE: 'x' });
-  assert.equal(r.code, 1);
-  assert.match(r.out, /ECHEC archive HS ILI2 : réponse inattendue/);
+  assert.equal(r.code, 1, "relevé ILI2 absent : l'alerte est aveugle, critique");
+  assert.match(r.out, /AVERTISSEMENT archive HS ILI2 : réponse inattendue/);
 });
 test('rapport : modèle de l\'alerte et station de référence seuls', () => {
   const dir = mkdtempSync(join(tmpdir(), 'neige-'));
@@ -597,4 +605,71 @@ test('annoncée : écran enrichi (jours détaillés, altitude), sans bulletin ni
   assert.equal('avalanche' in r.ecran, false);
   assert.equal('mesure' in r.ecran, false);
   assert.doesNotMatch(r.out, /aws\.slf\.ch|bulletin/);
+});
+
+// ---- D-007 : un 429 d'Open-Meteo ne perd rien ----------------------------------
+
+test('annoncée : 429 Open-Meteo -> rouge, état, écran et journal intacts ; le run suivant rattrape', () => {
+  const etat = JSON.stringify({ episodes: [] });
+  const refus = lancer('snow-forecast-alert.mjs', { status: 429, body: { error: true, reason: 'Daily API request limit exceeded' } },
+    REEL, etat);
+  assert.equal(refus.code, 1, refus.out);
+  assert.match(refus.out, /HTTP 429/);
+  assert.equal(refus.etat, etat, 'état d\'épisode inchangé');
+  assert.equal(refus.ecran, null, 'écran non réécrit : TRMNL garde le dernier, daté');
+  assert.equal(refus.journal, '', 'rien au journal');
+  assert.doesNotMatch(refus.out, /ntfy →/);
+  const suivant = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), REEL, etat);
+  assert.equal(suivant.code, 0, suivant.out);
+  assert.match(suivant.out, /ntfy → Neige annoncée/);
+  assert.equal(suivant.ecran.episode.cm, 12);
+});
+
+
+test('fraîche : archive HS injoignable -> vert, un seul nouvel essai, stations suivantes sautées', () => {
+  const urls = join(tmpdir(), `urls-hs-${process.pid}.log`);
+  writeFileSync(urls, '');
+  try {
+    const r = lancer('snow-fresh-alert.mjs', slf(3, 1),
+      { DRY_RUN: 'false', NTFY_TOPIC_NEIGE: 'x', MOCK_STATION: '{"status":503,"body":{}}', MOCK_URLS: urls });
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /AVERTISSEMENT archive HS \(SLF\) : ILI2 : HTTP 503/);
+    assert.match(r.out, /sautée : SLF en panne dans ce run/);
+    const appels = readFileSync(urls, 'utf8').split('\n').filter((u) => u.includes('/imis/station/'));
+    assert.equal(appels.length, 2, 'ILI2 et son nouvel essai, rien pour les voisines');
+    assert.ok(r.sources[1]['archive HS (SLF)']);
+  } finally {
+    rmSync(urls, { force: true });
+  }
+});
+
+test('fraîche : une station voisine en 404 -> avertissement sous son nom, les autres archivées', () => {
+  const r = lancer('snow-fresh-alert.mjs', slf(3, 1),
+    { DRY_RUN: 'false', NTFY_TOPIC_NEIGE: 'x', MOCK_STATION_404: 'ILI2' });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /AVERTISSEMENT archive HS ILI2 : HTTP 404/);
+  assert.doesNotMatch(r.out, /sautée/);
+  assert.equal(r.sources[1]['archive HS (SLF)'], undefined);
+});
+
+test('annoncée : source informative en panne depuis plus de 24 h -> rouge (escalade), alerte partie', () => {
+  const t = (h) => new Date(Date.now() - h * 36e5).toISOString();
+  const suivi = { 'journal neige horizon long': { depuis: t(30), dernier: t(5), message: 'HTTP 503' } };
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), { ...REEL, MOCK_LONG: '{"status":503,"body":{}}' },
+    null, { 'data/sources-neige-annoncee.json': JSON.stringify(suivi) });
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /ECHEC journal neige horizon long en panne depuis plus de 24 h/);
+  assert.match(r.out, /ntfy → Neige annoncée/);
+  assert.equal(r.sources[0]['journal neige horizon long'].depuis, suivi['journal neige horizon long'].depuis);
+});
+
+test('annoncée : DRY_RUN avec une panne en cours -> escalade calculée (rouge), suivi non réécrit', () => {
+  const t = (h) => new Date(Date.now() - h * 36e5).toISOString();
+  const suivi = JSON.stringify({ 'snowfall_sum (journal)': { depuis: t(30), dernier: t(5), message: 'x' } });
+  const m = prev([0, 7, 5, 0, 0]);
+  delete m.body.daily.snowfall_sum;
+  const r = lancer('snow-forecast-alert.mjs', m, {}, null, { 'data/sources-neige-annoncee.json': suivi });
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /snowfall_sum \(journal\) en panne depuis plus de 24 h/);
+  assert.deepEqual(r.sources[0], JSON.parse(suivi));
 });

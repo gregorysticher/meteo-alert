@@ -74,9 +74,9 @@ test('les workflows transmettent vraiment l\'entree au script', () => {
   }
   assert.ok(wind.includes('-size +45M'), 'garde de taille des fichiers');
   assert.ok(annonce.includes('AFFICHAGE_CM: ${{ vars.AFFICHAGE_NEIGE_CM }}'));
-  assert.ok(annonce.includes('data/neige-ecran.json data/alertes-neige.csv; do'), 'ecran et journal QA dans le commit');
+  assert.ok(annonce.includes('data/neige-ecran.json data/alertes-neige.csv data/sources-neige-annoncee.json; do'), 'ecran et journal QA dans le commit');
   const fraiche = readFileSync('.github/workflows/snow-fresh-alert.yml', 'utf8');
-  assert.ok(fraiche.includes('data/alertes-neige-qa.csv data/neige-hs.csv; do'), 'verdicts et HS dans le commit');
+  assert.ok(fraiche.includes('data/alertes-neige-qa.csv data/neige-hs.csv data/sources-neige-fraiche.json; do'), 'verdicts et HS dans le commit');
   assert.ok(fraiche.includes('HAUSSE_PCT: ${{ vars.HAUSSE_NEIGE_PCT }}'), 'tolérance du verdict');
   for (const y of [annonce, fraiche]) assert.ok(y.includes('test/snow-verdict.test.mjs'), 'tests QA neige joués');
   assert.ok(annonce.includes('actions: write'));

@@ -12,12 +12,14 @@ import {
   archiver, apparier, biaisParEcheance, fichierArchive, fichierQa, lignesArchive, rapport,
   journaliserGradient,
 } from '../wind-qa.mjs';
+import { oublierMesures } from '../wind-sources.mjs';
 
 const SPOTS = [{ key: 'reposoir', station: 'GVE' }, { key: 'coppet', station: 'CGI' }];
 const racine = process.cwd();
 let dir;
 
 beforeEach(() => {
+  oublierMesures();
   process.chdir(racine);
   if (dir) rmSync(dir, { recursive: true, force: true });
   dir = mkdtempSync(join(tmpdir(), 'qa-'));
@@ -190,6 +192,7 @@ test('gradient : idempotent par heure, rouge si l\'air manque partout', async ()
   assert.equal(f.mock.callCount(), n, 'aucun appel au second passage');
   mock.restoreAll();
   rmSync('data', { recursive: true, force: true });
+  oublierMesures();
   monde('Station/Location;Date;fu3010z0', 'GVE;202611081000;10');
   await assert.rejects(journaliserGradient(lac), /air absente/);
   mock.restoreAll();

@@ -45,6 +45,7 @@ function lancer(monde, { vus = [], env = {}, fichiers = {} } = {}) {
       vus: JSON.parse(lit('alerted.json')),
       payload: lit('trmnl.log').trim() ? JSON.parse(lit('trmnl.log')).merge_variables : null,
       archive: lit('data/forecasts/2027-05.csv'), qa: lit('data/qa/2027-05.csv'), gradient: lit('data/gradient.csv'),
+      sources: lit('data/sources-vent.json') ? JSON.parse(lit('data/sources-vent.json')) : null,
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -107,11 +108,12 @@ test('B5 : AROME archive avec son modele, alertes identiques avec ou sans lui', 
   assert.ok(lignes.every((l) => l.startsWith('202705070700,') && l.split(',')[3] >= '202705070700'));
 });
 
-test('B5 : AROME en panne -> run rouge, MAIS alertes parties et archive MeteoSuisse ecrite', () => {
+test('B5 : AROME en panne -> avertissement, run vert (D-007), alertes parties et archive MeteoSuisse ecrite', () => {
   for (const arome of [503, 'vide']) {
     const r = lancer({ vent: venteSamedi('Bellevue'), arome });
-    assert.equal(r.code, 1, r.out);
-    assert.match(r.out, /ECHEC archive AROME/);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /AVERTISSEMENT AROME \(Open-Meteo\)/);
+    assert.match(r.out, /::warning title=AROME \(Open-Meteo\)::/);
     assert.ok(r.notifs.length > 0);
     assert.match(r.archive, /,ms\n/);
     assert.doesNotMatch(r.archive, /,arome/);
@@ -124,11 +126,11 @@ test('B5 : la requete AROME demande le bon modele, en noeuds', () => {
   assert.match(r.archive, /,arome/);
 });
 
-test('B5 : unite inattendue ou run fige -> rouge, rien d\'archive pour AROME', () => {
+test('B5 : unite inattendue ou run fige -> avertissement, rien d\'archive pour AROME', () => {
   for (const arome of ['mph', 'fige']) {
     const r = lancer({ arome });
-    assert.equal(r.code, 1, r.out);
-    assert.match(r.out, /ECHEC archive AROME/);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /AVERTISSEMENT AROME/);
     assert.doesNotMatch(r.archive, /,arome/);
   }
 });
@@ -176,23 +178,24 @@ test('B6 : second run dans la meme heure, seul le spot sans thermometre reste ->
   assert.match(r.out, /Gradient air-eau : 0/);
 });
 
-test('B6 : air absent partout -> rouge', () => {
+test('B6 : air absent partout -> avertissement, vert', () => {
   const r = lancer({ air_mesure: false, eau: 12 });
-  assert.equal(r.code, 1, r.out);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /AVERTISSEMENT gradient air-eau/);
   assert.match(r.out, /air absente/);
 });
 
-test('B6 : lac muet -> run rouge, alertes parties quand meme', () => {
+test('B6 : lac muet -> avertissement, vert, alertes parties quand meme', () => {
   const r = lancer({ vent: venteSamedi('Bellevue'), eau: null });
-  assert.equal(r.code, 1, r.out);
-  assert.match(r.out, /ECHEC journal gradient/);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /AVERTISSEMENT gradient air-eau : temperature du lac indisponible/);
   assert.ok(r.notifs.length > 0);
 });
 
-test('B6 : prevision d\'air absente -> run rouge, alertes parties sans l\'air', () => {
+test('B6 : prevision d\'air absente -> avertissement, vert, alertes parties sans l\'air', () => {
   const r = lancer({ vent: venteSamedi('Bellevue'), air_prev: false, eau: 12 });
-  assert.equal(r.code, 1, r.out);
-  assert.match(r.out, /ECHEC prevision tre200h0/);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /AVERTISSEMENT prevision tre200h0/);
   const conf = r.notifs.find((n) => n.title.startsWith('Confirme'));
   assert.match(conf.message, /Eau 12\.0°C\n/);
 });
@@ -339,7 +342,8 @@ test('contrat : neige jointe en saison neige, nulle en saison vent ou si absente
   const vieux = { 'data/neige-ecran.json': JSON.stringify({ ...ecran, maj: '202604100500' }) };
   assert.equal(lancer(hiver, { ...HOOK, fichiers: vieux }).payload.neige, null);
   const r = lancer(hiver, { ...HOOK, fichiers: { 'data/neige-ecran.json': '{pas du json' } });
-  assert.equal(r.code, 1, r.out);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /AVERTISSEMENT data\/neige-ecran\.json/);
   assert.equal(r.payload.neige, null);
 });
 
@@ -357,16 +361,16 @@ test('alerte : le message annonce la vraie fin de la fenetre', () => {
 
 // ---- page detail : bulletin, releves ILI2, plan ------------------------------------
 
-test('page detail : bulletin en panne ou region absente -> rouge, envoi parti ; aucun bulletin -> vert', () => {
+test('page detail : bulletin en panne ou region absente -> avertissement, vert, envoi parti ; aucun bulletin -> vert', () => {
   const ecran = { maj: '202611081000', lieu: 'Les Collines', episode: null };
   const fichiers = { 'data/neige-ecran.json': JSON.stringify(ecran) };
   const panne = lancer({ now: '2026-11-08T10:00:00Z', avalanche: 'panne' }, { ...HOOK, fichiers });
-  assert.equal(panne.code, 1, panne.out);
-  assert.match(panne.out, /ECHEC bulletin d'avalanches : HTTP 503/);
+  assert.equal(panne.code, 0, panne.out);
+  assert.match(panne.out, /AVERTISSEMENT bulletin d'avalanches SLF : HTTP 503/);
   assert.equal(panne.payload.neige.avalanche, null);
   assert.equal(panne.payload.neige.maj, '202611081000');
   const autre = lancer({ now: '2026-11-08T10:00:00Z', avalanche: 'autre' }, { ...HOOK, fichiers });
-  assert.equal(autre.code, 1, autre.out);
+  assert.equal(autre.code, 0, autre.out);
   assert.match(autre.out, /région CH-1312 absente/);
   const vide = lancer({ now: '2026-11-08T10:00:00Z', avalanche: 'vide' }, { ...HOOK, fichiers });
   assert.equal(vide.code, 0, vide.out);
@@ -390,4 +394,45 @@ test('contrat : plan aligne sur spots[], 7 jours', () => {
   assert.equal(p.plan.jours.length, 7);
   assert.deepEqual(p.plan.s.map((x) => x.n), p.spots.map((x) => x.n));
   assert.ok(p.plan.s.every((x) => x.kn.length === 7 && x.ok.length === 7));
+});
+
+// ---- D-007 : deux niveaux de gravite --------------------------------------------
+
+test('D-007 : AROME en panne depuis moins de 24 h -> vert, suivi garde le debut', () => {
+  const depuis = new Date(Date.parse(VENDREDI) - 20 * 36e5).toISOString();
+  const suivi = { 'AROME (Open-Meteo)': { depuis, dernier: new Date(Date.parse(VENDREDI) - 4 * 36e5).toISOString(), message: 'HTTP 429' } };
+  const r = lancer({ arome: 503 }, { fichiers: { 'data/sources-vent.json': JSON.stringify(suivi) } });
+  assert.equal(r.code, 0, r.out);
+  assert.equal(r.sources['AROME (Open-Meteo)'].depuis, depuis);
+});
+
+test('D-007 : AROME en panne depuis plus de 24 h -> rouge (escalade), alertes parties', () => {
+  const depuis = new Date(Date.parse(VENDREDI) - 25 * 36e5).toISOString();
+  const suivi = { 'AROME (Open-Meteo)': { depuis, dernier: new Date(Date.parse(VENDREDI) - 4 * 36e5).toISOString(), message: 'HTTP 429' } };
+  const r = lancer({ vent: venteSamedi('Bellevue'), arome: 503 },
+    { fichiers: { 'data/sources-vent.json': JSON.stringify(suivi) } });
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /ECHEC AROME \(Open-Meteo\) en panne depuis plus de 24 h/);
+  assert.ok(r.notifs.length > 0);
+});
+
+test('D-007 : AROME de retour -> suivi efface', () => {
+  const depuis = new Date(Date.parse(VENDREDI) - 30 * 36e5).toISOString();
+  const suivi = { 'AROME (Open-Meteo)': { depuis, dernier: new Date(Date.parse(VENDREDI) - 4 * 36e5).toISOString(), message: 'HTTP 429' } };
+  const r = lancer({}, { fichiers: { 'data/sources-vent.json': JSON.stringify(suivi) } });
+  assert.equal(r.code, 0, r.out);
+  assert.deepEqual(r.sources, {});
+});
+
+test('D-007 : Alplakes muet -> un seul nouvel essai dans le run, spots suivants sautes', () => {
+  const r = lancer({ vent: venteSamedi('Bellevue'), eau: null });
+  assert.equal(r.code, 0, r.out);
+  assert.equal(r.out.match(/Raté sur https:\/\/alplakes-api\.eawag\.ch/g)?.length, 1, r.out);
+  assert.match(r.out, /AVERTISSEMENT lac \(Alplakes\) : HTTP 500/);
+  assert.ok(r.sources['lac (Alplakes)']);
+});
+
+test('D-007 : critiques inchanges -> ntfy, webhook et prevision restent rouges au premier echec', () => {
+  assert.equal(lancer({ ntfy: 500, vent: venteSamedi('Bellevue') }).code, 1);
+  assert.equal(lancer({ emission_age_h: 30 }).code, 1);
 });

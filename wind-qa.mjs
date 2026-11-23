@@ -30,6 +30,7 @@
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { mesures, tempLac } from './wind-sources.mjs';
+import { informatif } from './gravite.mjs';
 
 const DIR = 'data';
 const ARCHIVES = DIR + '/forecasts';
@@ -162,7 +163,8 @@ export async function lignesArchive(echeance) {
 /** Verite terrain, independante de toute prevision. Idempotent par heure. */
 export async function journaliserMesures(spots) {
   const codes = new Set(spots.map((s) => s.station));
-  const m = await mesures(codes).catch(() => new Map());
+  // Panne VQHA80 : avertissement (D-007), sous le meme nom que dans wind-alert.
+  const m = await mesures(codes).catch((err) => { informatif('mesures MeteoSuisse', err); return new Map(); });
   if (!m.size) return 0;
 
   const now = new Date();

@@ -26,6 +26,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { notifier, sortieSiEchecs } from './notify.mjs';
 import { apresSilence } from './silence.mjs';
 import { fetchEssai } from './reseau.mjs';
+import { initSources, informatif, sourceOk, bilanSources } from './gravite.mjs';
 import { mesureStation, lireAvalanche } from './snow-detail.mjs';
 import { lire as lireJournalNeige } from './snow-qa.mjs';
 import { previsions, previsionsArome, mesures, tempLac } from './wind-sources.mjs';
@@ -126,29 +127,27 @@ async function neigeEcran(saison, maintenant) {
   if (saison !== 'neige') return null;
   try {
     const n = JSON.parse(await readFile('data/neige-ecran.json', 'utf8'));
+    sourceOk('data/neige-ecran.json');
     // Fichier de la saison passee, si les premiers runs de l'hiver ont echoue.
     if ((maintenant - versDate(n.maj)) / 864e5 > NEIGE_AGE_MAX_J) return null;
     // Page detail (snow-detail.mjs) : releves ILI2 et bulletin d'avalanches lus a chaque
-    // envoi, ils vieillissent plus vite que la prevision. Panne : bloc vide, run rouge,
-    // l'envoi part quand meme.
+    // envoi, ils vieillissent plus vite que la prevision. Panne : bloc vide, avertissement
+    // (gravite.mjs, informatif), l'envoi part quand meme.
     try {
       n.mesure = mesureStation({ lignesNeige: lireJournalNeige(), maintenant });
+      sourceOk('releves ILI2 (ecran)');
     } catch (err) {
-      console.error(`ECHEC releves ILI2 : ${err.message}`);
+      informatif('releves ILI2 (ecran)', err);
       n.mesure = null;
-      process.exitCode = 1;
     }
     const av = await lireAvalanche(fetchEssai);
     n.avalanche = av.avalanche;
-    if (av.erreur) {
-      console.error(`ECHEC bulletin d'avalanches : ${av.erreur}`);
-      process.exitCode = 1;
-    }
+    if (av.erreur) informatif('bulletin d\'avalanches SLF', av.erreur);
+    else sourceOk('bulletin d\'avalanches SLF');
     return n;
   } catch (err) {
     if (err.code === 'ENOENT') return null;
-    console.error(`ECHEC data/neige-ecran.json : ${err.message}`);
-    process.exitCode = 1;
+    informatif('data/neige-ecran.json', err);
     return null;
   }
 }
@@ -222,19 +221,36 @@ async function ecrireVus(v) {
 
 const cfg = JSON.parse(await readFile(CONFIG, 'utf8'));
 if (TEST) cfg.seuil_kn = SEUIL_TEST;
+// Suivi des sources informatives (gravite.mjs) : sortie deja copiee dans le resume (tee).
+initSources('data/sources-vent.json');
+
+// QA et journaux : information seulement (D-007). Chaque etape est isolee : la panne de
+// l'une n'empeche ni les suivantes ni l'envoi a l'ecran.
+async function etapeQa(source, f) {
+  try {
+    const r = await f();
+    sourceOk(source);
+    return r;
+  } catch (err) {
+    informatif(source, err);
+    return null;
+  }
+}
+
+async function qaDuRun() {
+  await etapeQa('journal des mesures', async () => console.log(`Mesures : ${await journaliserMesures(cfg.spots)}`));
+  await etapeQa('gradient air-eau', async () => console.log(`Gradient air-eau : ${await journaliserGradient(cfg.spots)}`));
+  await etapeQa('appariements QA', async () => console.log(`Appariements : ${await apparier(cfg.spots)}`));
+  await etapeQa('evaluation des alertes', async () => console.log(`Alertes evaluees : ${await evaluerAlertes(cfg)}`));
+  await etapeQa('rapports QA', async () => {
+    console.log('\n' + await rapport());
+    console.log('\n' + await rapportAlertes());
+  });
+}
 
 if (QA_ONLY) {
-  await journaliserMesures(cfg.spots);
-  try {
-    console.log(`Gradient air-eau : ${await journaliserGradient(cfg.spots)}`);
-  } catch (err) {
-    console.error(`ECHEC journal gradient : ${err.message}`);
-    process.exitCode = 1;
-  }
-  console.log(`Appariements : ${await apparier(cfg.spots)}`);
-  console.log(`Alertes evaluees : ${await evaluerAlertes(cfg)}`);
-  console.log('\n' + await rapport());
-  console.log('\n' + await rapportAlertes());
+  await qaDuRun();
+  bilanSources();
   sortieSiEchecs();
 } else {
   const maintenant = new Date();
@@ -250,11 +266,10 @@ if (QA_ONLY) {
     (TEST ? '  *** MODE TEST ***' : ''));
 
   const codes = new Set(cfg.spots.map((s) => s.station));
-  // Mesures : affichage et QA seulement, le run continue, mais l'echec doit
-  // se voir (run rouge) au lieu d'etre avale.
-  const m = await mesures(codes).catch((err) => {
-    console.error(`ECHEC mesures MeteoSuisse : ${err.message}`);
-    process.exitCode = 1;
+  // Mesures : affichage et QA seulement (aucune alerte n'en depend) : avertissement,
+  // rouge seulement apres 24 h de panne (gravite.mjs).
+  const m = await mesures(codes).then((x) => { sourceOk('mesures MeteoSuisse'); return x; }, (err) => {
+    informatif('mesures MeteoSuisse', err);
     return new Map();
   });
   const vus = await lireVus();
@@ -330,11 +345,13 @@ if (QA_ONLY) {
     if (!envoye) continue;
     vus.ids.push(id);
     modifie = true;
-    await journaliserAlerte({
+    // Journal QA (informatif) : sa panne ne doit pas empecher d'ecrire alerted.json
+    // plus bas, sinon l'alerte repartirait en double au run suivant.
+    await etapeQa('journal des alertes', () => journaliserAlerte({
       envoyeLe: versCle(maintenant), etage, spot: c.spot.key,
       station: c.spot.station, debut: f[0].date, fin: f.at(-1).date,
       prevu: moyenne(f), corrige: moyenne(f, 'corrige'), lead,
-    });
+    }));
   }
 
   if (cfg.annulation && !TEST && !DRY_RUN && TOPIC) {
@@ -384,9 +401,9 @@ if (QA_ONLY) {
     let plan = null;
     try {
       plan = planSemaine(classement, cfg, biais, maintenant);
+      sourceOk('plan de la semaine (ecran)');
     } catch (err) {
-      console.error(`ECHEC plan de la semaine : ${err.message}`);
-      process.exitCode = 1;
+      informatif('plan de la semaine (ecran)', err);
     }
     console.log(await versTrmnl(classement, cfg, emission, reco, profil, maintenant, plan));
   } catch (err) {
@@ -394,29 +411,18 @@ if (QA_ONLY) {
     process.exitCode = 1;
   }
   if (!TEST) {
-    console.log(`Archive QA : ${await archiver(emission, cfg.spots, parSpot)}`);
-    // Second avis, archive seulement : apres les alertes, et sa panne ne les
-    // touche pas, mais elle se voit (run rouge).
-    try {
+    await etapeQa('archive MeteoSuisse', async () =>
+      console.log(`Archive QA : ${await archiver(emission, cfg.spots, parSpot)}`));
+    // Second avis, archive seulement : apres les alertes, sa panne ne les touche pas
+    // (avertissement, rouge apres 24 h).
+    await etapeQa('AROME (Open-Meteo)', async () => {
       const a = await previsionsArome(cfg.spots);
       console.log(`Archive AROME ${a.emission} : ` +
         await archiver(a.emission, cfg.spots, a.parSpot, 'arome'));
-    } catch (err) {
-      console.error(`ECHEC archive AROME : ${err.message}`);
-      process.exitCode = 1;
-    }
-    console.log(`Mesures : ${await journaliserMesures(cfg.spots)}`);
-    try {
-      console.log(`Gradient air-eau : ${await journaliserGradient(cfg.spots)}`);
-    } catch (err) {
-      console.error(`ECHEC journal gradient : ${err.message}`);
-      process.exitCode = 1;
-    }
-    console.log(`Appariements : ${await apparier(cfg.spots)}`);
-    console.log(`Alertes evaluees : ${await evaluerAlertes(cfg)}`);
-    console.log('\n' + await rapport());
-    console.log('\n' + await rapportAlertes());
+    });
+    await qaDuRun();
   }
   console.log('\nSource: MeteoSwiss / Eawag Alplakes / Open-Meteo (Meteo-France)');
+  bilanSources();
   sortieSiEchecs();
 }

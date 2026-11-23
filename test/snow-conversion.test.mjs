@@ -173,12 +173,12 @@ test('script : unité horaire inattendue -> rouge, aucune alerte', () => {
   assert.match(r.out, /Unité inattendue/);
 });
 
-test('script : snowfall_sum absent -> alerte quand même, run rouge, cm_fixe vide', () => {
+test('script : snowfall_sum absent -> alerte quand même, avertissement, cm_fixe vide', () => {
   const b = reponse([{ mm: 0, t: -8 }, { mm: 20, t: -8 }, { mm: 0, t: -8 }]);
   delete b.daily.snowfall_sum;
   const r = lancer(b);
-  assert.equal(r.code, 1, r.out);
-  assert.match(r.out, /snowfall_sum inexploitable/);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /AVERTISSEMENT snowfall_sum \(journal\) : inexploitable/);
   assert.match(r.out, /À notifier : 1/);
   assert.ok(r.journal.split('\n').some((l) => l.includes(`prev,${jourLocal(1)},`) && l.endsWith(',,')), r.journal);
 });

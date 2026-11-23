@@ -34,6 +34,18 @@ if (spec) {
       const { status = 200, body = null } = JSON.parse(process.env.MOCK_LONG);
       return new Response(JSON.stringify(body), { status });
     }
+    // Archive HS par station (snow-fresh-alert, D-003) : MOCK_STATION = { status, body } |
+    // "network-error" ; MOCK_STATION_404 = code de station qui répond 404.
+    if (String(url).includes('/imis/station/')) {
+      if (process.env.MOCK_STATION_404 && String(url).includes(`/station/${process.env.MOCK_STATION_404}/`)) {
+        return new Response('{}', { status: 404 });
+      }
+      if (process.env.MOCK_STATION === 'network-error') throw new TypeError('fetch failed', { cause: { code: 'ECONNRESET' } });
+      if (process.env.MOCK_STATION) {
+        const { status = 200, body = null } = JSON.parse(process.env.MOCK_STATION);
+        return new Response(JSON.stringify(body), { status });
+      }
+    }
     if (spec === 'network-error') throw new Error('ECONNRESET (simulé)');
     const { status = 200, body = null } = JSON.parse(spec);
     const texte = typeof body === 'string' ? body : JSON.stringify(body);

@@ -46,6 +46,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
 import { fetchEssai } from "./reseau.mjs";
+import { initSources, informatif, sourceOk, bilanSources } from "./gravite.mjs";
 import { journaliserPrevision } from "./snow-qa.mjs";
 import { detailJours, heuresDetail, POUDRE } from "./snow-detail.mjs";
 import { episodes as decouper, decider, ecranNeige } from "./snow-episodes.mjs";
@@ -246,14 +247,17 @@ async function journaliserLong(url, jour) {
       annexes: { mm: d.precipitation_sum, pluie: d.rain_sum, tMoy: d.temperature_2m_mean },
     });
     console.log(`Journal neige, horizon long : ${n} ligne(s) ajoutée(s).`);
+    sourceOk("journal neige horizon long");
   } catch (err) {
-    console.error(`ECHEC journal neige horizon long : ${err.message}`);
-    process.exitCode = 1;
+    informatif("journal neige horizon long", err);
   }
 }
 
 // ══════ MAIN ══════
 async function main() {
+  // Sources informatives (gravite.mjs, D-007) : avertissement, rouge après 24 h de panne.
+  // Open-Meteo, dont dépend l'alerte, reste critique (rouge au premier échec).
+  initSources("data/sources-neige-annoncee.json", { ecrire: !DRY_RUN, resume: true });
   const jour = aujourdhuiLocal();
   console.log(`${LIEU} (${ALT} m) · seuil ${SEUIL_CM} cm cumulés · hausse ${HAUSSE_CM} cm ou ${HAUSSE_PCT} %`);
   console.log(`Date locale : ${jour}\n`);
@@ -312,13 +316,12 @@ async function main() {
   const regl = reglages();
   const dates = data.daily?.time || [];
   // Neige de l'alerte et de l'écran : conversion D-005. snowfall_sum (0,7 fixe) reste au
-  // journal, en information : s'il manque, l'alerte part quand même, mais le run est rouge.
+  // journal, en information : s'il manque, l'alerte part quand même (avertissement).
   let neigeFixe = data.daily?.snowfall_sum;
   if (uF !== "cm" || !Array.isArray(neigeFixe) || neigeFixe.length !== dates.length) {
-    console.error(`snowfall_sum inexploitable (unité ${uF}) : 0,7 fixe absent du journal.`);
-    process.exitCode = 1;
+    informatif("snowfall_sum (journal)", `inexploitable (unité ${uF}) : 0,7 fixe absent du journal`);
     neigeFixe = dates.map(() => null);
-  }
+  } else sourceOk("snowfall_sum (journal)");
   const neige = neigeJournaliere(data.hourly, dates, regl.bornes);
   console.log(`Conversion D-005 : neige sous ${regl.bornes.neige} °C, rien au-dessus de ${regl.bornes.pluie} °C.`);
   // À venir seulement : c'est ce qui prouve que l'alerte voit quelque chose.
@@ -341,12 +344,18 @@ async function main() {
   for (let i = 0; i < datesFutur.length; i++) {
     console.log(`  ${label(datesFutur[i])} · ${neigeFutur[i]} cm (0,7 fixe : ${neigeFixe[iFutur[i]]} cm)`);
   }
+  // Journal QA : sa panne ne doit pas empêcher l'alerte (avant D-007, elle tuait le run).
   if (!DRY_RUN) {
-    const serie = (nom) => iFutur.map((i) => data.daily?.[nom]?.[i] ?? null);
-    console.log(`Journal neige : ${journaliserPrevision(jour, datesFutur, neigeFutur, {
-      annexes: { mm: serie("precipitation_sum"), pluie: serie("rain_sum"), tMoy: serie("temperature_2m_mean"),
-        cmFixe: iFutur.map((i) => neigeFixe[i]) },
-    })} ligne(s) ajoutée(s).`);
+    try {
+      const serie = (nom) => iFutur.map((i) => data.daily?.[nom]?.[i] ?? null);
+      console.log(`Journal neige : ${journaliserPrevision(jour, datesFutur, neigeFutur, {
+        annexes: { mm: serie("precipitation_sum"), pluie: serie("rain_sum"), tMoy: serie("temperature_2m_mean"),
+          cmFixe: iFutur.map((i) => neigeFixe[i]) },
+      })} ligne(s) ajoutée(s).`);
+      sourceOk("journal neige");
+    } catch (err) {
+      informatif("journal neige", err);
+    }
   }
 
   const episodes = decouper(dates, neige, {
@@ -386,15 +395,15 @@ async function main() {
     }),
   };
   // Contexte de la page détail (snow-detail.mjs), même prévision que l'alerte. Une panne ne
-  // touche pas l'alerte : bloc vide, run rouge. Bulletin d'avalanches et relevés ILI2 :
+  // touche pas l'alerte : bloc vide, avertissement. Bulletin d'avalanches et relevés ILI2 :
   // ajoutés par wind-alert à chaque envoi vers TRMNL (ils vieillissent plus vite).
   ecran.alt = ALT;
   try {
     ecran.jours = detailJours(data, dates, neige, ecran.jours, POUDRE_REGL);
     ecran.h = heuresDetail(data, Date.now(), neigeHoraire, regl.bornes);
+    sourceOk("détail des jours (écran)");
   } catch (err) {
-    console.error(`ECHEC détail des jours : ${err.message}`);
-    process.exitCode = 1;
+    informatif("détail des jours (écran)", err);
   }
   console.log(`\nÉcran : ${JSON.stringify(ecran)}`);
 
@@ -416,14 +425,14 @@ async function main() {
       });
       if (!ok) garde = d.record;
       // Message parti : journalisé pour le verdict QA (D-003). Un seuil forcé est un
-      // test, il n'y entre pas. Une panne du journal rend le run rouge sans toucher à
-      // l'état : l'alerte ne repart pas.
+      // test, il n'y entre pas. Une panne du journal ne touche pas à l'état (l'alerte ne
+      // repart pas) : avertissement.
       else if (!SEUIL_FORCE) {
         try {
           journaliserEnvoi(d, { jour, seuil: SEUIL_CM });
+          sourceOk("journal des alertes neige");
         } catch (err) {
-          console.error(`ECHEC journal des alertes neige : ${err.message}`);
-          process.exitCode = 1;
+          informatif("journal des alertes neige", err);
         }
       }
     }
@@ -438,6 +447,7 @@ async function main() {
 }
 
 main()
+  .then(() => bilanSources())
   .then(sortieSiEchecs)
   .catch((err) => {
     console.error("Erreur inattendue :", err.message);

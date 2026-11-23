@@ -12,6 +12,7 @@
 // que de supposer, comme le faisait deja l'ancien controle Open-Meteo.
 
 import { fetchEssai, lireEssai } from './reseau.mjs';
+import { informatif, sourceOk, enPanne } from './gravite.mjs';
 
 const STAC =
   'https://data.geo.admin.ch/api/stac/v1/collections/' +
@@ -35,7 +36,7 @@ export const PARAMS = {
   dir: 'dkl010h0',
 };
 
-// Facultatifs : leur panne rend le run rouge mais ne bloque pas les alertes.
+// Facultatifs : leur panne ne bloque pas les alertes (avertissement, rouge apres 24 h).
 export const PARAMS_OPTION = {
   air: 'tre200h0',    // temperature de l'air a 2 m, degres C
 };
@@ -129,9 +130,9 @@ export async function previsions(spots) {
   for (const [label, param] of Object.entries(PARAMS_OPTION)) {
     try {
       series[label] = (await serie(param, ids)).data;
+      sourceOk(`prevision ${param}`);
     } catch (err) {
-      console.error(`ECHEC prevision ${param} : ${err.message}`);
-      process.exitCode = 1;
+      informatif(`prevision ${param}`, err);
       series[label] = new Map();
     }
   }
@@ -218,8 +219,15 @@ export async function previsionsArome(spots) {
 
 // ---- mesures temps reel --------------------------------------------------
 
+// Un seul telechargement de VQHA80 par run (appele pour l'ecran, le journal et le
+// gradient) : le texte, ou l'echec apres son nouvel essai, est garde pour le run.
+let vqha80 = null;
+// Tests dans un meme processus : chaque scenario simule un autre VQHA80.
+export function oublierMesures() { vqha80 = null; }
+
 export async function mesures(codes) {
-  const lignes = (await texte(MESURES)).split('\n');
+  vqha80 ??= texte(MESURES);
+  const lignes = (await vqha80).split('\n');
   const e = lignes[0].trim().split(';');
   const iDate = e.indexOf('Date');
   const iMoy = e.indexOf('fu3010z0');
@@ -257,17 +265,33 @@ export async function mesures(codes) {
  * Non bloquant : renvoie null en cas d'echec, le reste continue.
  * Simulation au pas de 3 h : la valeur est celle du pas suivant, jusqu'a 3 h apres
  * l'instant demande. Unite verifiee le 08/11/2026 (degC, profondeur 0,17 m).
+ * Source informative (D-007) : Alplakes injoignable (reseau, 5xx, 429) apres son
+ * nouvel essai -> avertissement, et les appels suivants du run sont sautes (le
+ * 23.11.2026, un essai par spot avait coute 5 minutes). Un 4xx reste propre au point.
  */
+export const SOURCE_LAC = 'lac (Alplakes)';
+
 export async function tempLac(lac, lat, lon) {
-  if (!lac) return null;
+  if (!lac || enPanne(SOURCE_LAC)) return null;
   const f = (d) =>
     new Date(Date.now() + d * 864e5).toISOString().slice(0, 16).replace(/[-:T]/g, '');
   const url =
     ALPLAKES + '/simulations/point/delft3d-flow/' + lac + '/' +
     f(0) + '/' + f(1) + '/0/' + lat + '/' + lon + '?variables=temperature';
+  let res;
   try {
-    const res = await fetchEssai(url);
+    res = await fetchEssai(url);
+  } catch (err) {
+    informatif(SOURCE_LAC, err);
+    return null;
+  }
+  if (res.status >= 500 || res.status === 429) {
+    informatif(SOURCE_LAC, `HTTP ${res.status}`);
+    return null;
+  }
+  try {
     if (!res.ok) return null;
+    sourceOk(SOURCE_LAC);
     const j = await res.json();
     const temp = j && j.variables && j.variables.temperature;
     if (temp && temp.unit && temp.unit !== 'degC') return null;

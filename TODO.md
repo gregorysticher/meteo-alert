@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-21
+Dernière mise à jour : 2026-11-23
 Session : Weather Station — https://claude.ai/code/session_01V44DmrGmT76TSq2yZ4XBUY — PC claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
@@ -21,9 +21,12 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 - [ ] **Page détail** : de nouveau par le bouton du milieu (deux fois), visible de 7h à
       22h seulement ; contenu enrichi le 2026-11-21 (neige : mesures, avalanches, 5 jours,
       48 h, POUDRE ; vent l'été : plan de la semaine). Me dire ce qui manque ou gêne, et si
-      l'écran quitte encore le DASHBOARD sans appui (avec l'heure). Pour vérifier le
-      retour au DASHBOARD à 22h : un soir, laisser l'écran sur la page détail vers 21h45
-      et me le dire (test du 21.11 sans conclusion, l'écran était sur le DASHBOARD).
+      l'écran quitte encore le DASHBOARD sans appui (avec l'heure). Retour au DASHBOARD
+      à 22h : second essai le 23.11 (page détail laissée vers 21h45), vérifié à 22h23.
+- [ ] **D-007, neige annoncée par MeteoSuisse** : dire oui ou non au journal en parallèle
+      (prévision MeteoSuisse Planachaux convertie D-005, comparée à ILI2, sans toucher à
+      l'alerte), puis décider de la bascule après 4 à 6 épisodes. Détail chiffré dans la
+      Réponse de D-007 (`docs/demandes-wingfoil.md`). La session WINGFOIL peut trancher.
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
 
@@ -66,6 +69,13 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ## Fait récemment
 
+- [x] 2026-11-23 — D-007 : deux niveaux de gravité (`gravite.mjs`). Sources critiques
+      (prévision de l'alerte, ntfy, webhook TRMNL, état) en rouge ; sources informatives
+      (lac, gradient, AROME, QA, archives, page détail) en vert avec avertissement, rouge
+      après 24 h de panne. Alplakes : un seul nouvel essai par run. Bilan sur 30 jours :
+      21 e-mails d'échec, 7 avec la nouvelle règle. Quota Open-Meteo : environ 150 appels
+      par jour sur 10 000 ; les 429 viennent de l'IP partagée des runners GitHub. Un 429
+      ne perd rien (test). Proposition MeteoSuisse pour la neige en attente de décision.
 - [x] 2026-11-21 — Vérification 22h (page détail en rotation 7h-22h) : sans conclusion.
       Timeline TRMNL de 21h30 à 22h20 : que des livraisons DASHBOARD (21h39, 21h54, 22h01,
       22h16) ; la page détail n'a plus été livrée depuis 11h22. Il faut un soir où l'écran

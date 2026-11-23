@@ -30,6 +30,7 @@
 import { readFileSync, writeFileSync, existsSync, appendFileSync } from "fs";
 import { notifier, sortieSiEchecs } from "./notify.mjs";
 import { fetchEssai } from "./reseau.mjs";
+import { initSources, informatif, sourceOk, enPanne, bilanSources } from "./gravite.mjs";
 import { journaliserMesures, journaliserHs, lire, rapport } from "./snow-qa.mjs";
 import { lireEnvois, mesuresReference, verdicts, ecrireVerdicts, rapport as rapportVerdicts } from "./snow-verdict.mjs";
 
@@ -126,6 +127,9 @@ function sauverEtat(alerted) {
 
 // ══════ MAIN ══════
 async function main() {
+  // Sources informatives (gravite.mjs, D-007) : journal, rapport, QA et archive HS.
+  // L'API SLF du relevé ILI2, dont dépend l'alerte, reste critique.
+  initSources("data/sources-neige-fraiche.json", { ecrire: !DRY_RUN, resume: true });
   const jour = aujourdhuiLocal();
   console.log(`${STATION_NOM} (${STATION}, ${STATION_ALT} m) · seuil ${SEUIL_CM} cm`);
   console.log(`Date locale : ${jour}\n`);
@@ -167,16 +171,27 @@ async function main() {
     console.log(`  ${m.measure_date} · HS=${m.HS} · HN_1D=${m.HN_1D}`);
   }
 
+  // Journal et rapport QA : leur panne n'empêche pas l'alerte (avertissement).
   if (!DRY_RUN) {
-    const n = journaliserMesures(releves
-      .filter((m) => m.station_code === STATION || VOISINES.includes(m.station_code))
-      .map((m) => ({
-        jour: String(m.measure_date).slice(0, 10), cm: m.HN_1D,
-        station: m.station_code, hs: m.HS,
-      })));
-    console.log(`Journal neige : ${n} ligne(s) ajoutée(s).`);
+    try {
+      const n = journaliserMesures(releves
+        .filter((m) => m.station_code === STATION || VOISINES.includes(m.station_code))
+        .map((m) => ({
+          jour: String(m.measure_date).slice(0, 10), cm: m.HN_1D,
+          station: m.station_code, hs: m.HS,
+        })));
+      console.log(`Journal neige : ${n} ligne(s) ajoutée(s).`);
+      sourceOk("journal neige");
+    } catch (err) {
+      informatif("journal neige", err);
+    }
   }
-  console.log("\n" + rapport(lire()));
+  try {
+    console.log("\n" + rapport(lire()));
+    sourceOk("rapport QA neige");
+  } catch (err) {
+    informatif("rapport QA neige", err);
+  }
 
   if (mesures.length === 0) {
     console.log("\nAucun relevé pour cette station — aucune alerte.");
@@ -248,7 +263,7 @@ async function main() {
 // ══════ QA NEIGE (D-003) ══════
 // Après l'alerte, et quel qu'en soit le sort : verdict des alertes neige annoncées
 // envoyées (snow-verdict.mjs) et archive des HS à la demi-heure. Information
-// seulement ; une panne rend le run rouge, sans toucher à l'alerte déjà traitée.
+// seulement (D-007) : une panne donne un avertissement, rouge après 24 h.
 async function qaNeige() {
   const jour = aujourdhuiLocal();
   if (!enSaison(jour) && !IGNORER_SAISON) return;
@@ -267,22 +282,40 @@ async function qaNeige() {
     const texte = rapportVerdicts(qa, lignes, mesures);
     console.log("\n" + texte);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, texte + "\n");
+    sourceOk("QA alertes neige");
   } catch (err) {
-    console.error(`ECHEC QA alertes neige : ${err.message}`);
-    process.exitCode = 1;
+    informatif("QA alertes neige", err);
   }
   if (DRY_RUN) return;
+  // API SLF injoignable (réseau, 5xx, 429) après son nouvel essai : les stations suivantes
+  // sont sautées dans ce run. Une réponse propre à une station (4xx, contenu inattendu)
+  // est suivie sous le nom de la station, sans couper les autres.
   let n = 0;
   for (const code of [STATION, ...VOISINES]) {
+    if (enPanne("archive HS (SLF)")) {
+      console.log(`Archive HS ${code} sautée : SLF en panne dans ce run.`);
+      continue;
+    }
+    let res;
     try {
-      const res = await fetchEssai(API_STATION(code), { headers: { Accept: "application/json" } });
+      res = await fetchEssai(API_STATION(code), { headers: { Accept: "application/json" } });
+    } catch (err) {
+      informatif("archive HS (SLF)", err, `${code} : `);
+      continue;
+    }
+    if (res.status >= 500 || res.status === 429) {
+      informatif("archive HS (SLF)", `${code} : HTTP ${res.status}`);
+      continue;
+    }
+    sourceOk("archive HS (SLF)");
+    try {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!Array.isArray(data)) throw new Error("réponse inattendue");
       n += journaliserHs(data.filter((r) => r.station_code === code));
+      sourceOk(`archive HS ${code}`);
     } catch (err) {
-      console.error(`ECHEC archive HS ${code} : ${err.message}`);
-      process.exitCode = 1;
+      informatif(`archive HS ${code}`, err);
     }
   }
   console.log(`Archive HS à la demi-heure : ${n} ligne(s) ajoutée(s).`);
@@ -290,6 +323,7 @@ async function qaNeige() {
 
 main()
   .then(qaNeige)
+  .then(() => bilanSources())
   .then(sortieSiEchecs)
   .catch((err) => {
     // Filet de sécurité : erreur imprévue = alerte aveugle = run rouge.

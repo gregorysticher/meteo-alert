@@ -773,4 +773,172 @@ nouvelle règle, la mesure du quota Open-Meteo et la proposition chiffrée pour 
 
 ### Réponse
 
-_(à remplir par Weather Station)_
+**De :** Weather Station — lundi 23.11.2026, soir
+
+#### Décision 1 — deux niveaux de gravité : en service
+
+Module `gravite.mjs`, branché dans les trois scripts.
+
+- **Critique → rouge** au premier échec, comme avant.
+- **Informatif → vert.** Une ligne `AVERTISSEMENT <source> : …` va au journal, et une
+  annotation jaune s'affiche sur la page du run.
+- **Escalade.** Une source informative en panne à chaque run depuis plus de 24 h rend
+  le run rouge, et le reste tant que la panne dure. Le suivi tient dans un fichier par
+  workflow (`data/sources-vent.json`, `data/sources-neige-annoncee.json`,
+  `data/sources-neige-fraiche.json`). Chaque fichier est commité avec les données, ce qui
+  évite les conflits entre workflows. Le compteur repart de zéro dès que la source répond.
+- **Essais.** Alplakes n'a plus qu'un nouvel essai par run : après un échec, les spots
+  suivants sont sautés. Le 23.11, il y avait eu 7 essais, soit 5 minutes perdues. Même
+  règle pour l'archive HS du SLF.
+- **Erreur de code.** Une erreur de programmation dans une étape informative (variable
+  inconnue, propriété d'un objet absent, pile dépassée) reste rouge tout de suite. Ce
+  n'est pas une panne de source. Une panne réseau ou un JSON illisible reste informatif.
+- **Série close.** Une source qui n'a pas été appelée depuis plus de 24 h (hors saison,
+  alerte rare) recommence sa série à zéro : sa prochaine panne ne passe pas au rouge
+  d'emblée.
+- **Mesures MeteoSuisse.** VQHA80 n'est téléchargé qu'une fois par run (écran, journal,
+  gradient) au lieu de trois, et réessayé une seule fois.
+- **DRY_RUN.** Les runs neige en DRY_RUN n'écrivent pas le suivi. Le vent l'écrit,
+  comme ses autres données (commit `[dry]`).
+- **Relu par un agent indépendant.** Il n'a trouvé aucun échec critique qui passerait
+  au vert. Ses six remarques sont corrigées, dont un doublon possible d'alerte vent si
+  le journal des alertes tombait en panne après l'envoi. 376 tests passent.
+
+Sources classées, liste complète dans la spec, § A2.1 :
+
+| Workflow | Critique (rouge) | Informatif (vert + avertissement) |
+|---|---|---|
+| Vent | Prévisions locales MeteoSuisse (vent, rafales, q10, direction) ; run de plus de 24 h ; spot sans prévision ; ntfy ; webhook TRMNL ; `alerted.json` et son push | Mesures MeteoSuisse VQHA80 ; prévision d'air `tre200h0` ; lac Alplakes ; gradient ; AROME ; archive MeteoSuisse ; appariements, évaluation des alertes, rapports QA ; page détail (bulletin SLF, relevés ILI2, `neige-ecran.json`, plan de la semaine) |
+| Neige annoncée | Open-Meteo ICON (HTTP, unités, données vides) ; état d'épisode ; ntfy ; push | `snowfall_sum` (0,7 fixe, journal seulement depuis D-005) ; journal neige ; détail des jours (écran) ; journal des alertes D-003 ; horizon long |
+| Neige fraîche | API SLF `daily-snow` ILI2 (HTTP, station absente, relevé trop vieux, HN_1D invalide) ; ntfy ; état ; push | Journal des mesures ; rapport QA ; verdicts QA ; archive HS |
+| Tous | Tests du job, variable de réglage invalide, erreur imprévue, fichier de données de plus de 45 Mo | — |
+
+Points de classement à te signaler :
+
+- **Mesures MeteoSuisse VQHA80** (vent mesuré à l'écran) : ta liste ne les citait pas. Je
+  les ai classées informatives, car aucune alerte n'en dépend.
+- **Archive MeteoSuisse** : c'est la base de la correction de biais des alertes vent.
+  Informative quand même : un run manqué ne change pas un biais calculé sur des
+  semaines, et l'escalade à 24 h couvre une panne durable.
+- **Deux défauts corrigés au passage.** Le journal de prévision de l'alerte annoncée,
+  le journal des mesures et le rapport de l'alerte fraîche n'étaient protégés par
+  rien. Leur panne arrêtait le script *avant* l'alerte. Ils sont maintenant isolés et
+  informatifs.
+- **Relance de wind-alert par l'alerte annoncée** (étape `gh workflow run`) : laissée
+  critique. Elle sert à mettre l'écran à jour plus vite. Dis-moi si tu la veux
+  informative.
+
+#### Décision 3 — bilan des runs rouges, 24.10 → 23.11
+
+Le Worker n'a raté aucun créneau depuis sa mise en service : 84 vent, 28 neige annoncée
+et 28 neige fraîche, chacun suivi de son run dans les 10 minutes. Il ne produit pas
+d'e-mail GitHub : une panne de déclenchement passe par ntfy et le journal Cloudflare.
+
+Il y a eu 21 runs rouges, donc 21 e-mails. Avec la nouvelle règle, il en serait parti
+**7**, dont 1 côté GitHub, plus le diagnostic manuel.
+
+| Run (heure locale) | Workflow | Cause | Impact réel | Avec D-007 |
+|---|---|---|---|---|
+| Sa 07.11 17h10 | neige annoncée | Open-Meteo HTTP 400 (requête refusée, pendant la correction de l'alerte aveugle du 15.10 au 07.11) | Alerte aveugle sur ce run | rouge |
+| Di 08.11 12h00 et 12h01 | vent ×2 | Erreur de code (`Maximum call stack size exceeded`), corrigée le jour même | Pas d'évaluation sur ces runs | rouge ×2 |
+| Di 08.11 12h43 et 12h45 | vent ×2 | Gradient : air absent pour tous les spots | Aucun | vert |
+| Ve 13.11 11h28, 18h17 ; Sa 14.11 6h17 ; Di 15.11 13h01, 16h24 ; Lu 16.11 2h17, 6h17 | vent ×7 | AROME : meta 404 (serveur US), ou `fetch failed` | Aucun (archive AROME seule) | vert |
+| Sa 14.11 16h24 | vent | AROME : délai dépassé (serveur européen muet) | Aucun | vert |
+| Ve 13.11 17h53 | neige annoncée | Open-Meteo injoignable (serveur US en panne) | Pas d'évaluation sur ce run, rattrapée au suivant | rouge |
+| Ve 13.11 17h58 | diag-openmeteo | Diagnostic manuel de la panne ci-dessus, rouge voulu | — | (manuel) |
+| Sa 14.11 12h35 | neige annoncée | Journal horizon long : délai dépassé | Aucun : alerte et écran faits avant | vert |
+| Sa 14.11 20h30 | neige annoncée | Tests du job en échec (seuil de hausse paramétrable, pendant le déploiement du palier D-001) | Pas d'évaluation sur ce run | rouge |
+| **Ve 20.11 23h15** | vent | **AROME : Open-Meteo HTTP 429** | Aucun | vert |
+| Di 22.11 13h40 | neige annoncée | Open-Meteo HTTP 429 « Daily API request limit exceeded » | Pas d'évaluation sur ce run, rattrapée à 16h23 | rouge |
+| **Di 22.11 22h06** | vent | **Run relancé par l'alerte annoncée : refusé au démarrage par GitHub** (« workflow file issue », 0 job, 50 s). Le fichier n'avait pas changé, et les autres relances du jour (8h03, 16h24) sont passées. Cause côté GitHub, inexpliquée. | Écran mis à jour 11 min plus tard par le run de 22h17 | rouge (hors de notre contrôle) |
+| Lu 23.11 14h17 | vent | Alplakes injoignable, 7 essais, gradient sans lac | Aucun | vert |
+
+Escalade : aucune source informative n'est restée en panne plus de 24 h d'affilée sur la
+période. Entre deux runs AROME rouges, il y avait toujours un run vert, donc AROME
+avait répondu. Aucune alerte n'aurait donc été rendue rouge par l'escalade.
+
+#### Décision 2 — quota Open-Meteo
+
+**Mesure.** La limite gratuite est par adresse IP : 600 appels par minute, 5 000 par
+heure et 10 000 par jour (page Pricing d'Open-Meteo, lue le 23.11). Une requête compte
+pour plus d'un appel au-delà de 10 variables, de 2 semaines ou d'un lieu. Notre
+consommation par jour, sur la semaine du 16 au 22.11 :
+
+| Appelant | Requête | Poids | Runs par jour | Appels par jour |
+|---|---|---|---|---|
+| Vent : AROME | meta + 8 lieux × 3 variables × 3 jours | 1 + 8 | ≤ 15 (104 runs en 7 j, dont des secours sautés) | ≤ 135 |
+| Neige annoncée | 15 variables × 12 jours (7 passés + 5) | 1,5 | ~6 (41 en 7 j) | ~9 |
+| Neige annoncée, horizon long | 10 variables × 16 jours | 1,1 | ~6 | ~7 |
+| Neige fraîche, Worker | aucun appel Open-Meteo | 0 | — | 0 |
+| **Total** | | | | **≤ 150, soit 1,5 % de la limite** |
+
+Le plugin TRMNL Météo Carouge interroge Open-Meteo depuis les serveurs de TRMNL, pas
+depuis nos runners.
+
+**Le 429 vient de l'adresse IP partagée des runners GitHub, pas de notre volume.**
+Nos ~150 appels par jour sont en plus répartis sur des runners différents. Le 22.11 à
+13h40, l'adresse du runner avait déjà épuisé ses 10 000 appels du jour, consommés par
+d'autres utilisateurs de GitHub Actions. On n'a aucune prise là-dessus.
+
+**En attendant : un 429 ne perd rien.** C'est vérifié dans le code et par un nouveau
+test, `annoncée : 429 Open-Meteo -> rouge, état, écran et journal intacts ; le run
+suivant rattrape` :
+
+- Le script s'arrête avant toute décision. L'état d'épisode, `neige-ecran.json` et le
+  journal ne sont pas touchés. TRMNL garde le dernier écran neige, daté de son run.
+- Le run suivant recalcule tout depuis 7 jours passés et décide à partir du même état.
+  Il rattrape donc l'alerte ou la révision. Le 22.11, c'était à 16h23.
+- Seul inconvénient : jusqu'à environ 11 h de retard si le run de 16h23 tombe lui aussi
+  sur une adresse épuisée.
+
+**Proposition gratuite : la neige annoncée par MeteoSuisse.** Sonde en lecture seule du
+23.11 :
+
+- **Points de prévision proches de Les Collines** (2022 m), dans `ogd-local-forecasting` :
+  - Champéry / Planachaux, station `WNSPLA`, 1943 m, à 1,9 km : 79 m plus bas, soit
+    −0,5 °C de correction. C'est le meilleur candidat, car c'est un point station,
+    calé sur des mesures.
+  - Pointe des Mossettes, point d'intérêt, 2277 m, à 0,9 km : 255 m plus haut.
+  - Les Crosets, centre NPA, 1665 m, à 1 km.
+- **Paramètres disponibles.** Il n'y a pas de neige prévue en cm, mais il y a ce qu'il
+  faut pour la conversion D-005 : précipitations horaires `rre150h0`, température
+  `tre200h0` et isotherme 0 °C `zprfr0hs`. Il y a aussi les quantiles 10 % et 90 % de la
+  pluie et de la température, qui donnent une fourchette.
+- **Horizon** : environ 9 jours (219 h), contre 5 jours pour ICON-CH2 via Open-Meteo.
+- **Coût** : deux CSV d'environ 32 Mo par run, lus en 1 à 2 s. Aucun quota, aucune clé.
+  C'est l'API que l'alerte vent lit déjà.
+- **Premier signal sur l'épisode en cours.** Neige du 22.11 (00h-24h), conversion D-005,
+  température ramenée à 2022 m. ILI2 a mesuré **39 cm** (HN du 23.11 à 7h) :
+
+  | Prévision | MeteoSuisse Planachaux | Open-Meteo ICON |
+  |---|---|---|
+  | J-1, run du 21.11 à 5h | 26 cm (42 mm) | 52 cm en 0,7 fixe (77 mm) ; conversion D-005 pas encore en service, pas de chiffre au journal |
+  | J0, run du 22.11 à 5h | 37 cm (58 mm) | 36 cm (D-005) |
+
+  Pour le 23.11, prévu la veille, MeteoSuisse donnait 14 cm et Open-Meteo 39 à 45 cm. La hauteur de
+  neige d'ILI2 est montée de 58 à 77 cm entre 23h et 5h, puis n'a plus bougé, soit
+  moins de 20 cm tombés. Le verdict se fera avec le HN de demain. Un seul épisode ne
+  prouve rien, mais les deux sources ne se trompent pas dans le même sens.
+- **Impact sur les bornes D-005.** Les bornes −5 / +5 °C sont calées sur ICON via
+  Open-Meteo, qui ramène la température à 2022 m par sa propre correction d'altitude.
+  Les températures MeteoSuisse aux points station sont post-traitées sur la mesure. Il
+  faudrait donc refaire le calage. Ce n'est pas faisable sur le passé, car le STAC ne
+  garde que 3 jours de runs. Il faut archiver à partir de maintenant.
+
+**Ma proposition, en deux temps, sans bascule :**
+
+1. **Maintenant, sur ton feu vert.** Journaliser chaque run en parallèle : prévision
+   MeteoSuisse Planachaux convertie (modèle `msl` dans `data/neige.csv`, information
+   seulement). Le rapport QA neige existant la compare alors à ILI2, à côté d'ICON.
+   Coût : environ 65 Mo téléchargés par run, aucune alerte touchée.
+2. **Après 4 à 6 épisodes** (mi-janvier ?). Recaler les bornes sur MeteoSuisse, comparer
+   les erreurs J-1 et J-2 des deux sources, puis tu décides : bascule complète, ou
+   MeteoSuisse en principal et Open-Meteo en secours si un 429 tombe.
+
+Autres pistes, moins bonnes :
+
+- Passer les appels par le Worker Cloudflare : ses adresses sont partagées aussi, et ça
+  ajoute une pièce.
+- Relancer le run neige 30 à 60 minutes après un 429, sur un autre runner : gratuit et
+  simple. C'est un bon palliatif si tu ne veux pas de MeteoSuisse.
+- Réduire le volume : il est déjà négligeable, ça ne changerait rien.

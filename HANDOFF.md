@@ -156,6 +156,14 @@ des alertes ne lit que `ms`. `data/gradient.csv` : air mesuré − eau, se joint
 Tous les workflows jouent leurs tests (`test/`) avant le script ; un échec
 (test, API, push) rend le run rouge. Lire le **log**, pas seulement le statut.
 
+**Deux niveaux de gravité (D-007, 23.11.2026, `gravite.mjs`)** : critique (source de
+l'alerte, ntfy, webhook TRMNL, état anti-spam et commit, réglage invalide, test) → rouge ;
+informatif (lac, gradient, AROME, mesures MeteoSuisse, journaux et rapports QA, archives,
+page détail) → vert, `AVERTISSEMENT …` au journal et annotation `::warning::` sur la page
+du run. Une source informative en panne depuis plus de 24 h passe au rouge (suivi dans
+`data/sources-vent.json`, `data/sources-neige-annoncee.json`, `data/sources-neige-fraiche.json`).
+Liste complète : `docs/spec-2026-11-07.md` § A2.1.
+
 Runs manuels : `dry_run` vaut vrai par défaut. `wind-alert` accepte aussi
 `seuil_test` (envoi marqué `[TEST]`, sans toucher anti-spam ni QA).
 
@@ -263,7 +271,8 @@ Voir [`TODO.md`](TODO.md).
   crons à intervalle). `wind-alert` déroge encore à la règle.
 - Sonde de découverte en lecture seule avant tout code de production, puis
   `DRY_RUN`.
-- Un échec doit rendre le run **rouge**, jamais passer en silence.
+- Un échec doit rendre le run **rouge**, jamais passer en silence. Depuis D-007 : un échec
+  **critique** ; une source informative donne un avertissement, rouge après 24 h de panne.
 - Vérifier contre la documentation officielle avant d'affirmer un comportement
   d'API ; tester les paramètres contre l'API réelle.
 - Les classes CSS du markup doivent exister dans le framework TRMNL (pas de
