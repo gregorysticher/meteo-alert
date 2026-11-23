@@ -704,7 +704,7 @@ est de nouveau déconnecté.
 
 ## D-007 — Runs rouges : deux niveaux de gravité, quota Open-Meteo
 
-**Statut :** OUVERTE
+**Statut :** FAITE (Décisions 1 et 3 en service le 23.11.2026 vers 22h30, DRY_RUN verts sur les trois workflows ; Décision 2 : mesure faite, proposition MeteoSuisse à valider)
 **De :** WINGFOIL/METEO-ALERT — lundi 23.11.2026, 17h30
 **Décidé par :** Greg, 23.11.2026
 
