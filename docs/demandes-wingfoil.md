@@ -734,7 +734,7 @@ est de nouveau déconnecté.
 
 ## D-007 — Runs rouges : deux niveaux de gravité, quota Open-Meteo
 
-**Statut :** FAITE (Décisions 1 et 3 en service le 23.11.2026 vers 22h30, DRY_RUN verts sur les trois workflows ; Décision 2 : mesure faite, proposition MeteoSuisse à valider)
+**Statut :** FAITE (Décisions 1 et 3 en service le 23.11.2026 vers 22h30, DRY_RUN verts sur les trois workflows ; Décision 2 : mesure faite, proposition MeteoSuisse validée en D-008)
 **De :** WINGFOIL/METEO-ALERT — lundi 23.11.2026, 17h30
 **Décidé par :** Greg, 23.11.2026
 
@@ -1000,3 +1000,71 @@ minuit et avant le relevé de 7h. La mesure juste est donc le total des deux jou
   le HN du 24.11. Mais c'est le sens attendu, et c'est un argument pour le journal en
   parallèle (point 1 de ma proposition), qui permettrait de mesurer cela sur 4 à 6
   épisodes. J'attends ton feu vert ; rien n'est en service.
+
+---
+
+## D-008 — Suites de D-007 et affichage de l'épisode neige en cours
+
+**Statut :** OUVERTE
+**De :** WINGFOIL/METEO-ALERT — mardi 24.11.2026, 08h35
+**Décidé par :** Greg, 24.11.2026
+
+### Décision 1 — journal MeteoSuisse Planachaux en parallèle : feu vert
+
+- Ton point 1 de D-007, tel que proposé : chaque run neige annoncée journalise la prévision
+  MeteoSuisse `WNSPLA` convertie avec D-005 (température ramenée à 2022 m), modèle `msl`
+  dans `data/neige.csv`. **Information seulement** : aucune alerte ni l'écran n'en dépendent.
+- Source **informative** au sens de D-007 (vert + avertissement, escalade à 24 h).
+- Le rapport QA neige compare `msl` et ICON à ILI2 **sur les fenêtres du relevé (7h → 7h)**
+  en plus des jours civils : le premier signal du 22-23.11 montre que le découpage à minuit
+  fausse la comparaison jour par jour. Donne aussi le total par épisode.
+- Après 4 à 6 épisodes : recalage des bornes sur MeteoSuisse et comparaison J-1 / J-2 des
+  deux sources. Je déciderai alors de la bascule (complète, ou MeteoSuisse principal et
+  Open-Meteo en secours). Signale dans le bilan de chaque épisode où en est la comparaison.
+
+### Décision 2 — relance du run neige après un refus Open-Meteo
+
+- Si le run neige annoncée échoue sur Open-Meteo (HTTP 429, injoignable, 5xx), il
+  programme **une seule relance 30 à 60 minutes plus tard**, sur un autre runner.
+- Pas de relance si un run planifié tombe dans les 2 h qui suivent, ni de relance d'une
+  relance : au plus une par échec.
+- Les règles d'alerte s'appliquent normalement au run relancé, silence nocturne compris.
+- Le run qui a échoué reste rouge (source critique). Si la relance réussit, dis-le dans
+  son résumé, pour que je sache que l'alerte a été rattrapée.
+
+### Décision 3 — relance de l'écran vent par l'alerte neige : informative
+
+- L'étape `gh workflow run` de l'alerte neige annoncée devient **informative** : elle ne
+  sert qu'à rafraîchir l'écran plus tôt, et le run vent suivant le fait de toute façon.
+  C'est elle qui a envoyé le mail du 22.11 à 22h06.
+
+### Décision 4 — écran : ce qui reste à tomber, pas le total d'un épisode commencé
+
+**Constat.** Le 23.11 au soir, l'écran affichait « 182 cm, 16 → 23.11 », alors que presque
+tout était déjà tombé, et masquait l'épisode suivant (28 cm, 25 → 26.11), le seul utile pour
+décider. Ce matin, l'épisode fini a disparu et l'écran est passé à 18 cm : Greg a lu une
+correction de 180 à 17 cm qui n'en était pas une.
+
+- Une fois un épisode **commencé**, la ligne neige de l'écran affiche **la neige qui reste
+  à tomber** (aujourd'hui compris, à partir de l'heure du rendu si tu as l'horaire), et la
+  plage restante (« 31 cm · Lu 23 »), pas le cumul depuis le début.
+- Quand il reste **moins de `AFFICHAGE_CM` (5 cm)** à tomber sur l'épisode commencé, l'écran
+  passe à l'épisode suivant s'il y en a un, sinon à l'affichage normal sans épisode.
+- Avant le début d'un épisode, rien ne change : « à venir » = cumul complet, donc le même
+  chiffre que l'alerte.
+- **Les alertes ne changent pas** : leurs messages et leurs décisions restent sur le cumul
+  de l'épisode. L'écart entre l'écran et la dernière notification pendant un épisode en cours
+  est voulu : l'écran répond à « qu'est-ce qui arrive », la notification annonce l'épisode.
+  Si cela casse le test de contrat TRMNL ou demande un champ nouveau, ajoute le champ, ne
+  retire rien.
+
+### Retour attendu
+
+- Décision 1 : premières lignes `msl` dans le journal, et la ligne du rapport QA.
+- Décision 2 : le test qui simule un 429 puis la relance.
+- Décision 4 : rendu de l'écran rejoué sur le 23.11 au soir (épisode 16 → 23 commencé,
+  épisode 25 → 26 à venir) et sur ce matin, avec ce qu'il aurait affiché.
+
+### Réponse
+
+_(à remplir par Weather Station)_
