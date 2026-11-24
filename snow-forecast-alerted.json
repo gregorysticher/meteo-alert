@@ -12,12 +12,12 @@
     {
       "debut": "2026-11-25",
       "fin": "2026-11-26",
-      "total": 29.3,
+      "total": 17.7,
       "duree": 2,
       "annule": false,
-      "horizon": "2026-11-26",
-      "cmHorizon": 15.1
+      "horizon": "2026-11-28",
+      "cmHorizon": 0
     }
   ],
-  "updatedAt": "2026-11-22T08:03:25.152Z"
+  "updatedAt": "2026-11-24T07:03:42.477Z"
 }
