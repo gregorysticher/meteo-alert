@@ -1630,3 +1630,4 @@ run,source,jour,cm,echeance_j,modele,mm,pluie_mm,t_moy,station,hs,cm_fixe
 2026-11-24T02:20Z,prev,2026-12-06,0,12,long,0.6,0.6,-1.8,,,
 2026-11-24T02:20Z,prev,2026-12-07,0,13,long,0,0,-1.1,,,
 2026-11-24T02:20Z,prev,2026-12-08,2.52,14,long,3.6,0,-5.4,,,
+2026-11-24T03:03Z,mesure,2026-11-23,8.5,,,,,,GRA2,20,
