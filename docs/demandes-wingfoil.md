@@ -230,7 +230,7 @@ remarques mineures corrigées.
 
 ## D-003 — Boucle QA neige : verdict des alertes envoyées
 
-**Statut :** FAITE (en production le 15.11.2026 ; alignement HN_1D tranché vers le 21.11, après l'épisode)
+**Statut :** FAITE (en production le 15.11.2026 ; alignement HN_1D tranché en D-005 : J+1 ; bilan final de l'épisode du 15 au 23.11 écrit le 24.11.2026)
 **De :** WINGFOIL/METEO-ALERT — dimanche 15.11.2026, 08h15
 **Décidé par :** Greg, 15.11.2026
 
@@ -375,6 +375,36 @@ Bilan final, alignement HN_1D tranché, après la fin de la plage (23.11) et ses
 - Décision 3 respectée, aucune correction. Piste pour la fin de saison, à décider par
   vous : rapport cm/mm selon la température, et part pluie vers 0 °C. Le 0,7 cm/mm fixe
   surestime nettement la neige mouillée.
+
+**Bilan final de l'épisode du 15 au 23.11, 24.11.2026 (Weather Station).** Plage passée,
+HN d'ILI2 du 24.11 publié (relevé de 7h). Lecture J+1 retenue (D-005, `ALIGNEMENT = 'J+1'`),
+mesuré à ILI2 sur la plage = HN du 16 au 24.11. Le SLF peut encore réviser les HN du 23 et
+du 24.11 jusqu'au 26.11 ; le verdict est recalculé à chaque run.
+
+| envoyé (heure suisse) | type | plage | annoncé | mesuré | verdict |
+|---|---|---|---|---|---|
+| Je 12.11 5h24 | nouvelle | 15 → 16.11 | 64 | 9 | `RATE` |
+| Ve 13.11 11h28 | prolongé | 15 → 17.11 | 28 | 14 | `SURESTIME` |
+| Ve 13.11 17h33 | hausse | 15 → 16.11 | 37 | 9 | `RATE` |
+| Ve 13.11 22h27 | hausse | 15 → 16.11 | 44 | 9 | `RATE` |
+| Sa 14.11 5h24 | hausse | 15 → 18.11 | 59 | 16 | `SURESTIME` |
+| Sa 14.11 12h36 | hausse | 15 → 18.11 | 68 | 16 | `SURESTIME` |
+| Di 15.11 8h03 | hausse | 15 → 19.11 | 89 | 49 | `SURESTIME` |
+| Ma 17.11 7h03 | prolongé | 15 → 21.11 | 121 | 82 | `SURESTIME` |
+| Je 19.11 7h03 | hausse | 15 → 23.11 | 185 | 134 | `OK` (−28 %) |
+
+- **9 messages, objectif 3 dépassé.** Les 6 premiers sont d'avant D-001 et D-002. Sous les
+  règles actuelles, 3 messages en 9 jours de plage, soit l'objectif.
+- **Verdicts : 1 `OK`, 5 `SURESTIME`, 3 `RATE`.** Tous dans le même sens : trop de neige
+  annoncée. Seul le dernier message, qui couvre la phase froide du 19 au 23.11, tombe
+  dans la tolérance de 30 %, de justesse.
+- **Cause, confirmée** : la phase douce du 15 au 18.11 (pluie et neige mouillée vers 0 °C
+  à 2022 m), comptée en neige au 0,7 cm/mm fixe. D-005 corrige ce cas depuis le 21.11.
+- **Surveillance D-005** : c'est le premier épisode mesuré, et il est `SURESTIME`. Il a été
+  annoncé avant la conversion D-005. Si l'épisode suivant est lui aussi `SURESTIME` ou
+  `SOUSESTIME`, je le signale.
+- **Épisode suivant déjà ouvert** : plage 25 → 26.11, 2 messages (Di 22.11 9h03 nouvelle
+  29 cm, Ma 24.11 8h03 baisse 18 cm), en `ATTENTE`.
 
 ---
 
@@ -942,3 +972,31 @@ Autres pistes, moins bonnes :
 - Relancer le run neige 30 à 60 minutes après un 429, sur un autre runner : gratuit et
   simple. C'est un bon palliatif si tu ne veux pas de MeteoSuisse.
 - Réduire le volume : il est déjà négligeable, ça ne changerait rien.
+
+**Premier signal complété, 24.11.2026 (Weather Station).** HN d'ILI2 du 24.11 publié :
+**12,6 cm** (24 h jusqu'au 24.11 à 7h). Sonde en lecture seule (runs MeteoSuisse du 22 et
+du 23.11 à 5h), conversion D-005, température ramenée à 2022 m.
+
+La comparaison jour par jour est faussée par le découpage. La neige est tombée surtout
+entre 23h et 5h dans la nuit du 22 au 23 (hauteur ILI2 de 58 à 77 cm), à cheval sur
+minuit et avant le relevé de 7h. La mesure juste est donc le total des deux jours, du
+22.11 à 7h au 24.11 à 7h : **52 cm mesurés** (HN 39,3 + 12,6).
+
+| Prévision du 22.11 à 5h (J0 et J-1) | 22.11 | 23.11 | total |
+|---|---|---|---|
+| MeteoSuisse Planachaux, fenêtres du relevé (7h → 7h) | 46 cm | 3 cm | **50 cm** (−4 %) |
+| MeteoSuisse Planachaux, jours 00h-24h | 37 cm | 14 cm | 51 cm |
+| Open-Meteo ICON, D-005, jours 00h-24h | 36 cm | 44 cm | **80 cm** (+54 %) |
+| Mesuré ILI2 (HN 23.11 et 24.11) | 39 cm | 13 cm | 52 cm |
+
+- Sur le total, MeteoSuisse est juste et ICON annonce environ 50 % de trop. Les
+  millimètres expliquent l'écart : 72 mm pour MeteoSuisse contre 97 mm pour ICON. La
+  conversion est la même pour les deux : c'est la quantité d'eau prévue qui diffère.
+- Le run MeteoSuisse du 23.11 à 5h, une fois la neige tombée, ne donnait plus que 4 cm
+  pour la journée du 23 à 7h au 24 à 7h. ILI2 en a mesuré 12,6, alors que sa hauteur de
+  neige n'a pas bougé (tassement). Sur un jour isolé, l'écart est du même ordre que le
+  découpage horaire.
+- **Ça ne prouve rien.** C'est un seul épisode, en phase froide, et le SLF peut réviser
+  le HN du 24.11. Mais c'est le sens attendu, et c'est un argument pour le journal en
+  parallèle (point 1 de ma proposition), qui permettrait de mesurer cela sur 4 à 6
+  épisodes. J'attends ton feu vert ; rien n'est en service.

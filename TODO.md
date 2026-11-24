@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-23
+Dernière mise à jour : 2026-11-24
 Session : Weather Station — https://claude.ai/code/session_01V44DmrGmT76TSq2yZ4XBUY — PC claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
@@ -29,6 +29,7 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
       (prévision MeteoSuisse Planachaux convertie D-005, comparée à ILI2, sans toucher à
       l'alerte), puis décider de la bascule après 4 à 6 épisodes. Détail chiffré dans la
       Réponse de D-007 (`docs/demandes-wingfoil.md`). La session WINGFOIL peut trancher.
+      Premier signal (22-23.11, 52 cm mesurés à ILI2) : MeteoSuisse 50 cm, Open-Meteo 80 cm.
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
 
@@ -37,12 +38,6 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 ## Backlog Claude
 
 ### Avant le 15/04/2027 — prioritaire
-
-- [ ] 2026-11-21 (D-003) : épisode du 15 au 19.11 mesuré. Lire `data/alertes-neige-qa.csv`
-      et le résumé du job neige fraîche ; trancher l'alignement HN_1D avec `data/neige-hs.csv`
-      (4 stations, heure des hausses de HS ; premier indice : lecture J+1), mettre
-      `ALIGNEMENT` dans `snow-verdict.mjs`, écrire la règle en spec B4.1 et répondre dans
-      `docs/demandes-wingfoil.md` (verdicts, règle, messages par épisode).
 
 - [ ] Contrôler le premier vrai `W.reco` à l'écran à l'ouverture de la
       saison (2027-04-15) : jour, heures, inversion.
@@ -71,6 +66,11 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ## Fait récemment
 
+- [x] 2026-11-24 — D-003 : bilan final de l'épisode du 15 au 23.11 dans
+      `docs/demandes-wingfoil.md`. 9 messages (3 sous les règles actuelles), verdicts
+      1 `OK`, 5 `SURESTIME`, 3 `RATE`, tous trop haut (phase douce comptée en neige).
+- [x] 2026-11-24 — D-007 : premier signal complété avec le HN du 24.11. Sur le 22 et le
+      23.11 : 52 cm mesurés à ILI2, MeteoSuisse 50 cm, Open-Meteo 80 cm. Un seul épisode.
 - [x] 2026-11-23 — Vérification 22h, second essai : sans conclusion, l'écran n'a pas été
       touché (Greg) et restait sur le DASHBOARD. Indice : livraison hors rythme à chaque
       bord de l'horaire de la page détail (22h01 les 21 et 23.11, 7h00 le 23.11). TRMNL
