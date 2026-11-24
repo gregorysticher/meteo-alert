@@ -1,12 +1,1 @@
-{
-  "lac (Alplakes)": {
-    "depuis": "2026-11-24T01:19:08.539Z",
-    "dernier": "2026-11-24T01:19:08.539Z",
-    "message": "fetch failed : UND_ERR_CONNECT_TIMEOUT"
-  },
-  "gradient air-eau": {
-    "depuis": "2026-11-24T01:19:08.539Z",
-    "dernier": "2026-11-24T01:19:08.539Z",
-    "message": "temperature du lac indisponible pour tous les spots"
-  }
-}
+{}
