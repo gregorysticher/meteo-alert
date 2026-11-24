@@ -347,6 +347,20 @@ test('contrat : neige jointe en saison neige, nulle en saison vent ou si absente
   assert.equal(r.payload.neige, null);
 });
 
+test('contrat (D-008) : episode commence -> reste a tomber a l\'envoi, total garde, suivant si moins de min', () => {
+  const ecran = { maj: '202611080500', lieu: 'Les Collines', min: 5, jour: '2026-11-08',
+    jours: [{ d: '2026-11-08', cm: 2 }, { d: '2026-11-09', cm: 20 }, { d: '2026-11-10', cm: 0 }, { d: '2026-11-11', cm: 9 }],
+    episodes: [{ cm: 60, de: '2026-11-06', a: '2026-11-09', ok: true }, { cm: 9, de: '2026-11-11', a: '2026-11-11', ok: false }],
+    episode: { cm: 60, de: '2026-11-06', a: '2026-11-09', ok: true } };
+  const fichiers = { 'data/neige-ecran.json': JSON.stringify(ecran) };
+  const n = lancer({ now: '2026-11-08T10:00:00Z' }, { ...HOOK, fichiers }).payload.neige;
+  assert.deepEqual(n.episode, { cm: 22, de: '2026-11-08', a: '2026-11-09', ok: true, total: 60, cours: true });
+  assert.deepEqual(n.episodes[1], { cm: 9, de: '2026-11-11', a: '2026-11-11', ok: false, total: 9, cours: false });
+  // Le 09 au soir sans h : jour entier (20 cm) ; le 10, l'episode est fini -> le suivant.
+  const fin = lancer({ now: '2026-11-10T10:00:00Z' }, { ...HOOK, fichiers }).payload.neige;
+  assert.deepEqual(fin.episode, { cm: 9, de: '2026-11-11', a: '2026-11-11', ok: false, total: 9, cours: false });
+});
+
 test('contrat : reco sous le seuil -> glyphe ○, ok faux', () => {
   const p = lancer({}, HOOK).payload;
   assert.equal(p.reco.ok, false);

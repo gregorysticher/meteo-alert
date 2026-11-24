@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import {
   verdict, mesurePlage, verdicts, episodes, ligneEnvoi, journaliserEnvoi, lireEnvois,
   ecrireVerdicts, mesuresReference, biaisParEcheance, rapportTemperature,
-  rapport, ALIGNEMENT,
+  rapport, ALIGNEMENT, comparaisonJours, comparaisonEpisodes,
 } from '../snow-verdict.mjs';
 import { journaliserHs } from '../snow-qa.mjs';
 
@@ -210,4 +210,36 @@ test('archive HS : dédoublonnée par station et heure, valeurs invalides écart
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ---- D-008 : ICON contre MeteoSuisse, jours civils et fenêtres 7h -> 7h ------------------
+
+const pv = (run, jour, cm, ech, modele) => ({ run, source: 'prev', jour, cm, echeance_j: ech, modele });
+const JOURNAL = [
+  pv('2026-11-24T04:24Z', '2026-11-25', 18, 1, 'icon'), pv('2026-11-24T04:24Z', '2026-11-25', 14, 1, 'icon7'),
+  pv('2026-11-24T04:24Z', '2026-11-25', 2, 1, 'msl'), pv('2026-11-24T04:24Z', '2026-11-25', 4, 1, 'msl7'),
+  pv('2026-11-24T15:24Z', '2026-11-25', 5, 1, 'msl7'),          // plus récent à J-1 : retenu
+  pv('2026-11-24T04:24Z', '2026-11-26', 9, 2, 'icon7'), pv('2026-11-24T04:24Z', '2026-11-26', 1, 2, 'msl7'),
+  pv('2026-11-25T04:24Z', '2026-11-26', 7, 1, 'icon7'), pv('2026-11-25T04:24Z', '2026-11-26', 1.5, 1, 'msl7'),
+  pv('2026-11-23T04:24Z', '2026-11-25', 20, 2, 'icon7'), pv('2026-11-23T04:24Z', '2026-11-25', 3, 2, 'msl7'),
+];
+const MESURES = new Map([['2026-11-26', 6], ['2026-11-27', 2]]);
+
+test('D-008 : comparaison par jour à J-1, mesure datée J+1', () => {
+  assert.deepEqual(comparaisonJours(JOURNAL, MESURES), [
+    { jour: '2026-11-25', icon: 18, icon7: 14, msl: 2, msl7: 5, mesure: 6 },
+    { jour: '2026-11-26', icon: null, icon7: 7, msl: null, msl7: 1.5, mesure: 2 },
+  ]);
+});
+
+test('D-008 : total par épisode des fenêtres, J-1 et J-2, couverture partielle dite', () => {
+  const envois = [envoi('nouvelle', 29, 10, '2026-11-25', '2026-11-26', '2026-11-22T08:03Z')];
+  const [e] = comparaisonEpisodes(envois, JOURNAL, MESURES, { jour: '2026-11-28' });
+  assert.deepEqual([e.icon7_j1, e.msl7_j1, e.icon7_j2, e.msl7_j2, e.mesure],
+    [{ cm: 21, n: 2 }, { cm: 6.5, n: 2 }, { cm: 29, n: 2 }, { cm: 4, n: 2 }, { cm: 8 }]);
+  // Épisode d'avant le journal MeteoSuisse : absent.
+  assert.deepEqual(comparaisonEpisodes([envoi('nouvelle', 40)], JOURNAL, MESURES, { jour: '2026-11-28' }), []);
+  const texte = rapport(verdicts(envois, MESURES, { jour: '2026-11-28' }), JOURNAL, MESURES, { jour: '2026-11-28' });
+  assert.match(texte, /\| 2026-11-25 \| 18 \| 14 \| 2 \| 5 \| 6 \|/);
+  assert.match(texte, /\| 2026-11-25 → 2026-11-26 \| 21 \| 6\.5 \| 29 \| 4 \| 8 \|/);
 });

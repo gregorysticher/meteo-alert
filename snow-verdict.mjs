@@ -176,10 +176,10 @@ export function ecrireVerdicts(lignes, fichier = ALERTES_QA) {
 export { rapportTemperature, RAPPORT_FIXE } from './snow-conversion.mjs';
 
 // Prévision ICON la plus récente à l'échéance k pour chaque jour. lignes = snow-qa.lire().
-function prevParEcheance(lignes, k) {
+function prevParEcheance(lignes, k, modele = 'icon') {
   const p = new Map();
   for (const l of lignes) {
-    if (l.source !== 'prev' || l.modele !== 'icon' || l.echeance_j !== k) continue;
+    if (l.source !== 'prev' || l.modele !== modele || l.echeance_j !== k) continue;
     const x = p.get(l.jour);
     if (!x || l.run >= x.run) p.set(l.jour, l);
   }
@@ -212,11 +212,51 @@ export function biaisParEcheance(lignes, mesures, { echeances = [1, 2, 3, 4], mi
   return out;
 }
 
+// ---- ICON contre MeteoSuisse (D-008, Décision 1) ----------------------------------
+// Information seulement. Modèles du journal : icon et msl (jour civil), icon7 et msl7
+// (fenêtre du relevé 7h → 7h, rangée au jour où elle commence). Les deux se comparent au
+// HN_1D daté J+1 (lecture J+1) : pour la fenêtre, c'est exactement la même période ; pour
+// le jour civil, la neige de la nuit tombe à cheval sur deux jours (22-23.11.2026).
+export const MODELES_COMPARES = ['icon', 'icon7', 'msl', 'msl7'];
+
+// Par jour : prévision à J-k de chaque modèle et mesure J+1. Jours où au moins une
+// prévision MeteoSuisse existe, les nJours derniers.
+export function comparaisonJours(lignes, mesures, { k = 1, nJours = 10 } = {}) {
+  const p = Object.fromEntries(MODELES_COMPARES.map((m) => [m, prevParEcheance(lignes, k, m)]));
+  const jours = [...new Set([...p.msl.keys(), ...p.msl7.keys()])].sort().slice(-nJours);
+  return jours.map((j) => ({ jour: j,
+    ...Object.fromEntries(MODELES_COMPARES.map((m) => [m, p[m].get(j)?.cm ?? null])),
+    mesure: mesures.get(decaler(j, 1)) ?? null }));
+}
+
+// Par épisode (messages d'alerte, comme les verdicts) : total des fenêtres 7h → 7h prévues à
+// J-1 et J-2 par ICON et MeteoSuisse, contre le mesuré sur la plage (lecture J+1). Un total
+// partiel (jour sans prévision) le dit : n jours couverts sur la plage.
+export function comparaisonEpisodes(envois, lignes, mesures, { jour } = {}) {
+  const out = [];
+  for (const g of episodes(envois)) {
+    const plage = [];
+    for (let j = g.debut; j <= g.fin; j = decaler(j, 1)) plage.push(j);
+    const prev = {};
+    for (const k of [1, 2]) {
+      for (const m of ['icon7', 'msl7']) {
+        const p = prevParEcheance(lignes, k, m);
+        const v = plage.filter((j) => p.has(j)).map((j) => p.get(j).cm);
+        prev[`${m}_j${k}`] = { cm: v.length ? arrondi(v.reduce((a, b) => a + b, 0)) : null, n: v.length };
+      }
+    }
+    if (!prev.msl7_j1.n && !prev.msl7_j2.n) continue;   // avant le journal MeteoSuisse
+    out.push({ debut: g.debut, fin: g.fin, jours: plage.length, ...prev,
+      mesure: mesurePlage(mesures, g.debut, g.fin, 'J+1', jour) });
+  }
+  return out;
+}
+
 // ---- rapport du job (Markdown, comme le QA vent) --------------------------------
 
 const fmt = (x) => (x == null || x === '' ? '—' : String(x));
 
-export function rapport(lignesQa, lignesNeige, mesures) {
+export function rapport(lignesQa, lignesNeige, mesures, { jour } = {}) {
   const out = ['### QA alertes neige (D-003)', ''];
   if (!lignesQa.length) out.push('Aucune alerte neige envoyée journalisée.');
   else {
@@ -243,5 +283,28 @@ export function rapport(lignesQa, lignesNeige, mesures) {
     out.push(`| J-${b.echeance} | ${b.lecture} | ${b.n} | ${fmt(b.biais)} | ${fmt(b.mae)} | ` +
       `${fmt(fixe[i].biais)} | ${fmt(fixe[i].mae)} |`);
   });
+  out.push('', '### ICON contre MeteoSuisse Planachaux (D-008, information)', '',
+    'Prévu à J-1 en cm, conversion D-005, par jour civil et par fenêtre du relevé (7h → 7h) ; ' +
+    'mesuré = HN_1D d\'ILI2 daté J+1.', '');
+  const jours = comparaisonJours(lignesNeige, mesures);
+  if (!jours.length) out.push('Pas encore de prévision MeteoSuisse à J-1 au journal.');
+  else {
+    out.push('| jour | ICON civil | ICON 7h-7h | MeteoSuisse civil | MeteoSuisse 7h-7h | mesuré |',
+      '|---|---|---|---|---|---|');
+    for (const x of jours) {
+      out.push(`| ${x.jour} | ${fmt(x.icon)} | ${fmt(x.icon7)} | ${fmt(x.msl)} | ${fmt(x.msl7)} | ${fmt(x.mesure)} |`);
+    }
+  }
+  const eps = comparaisonEpisodes(lignesQa, lignesNeige, mesures, { jour });
+  if (eps.length) {
+    const t = (p, n) => (p.cm == null ? '—' : p.n < n ? `${p.cm} (${p.n}/${n} j)` : `${p.cm}`);
+    const m = (x) => (x.cm != null ? x.cm : x.attente ? 'attente' : '?');
+    out.push('', 'Total par épisode, fenêtres 7h → 7h :', '',
+      '| épisode | ICON J-1 | MeteoSuisse J-1 | ICON J-2 | MeteoSuisse J-2 | mesuré |', '|---|---|---|---|---|---|');
+    for (const e of eps) {
+      out.push(`| ${e.debut} → ${e.fin} | ${t(e.icon7_j1, e.jours)} | ${t(e.msl7_j1, e.jours)} | ` +
+        `${t(e.icon7_j2, e.jours)} | ${t(e.msl7_j2, e.jours)} | ${m(e.mesure)} |`);
+    }
+  }
   return out.join('\n');
 }

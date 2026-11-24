@@ -142,9 +142,18 @@ réveil par le 4e cron du Worker (`3 5,6,7 * * *`, 7h03 jour ouvré / 8h03 sinon
 `MARGE_ANNUL_NEIGE_CM` (2), `PROLONGE_MIN_NEIGE_CM` (2), `AFFICHAGE_NEIGE_CM` (5).
 Règles dans `snow-episodes.mjs` ; état dans `snow-forecast-alerted.json`. L'alerte écrit
 `data/neige-ecran.json`, que `wind-alert` joint au payload ; si l'épisode change, le
-workflow neige relance `wind-alert` aussitôt. Journal `data/neige.csv` : prévision du modèle de l'alerte et
-du modèle long, précipitations, température, 4 stations SLF. L'API SLF ne garde que
-7 jours : ce journal est irremplaçable.
+workflow neige relance `wind-alert` aussitôt (étape informative depuis D-008). Journal
+`data/neige.csv` : prévision du modèle de l'alerte et du modèle long, précipitations,
+température, 4 stations SLF. L'API SLF ne garde que 7 jours : ce journal est irremplaçable.
+Depuis D-008 (24.11.2026), aussi MeteoSuisse Planachaux (`msl` jour civil, `msl7` fenêtre
+7h → 7h, `snow-msl.mjs`) et ICON en fenêtre (`icon7`), information seulement.
+**Écran pendant un épisode (D-008)** : `wind-alert` remplace, à chaque envoi, le cumul d'un
+épisode commencé par la neige qui reste à tomber (`resteEcran`, champs `total` et `cours`
+en plus) ; sous 5 cm restants, l'épisode suivant. `data/neige-ecran.json` garde les cumuls.
+**Relance après un refus d'Open-Meteo (D-008)** : 429, 5xx ou injoignable → une relance
+dans un nouveau run 40 min plus tard (`vars.RELANCE_NEIGE_MIN`, 30 à 60), sauf relance d'une
+relance ou run planifié dans les 2 h (`relance.mjs`). Le run qui a échoué reste rouge ; le
+résumé du run relancé dit si l'alerte est rattrapée.
 
 **QA des alertes neige** (D-003, `snow-verdict.mjs`) : chaque message neige annoncée parti
 est journalisé dans `data/alertes-neige.csv` ; l'alerte neige fraîche recalcule

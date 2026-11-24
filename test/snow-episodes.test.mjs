@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { episodes, decider, duree, ecranNeige } from '../snow-episodes.mjs';
+import { episodes, decider, duree, ecranNeige, resteEcran } from '../snow-episodes.mjs';
 
 const OPT = { jour: '2027-01-12', seuil: 10, hausse: 5, marge: 2, prolongeMin: 2, memoire: 7 };
 const SA = '2027-01-09', DI = '2027-01-10', LU = '2027-01-11', MA = '2027-01-12',
@@ -467,4 +467,73 @@ test('episode annule : plus inverse, et plus du tout sous les 5 cm a venir', () 
 test('deuxieme episode nouveau : l\'ecran garde le plus proche, deja annonce', () => {
   const e = ecran([ep(MA, [12]), ep(JE, [15])], [rec(MA, MA, 12)]);
   assert.deepEqual(e.episode, { cm: 12, de: MA, a: MA, ok: true });
+});
+
+// ---- D-008, Décision 4 : épisode commencé -> ce qui reste à tomber -------------------
+
+// Fichier écran : épisode en cours Sa 21 → Lu 23.11 (182 cm), suivant Me 25 → Je 26 (28 cm).
+// h : heures depuis le 23.11 à 16h locales (15:00 UTC), 0,1 cm chacune le 23.
+const fichier = (h = null) => ({
+  maj: '202611231524', min: 5, jour: '2026-11-23',
+  jours: [{ d: '2026-11-23', cm: 31.5 }, { d: '2026-11-24', cm: 0 }, { d: '2026-11-25', cm: 18.3 },
+    { d: '2026-11-26', cm: 9.7 }],
+  episodes: [{ cm: 182, de: '2026-11-21', a: '2026-11-23', ok: true },
+    { cm: 28, de: '2026-11-25', a: '2026-11-26', ok: true }],
+  episode: { cm: 182, de: '2026-11-21', a: '2026-11-23', ok: true },
+  h,
+});
+const heures = (cmLe23) => ({ h0: Date.parse('2026-11-23T15:00:00Z') / 1000,
+  cm: Array.from({ length: 60 }, (_, i) => (i < 8 ? cmLe23 : 0)) });
+const a = (iso) => Date.parse(iso);
+
+test('reste : épisode commencé presque fini -> l\'écran passe au suivant (23.11 au soir)', () => {
+  const r = resteEcran(fichier(heures(0.1)), a('2026-11-23T18:17:00+01:00'));
+  assert.deepEqual(r.episode, { cm: 28, de: '2026-11-25', a: '2026-11-26', ok: true, total: 28, cours: false });
+  assert.equal(r.episodes.length, 1);
+  assert.equal(r.jours.length, 4, 'le reste du fichier ne bouge pas');
+});
+
+test('reste : épisode commencé, encore de la neige -> reste et plage restante, total gardé', () => {
+  // 3 cm par heure restante du 23 (16h-24h), à 18h17 : 18h → 24h = 6 heures = 18 cm.
+  const r = resteEcran(fichier(heures(3)), a('2026-11-23T18:17:00+01:00'));
+  assert.deepEqual(r.episode, { cm: 18, de: '2026-11-23', a: '2026-11-23', ok: true, total: 182, cours: true });
+  // Le matin, avant le run : les heures de h ne couvrent pas le début du jour -> jour entier.
+  const matin = resteEcran({ ...fichier(heures(3)), h: { h0: Date.parse('2026-11-23T15:00:00Z') / 1000, cm: [3] } },
+    a('2026-11-23T18:17:00+01:00'));
+  assert.equal(matin.episode.cm, 32, 'h trop courte : la journée entière de jours (31,5)');
+});
+
+test('reste : plage restante = premier jour avec de la neige ; avant le début, cumul complet', () => {
+  const n = { min: 5, jours: [{ d: '2026-11-23', cm: 0.2 }, { d: '2026-11-24', cm: 12 }, { d: '2026-11-25', cm: 6 }],
+    episodes: [{ cm: 40, de: '2026-11-21', a: '2026-11-25', ok: true }, { cm: 9, de: '2026-11-28', a: '2026-11-28', ok: false }] };
+  const r = resteEcran(n, a('2026-11-23T12:00:00+01:00'));
+  assert.deepEqual(r.episodes, [
+    { cm: 18, de: '2026-11-24', a: '2026-11-25', ok: true, total: 40, cours: true },
+    { cm: 9, de: '2026-11-28', a: '2026-11-28', ok: false, total: 9, cours: false },
+  ]);
+  // Le dernier jour fini : l'épisode sort, le suivant reste tel quel.
+  assert.deepEqual(resteEcran(n, a('2026-11-26T08:00:00+01:00')).episodes.map((e) => e.cm), [9]);
+});
+
+test('reste : plus aucun épisode -> episode null ; fichier sans liste -> inchangé', () => {
+  const n = { min: 5, jours: [{ d: '2026-11-23', cm: 1 }], episodes: [{ cm: 30, de: '2026-11-22', a: '2026-11-23', ok: true }] };
+  const r = resteEcran(n, a('2026-11-23T12:00:00+01:00'));
+  assert.deepEqual([r.episodes, r.episode], [[], null]);
+  const ancien = { min: 5, episode: { cm: 23, de: '2026-11-10', a: '2026-11-12', ok: true } };
+  assert.equal(resteEcran(ancien, a('2026-11-11T12:00:00+01:00')), ancien);
+});
+
+test('reste : heure inconnue dans h -> journée entière (jamais moins que la prévision)', () => {
+  const h = heures(0.1);
+  h.cm[5] = null;
+  const r = resteEcran(fichier(h), a('2026-11-23T18:17:00+01:00'));
+  assert.equal(r.episode.cm, 32);
+  assert.equal(r.episode.cours, true);
+});
+
+test('reste : h qui finit à minuit pile couvre la journée', () => {
+  // 13h → 24h locales le 23.11, rien ne tombe ; jours dit 10 cm pour le 23.
+  const n = { min: 5, jours: [{ d: '2026-11-23', cm: 10 }], h: { h0: Date.parse('2026-11-23T12:00:00Z') / 1000,
+    cm: Array(11).fill(0) }, episodes: [{ cm: 40, de: '2026-11-22', a: '2026-11-23', ok: true }] };
+  assert.deepEqual(resteEcran(n, a('2026-11-23T14:00:00+01:00')).episodes, []);
 });

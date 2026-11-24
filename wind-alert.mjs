@@ -29,6 +29,7 @@ import { fetchEssai } from './reseau.mjs';
 import { initSources, informatif, sourceOk, bilanSources } from './gravite.mjs';
 import { mesureStation, lireAvalanche } from './snow-detail.mjs';
 import { lire as lireJournalNeige } from './snow-qa.mjs';
+import { resteEcran } from './snow-episodes.mjs';
 import { previsions, previsionsArome, mesures, tempLac } from './wind-sources.mjs';
 import {
   archiver, apparier, rapport, versDate, versCle,
@@ -126,10 +127,18 @@ const NEIGE_AGE_MAX_J = 7;
 async function neigeEcran(saison, maintenant) {
   if (saison !== 'neige') return null;
   try {
-    const n = JSON.parse(await readFile('data/neige-ecran.json', 'utf8'));
+    let n = JSON.parse(await readFile('data/neige-ecran.json', 'utf8'));
     sourceOk('data/neige-ecran.json');
     // Fichier de la saison passee, si les premiers runs de l'hiver ont echoue.
     if ((maintenant - versDate(n.maj)) / 864e5 > NEIGE_AGE_MAX_J) return null;
+    // D-008, Decision 4 : episode commence -> neige qui reste a tomber a l'heure de l'envoi
+    // (snow-episodes.resteEcran). Panne : cumuls du fichier, avertissement.
+    try {
+      n = resteEcran(n, maintenant.getTime());
+      sourceOk('reste a tomber (ecran)');
+    } catch (err) {
+      informatif('reste a tomber (ecran)', err);
+    }
     // Page detail (snow-detail.mjs) : releves ILI2 et bulletin d'avalanches lus a chaque
     // envoi, ils vieillissent plus vite que la prevision. Panne : bloc vide, avertissement
     // (gravite.mjs, informatif), l'envoi part quand meme.

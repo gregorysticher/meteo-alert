@@ -14,6 +14,19 @@ on:
         description: "Seuil en cm — surcharge ponctuelle (vide = variable SEUIL_NEIGE_CM, sinon 20)"
         type: string
         default: ""
+      # Internes (D-008) : posés par la relance après un refus d'Open-Meteo, jamais à la main.
+      relance:
+        description: "Interne : 1 = relance après un refus d'Open-Meteo (pas d'autre relance)"
+        type: string
+        default: "0"
+      attente_min:
+        description: "Interne : attente en minutes avant la relance"
+        type: string
+        default: "0"
+      origine:
+        description: "Interne : numéro du run qui a échoué"
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -27,6 +40,20 @@ jobs:
   alerte:
     runs-on: ubuntu-latest
     steps:
+      # Relance après un refus d'Open-Meteo (D-008) : l'attente se fait ici, dans le run
+      # relancé (nouveau runner), avant le checkout, pour partir des scripts et de l'état
+      # les plus récents.
+      - name: Attendre avant la relance
+        if: inputs.relance == '1'
+        env:
+          ATTENTE: ${{ inputs.attente_min }}
+          ORIGINE: ${{ inputs.origine }}
+        run: |
+          case "$ATTENTE" in ''|*[!0-9]*) ATTENTE=40 ;; esac
+          [ "$ATTENTE" -le 60 ] || ATTENTE=60
+          echo "Relance du run $ORIGINE : attente de $ATTENTE min."
+          sleep $(( ATTENTE * 60 ))
+
       - name: Checkout
         uses: actions/checkout@v7
         # Un run en file part de la pointe : sinon, conflit garanti sur neige-ecran.json.
@@ -41,7 +68,7 @@ jobs:
       # Chemins d'échec (API refusée, muette, vide) sur fetch simulé :
       # un test en échec bloque le run, il apparaît en rouge.
       - name: Tests
-        run: node --test test/gravite.test.mjs test/snow.test.mjs test/snow-conversion.test.mjs test/snow-detail.test.mjs test/snow-episodes.test.mjs test/reseau.test.mjs test/silence.test.mjs test/snow-verdict.test.mjs
+        run: node --test test/gravite.test.mjs test/snow.test.mjs test/snow-conversion.test.mjs test/snow-detail.test.mjs test/snow-episodes.test.mjs test/reseau.test.mjs test/silence.test.mjs test/snow-verdict.test.mjs test/snow-msl.test.mjs test/relance.test.mjs
 
       - name: Vérifier les chutes annoncées
         id: alerte
@@ -67,6 +94,9 @@ jobs:
           POUDRE_SOLEIL_H: ${{ vars.POUDRE_SOLEIL_H }}
           POUDRE_RAFALES_KMH: ${{ vars.POUDRE_RAFALES_KMH }}
           POUDRE_TMAX_C: ${{ vars.POUDRE_TMAX_C }}
+          # Relance après un refus d'Open-Meteo (D-008).
+          RELANCE: ${{ inputs.relance }}
+          RUN_ORIGINE: ${{ inputs.origine }}
         run: node snow-forecast-alert.mjs
 
       - name: Commit l'état si modifié
@@ -92,11 +122,40 @@ jobs:
           echo "::error::push impossible après 3 essais"
           exit 1
 
+      # Refus d'Open-Meteo (429, 5xx, injoignable) : une seule relance, 30 à 60 min plus tard,
+      # dans un nouveau run (D-008, Décision 2). Ce run-ci reste rouge. relance.mjs refuse une
+      # relance d'une relance, ou si un run planifié tombe dans les 2 h.
+      - name: Programmer une relance (refus Open-Meteo)
+        if: failure() && steps.alerte.outputs.relance == 'true' && inputs.relance != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELANCE_NEIGE_MIN: ${{ vars.RELANCE_NEIGE_MIN }}
+        # relance.mjs : 0 = relancer, 3 = pas de relance (raison au résumé), autre = panne du
+        # script, qui doit se voir.
+        run: |
+          set +e
+          node relance.mjs
+          rc=$?
+          set -e
+          case $rc in
+            0)
+              A=$(grep '^attente_min=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)
+              gh workflow run snow-forecast-alert.yml -f dry_run=false -f relance=1 -f attente_min="$A" -f origine=${{ github.run_id }}
+              ;;
+            3) ;;
+            *) echo "::error title=relance::relance.mjs en panne (code $rc) : pas de relance"; exit "$rc" ;;
+          esac
+
       # Après le commit : wind-alert lit le fichier poussé. Au plus une relance par run
       # neige. always() : une alerte partie doit s'afficher même si le journal long a
       # rendu le run rouge ; au run suivant, le fichier est à jour et rien ne repart.
+      # Informative (D-008, Décision 3) : elle ne fait qu'avancer l'écran, le run vent
+      # suivant le met à jour de toute façon. Un échec laisse le run vert, avec un
+      # avertissement.
       - name: Mettre l'écran à jour tout de suite
         if: always() && steps.alerte.outputs.ecran_change == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run wind-alert.yml -f dry_run=0 -f qa_only=0
+        run: |
+          gh workflow run wind-alert.yml -f dry_run=0 -f qa_only=0 ||
+            echo "::warning title=relance écran::wind-alert non relancé ; l'écran attendra le prochain run vent (4 h au plus)."

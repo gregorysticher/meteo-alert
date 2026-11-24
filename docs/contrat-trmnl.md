@@ -136,8 +136,10 @@ L'écran grise les jours déjà passés au moment du rendu.
 | `j0` | cm, entier | Chute prévue le jour du run |
 | `j5` | cm, entier | Chute prévue sur les 5 jours, jour du run compris |
 | `episode` | objet ou null | Premier de `episodes`. Null : aucune chute à montrer |
-| `episode.cm` | cm, entier | Cumul, jours passés compris : somme des épisodes qui chevauchent l'annonce, comme l'alerte. Au moment d'une alerte, c'est son chiffre ; ensuite, c'est la valeur courante de la prévision, qui peut monter de moins que `HAUSSE_NEIGE_CM` ou baisser sans message |
-| `episode.de`, `episode.a` | `AAAA-MM-JJ` local | Premier et dernier jour |
+| `episode.cm` | cm, entier | Épisode pas commencé : cumul, somme des épisodes qui chevauchent l'annonce, comme l'alerte. Au moment d'une alerte, c'est son chiffre ; ensuite, c'est la valeur courante de la prévision, qui peut monter de moins que `HAUSSE_NEIGE_CM` ou baisser sans message. **Épisode commencé (D-008, depuis le 24.11.2026)** : neige qui reste à tomber à l'heure de l'envoi (`wind-alert`, toutes les 4 h), aujourd'hui compris ; sous `min` cm, l'épisode quitte la liste et le suivant prend sa place. `data/neige-ecran.json` garde le cumul |
+| `episode.total` | cm, entier | Depuis le 24.11.2026 (D-008). Cumul complet de l'épisode, le chiffre de l'alerte, commencé ou non |
+| `episode.cours` | booléen | Depuis le 24.11.2026 (D-008). Vrai : épisode commencé, `cm` et `de` sont ce qui reste (`de` = premier jour restant avec au moins 1 cm) |
+| `episode.de`, `episode.a` | `AAAA-MM-JJ` local | Premier et dernier jour ; épisode commencé : premier jour restant et dernier jour |
 | `episode.ok` | booléen | Vrai : le cumul atteint le seuil. Libellé inversé. Dans la marge d'annulation : faux, sans message |
 | `jours[].tn`, `jours[].tx` | °C entiers, ou null | Depuis le 2026-11-21 (`snow-detail.mjs`, page détail). Minimum et maximum à 2022 m |
 | `jours[].pl` | mm entiers, ou null | Pluie du modèle (`rain_sum` + `showers_sum`) |

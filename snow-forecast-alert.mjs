@@ -44,7 +44,7 @@
 //   IGNORER_SAISON=true  → force l'analyse hors saison (test en été)
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
-import { notifier, sortieSiEchecs } from "./notify.mjs";
+import { notifier, sortieSiEchecs, echecs as echecsNtfy } from "./notify.mjs";
 import { fetchEssai } from "./reseau.mjs";
 import { initSources, informatif, sourceOk, bilanSources } from "./gravite.mjs";
 import { journaliserPrevision } from "./snow-qa.mjs";
@@ -52,6 +52,7 @@ import { detailJours, heuresDetail, POUDRE } from "./snow-detail.mjs";
 import { episodes as decouper, decider, ecranNeige } from "./snow-episodes.mjs";
 import { journaliserEnvoi } from "./snow-verdict.mjs";
 import { neigeJournaliere, neigeHoraire, TEMP_NEIGE_C, TEMP_PLUIE_C } from "./snow-conversion.mjs";
+import { previsionMsl, heuresIcon, cumuls, DEBUT_RELEVE_H } from "./snow-msl.mjs";
 
 // ══════ PARAMÈTRES ══════
 const LAT = 46.1913556421;
@@ -231,6 +232,35 @@ function ecrireEcran(ecran) {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `ecran_change=${change}\n`);
 }
 
+// Relance après un refus d'Open-Meteo (D-008, Décision 2) : le script le signale au
+// workflow, qui décide (relance.mjs : pas de relance d'une relance, ni si un run planifié
+// tombe dans les 2 h) et lance un nouveau run plus tard, sur un autre runner. Le run qui a
+// échoué reste rouge. Rien en DRY_RUN ni avec un seuil forcé : ce sont des essais.
+const RELANCE = process.env.RELANCE === "1";
+let openMeteoRepondu = false;
+// Fin du run relancé : « rattrapée » seulement si tout le run a réussi (envoi, état).
+function bilanRelance() {
+  if (!RELANCE || !openMeteoRepondu) return;
+  const origine = `Relance après le refus d'Open-Meteo du run ${process.env.RUN_ORIGINE || "précédent"} : `;
+  resumeRelance(process.exitCode || echecsNtfy.length
+    ? origine + "Open-Meteo a répondu, mais le run a échoué ensuite (voir le journal) : alerte pas rattrapée."
+    : origine + "Open-Meteo a répondu, l'alerte est rattrapée (règles normales, silence compris).");
+}
+function resumeRelance(texte) {
+  console.log(texte);
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `**${texte}**\n\n`);
+}
+function demanderRelance(cause) {
+  if (RELANCE) {
+    resumeRelance(`Relance après le refus d'Open-Meteo du run ${process.env.RUN_ORIGINE || "précédent"} : ` +
+      `nouvel échec (${cause}), pas d'autre relance.`);
+    return;
+  }
+  if (DRY_RUN || SEUIL_FORCE) return;
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, "relance=true\n");
+  console.log(`Relance demandée au workflow (${cause}).`);
+}
+
 // Journal seulement : prévision du modèle par défaut sur 16 jours, celle du plugin
 // écran, pour mesurer ce que vaut une annonce à J+9 avant de songer à l'afficher.
 // Sa panne ne touche pas l'alerte, mais elle se voit.
@@ -250,6 +280,31 @@ async function journaliserLong(url, jour) {
     sourceOk("journal neige horizon long");
   } catch (err) {
     informatif("journal neige horizon long", err);
+  }
+}
+
+// Journal en parallèle (D-008, Décision 1) : prévision MeteoSuisse Planachaux convertie D-005,
+// par jour civil (msl) et par fenêtre du relevé 7h → 7h (msl7). Information seulement ;
+// source informative (D-007). DRY_RUN : lue et affichée, rien d'écrit.
+const SOURCE_MSL = "MeteoSuisse Planachaux (journal)";
+async function journaliserMsl(jour, bornes, { ecrire = true } = {}) {
+  try {
+    const { run, point, heures } = await previsionMsl({ alt: ALT, bornes });
+    const ecrits = [];
+    for (const [modele, debutH] of [["msl", 0], ["msl7", DEBUT_RELEVE_H]]) {
+      const c = cumuls(heures, debutH).filter((x) => x.jour >= jour);
+      console.log(`  ${modele} : ` + c.map((x) => `${label(x.jour)} ${x.cm} cm (${x.mm} mm)`).join(" · "));
+      if (ecrire) {
+        ecrits.push(journaliserPrevision(jour, c.map((x) => x.jour), c.map((x) => x.cm), {
+          modele, annexes: { mm: c.map((x) => x.mm), pluie: c.map((x) => x.pluie), tMoy: c.map((x) => x.tMoy) },
+        }));
+      }
+    }
+    console.log(`Journal neige MeteoSuisse : run ${run}, point ${point.id} (${point.alt} m)` +
+      (ecrire ? `, ${ecrits.join(" + ")} ligne(s) ajoutée(s).` : ", rien d'écrit (DRY_RUN)."));
+    sourceOk(SOURCE_MSL);
+  } catch (err) {
+    informatif(SOURCE_MSL, err);
   }
 }
 
@@ -282,26 +337,38 @@ async function main() {
 
   console.log(`Requête : ${url}\n`);
 
-  let data;
+  let data, res;
   try {
-    const res = await fetchEssai(url);
-    if (!res.ok) {
-      // Un 4xx n'est pas une panne passagère : c'est la requête qui est
-      // refusée, et l'alerte reste aveugle tant qu'on ne la corrige pas.
-      // On affiche la raison renvoyée par Open-Meteo et on fait échouer le
-      // run pour qu'il apparaisse en rouge au lieu de passer pour un succès.
-      const corps = await res.text().catch(() => "");
-      console.log(`Open-Meteo refuse la requête (HTTP ${res.status}) — aucune alerte.`);
-      console.log(`Réponse : ${corps.slice(0, 500)}`);
-      process.exitCode = 1;
-      return;
-    }
-    data = await res.json();
+    res = await fetchEssai(url);
   } catch (err) {
     console.log(`Erreur d'accès à Open-Meteo : ${err.message} — aucune alerte.`);
     process.exitCode = 1;
+    demanderRelance(err.message);
     return;
   }
+  if (!res.ok) {
+    // Un 4xx n'est pas une panne passagère : c'est la requête qui est
+    // refusée, et l'alerte reste aveugle tant qu'on ne la corrige pas.
+    // On affiche la raison renvoyée par Open-Meteo et on fait échouer le
+    // run pour qu'il apparaisse en rouge au lieu de passer pour un succès.
+    const corps = await res.text().catch(() => "");
+    console.log(`Open-Meteo refuse la requête (HTTP ${res.status}) — aucune alerte.`);
+    console.log(`Réponse : ${corps.slice(0, 500)}`);
+    process.exitCode = 1;
+    // Quota (429) ou panne du serveur (5xx) : passagers, relance possible (D-008). Un
+    // autre 4xx est une requête fausse : la relancer ne changerait rien.
+    if (res.status === 429 || res.status >= 500) demanderRelance(`HTTP ${res.status}`);
+    return;
+  }
+  try {
+    data = await res.json();
+  } catch (err) {
+    // Réponse 200 illisible : pas un refus (D-008), pas de relance.
+    console.log(`Réponse d'Open-Meteo illisible : ${err.message} — aucune alerte.`);
+    process.exitCode = 1;
+    return;
+  }
+  openMeteoRepondu = true;
 
   // On confirme les unités au lieu de les supposer
   const uP = data.hourly_units?.precipitation, uT = data.hourly_units?.temperature_2m;
@@ -356,6 +423,16 @@ async function main() {
     } catch (err) {
       informatif("journal neige", err);
     }
+    // ICON sur la fenêtre du relevé (icon7, D-008) : même découpage que msl7.
+    try {
+      const c = cumuls(heuresIcon(data.hourly, regl.bornes, data.utc_offset_seconds), DEBUT_RELEVE_H).filter((x) => x.jour >= jour);
+      console.log(`Journal neige 7h → 7h : ${journaliserPrevision(jour, c.map((x) => x.jour), c.map((x) => x.cm), {
+        modele: "icon7", annexes: { mm: c.map((x) => x.mm), pluie: c.map((x) => x.pluie), tMoy: c.map((x) => x.tMoy) },
+      })} ligne(s) ajoutée(s).`);
+      sourceOk("journal neige 7h-7h");
+    } catch (err) {
+      informatif("journal neige 7h-7h", err);
+    }
   }
 
   const episodes = decouper(dates, neige, {
@@ -408,6 +485,8 @@ async function main() {
   console.log(`\nÉcran : ${JSON.stringify(ecran)}`);
 
   if (DRY_RUN) {
+    console.log("\nJournal MeteoSuisse (DRY_RUN, lu seulement) :");
+    await journaliserMsl(jour, regl.bornes, { ecrire: false });
     console.log("\n*** DRY_RUN — aucune notif envoyée, aucun état écrit ***");
     return;
   }
@@ -442,12 +521,14 @@ async function main() {
   if (!SEUIL_FORCE && JSON.stringify(apres) !== JSON.stringify(avant)) sauverEtat(apres);
   // Un seuil forcé de test ne doit pas s'afficher.
   if (!SEUIL_FORCE) ecrireEcran(ecran);
-  // Après les envois : une panne ou une lenteur de ce journal ne retarde aucune alerte.
+  // Après les envois : une panne ou une lenteur de ces journaux ne retarde aucune alerte.
   await journaliserLong(url, jour);
+  await journaliserMsl(jour, regl.bornes);
 }
 
 main()
   .then(() => bilanSources())
+  .then(bilanRelance)
   .then(sortieSiEchecs)
   .catch((err) => {
     console.error("Erreur inattendue :", err.message);

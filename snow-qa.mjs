@@ -12,7 +12,10 @@
 //              21.11.2026 (snow-conversion.mjs), snowfall_sum avant ; prev long : snowfall_sum
 //   echeance_j prev : jours entre la date du run et le jour prévu (0 = jour
 //              même) ; mesure : vide
-//   modele     prev : icon (celui de l'alerte) | long (plugin écran, 16 jours)
+//   modele     prev : icon (celui de l'alerte) | long (plugin écran, 16 jours) |
+//              icon7 (ICON, fenêtre du relevé 7h → 7h rangée au jour où elle commence) |
+//              msl, msl7 (MeteoSuisse Planachaux, jour civil et fenêtre 7h → 7h, D-008,
+//              snow-msl.mjs). Fenêtre du jour J : se compare au HN_1D daté J+1
 //   mm, pluie_mm, t_moy  prev : précipitations, part de pluie, température moyenne.
 //              Open-Meteo calcule snowfall = (mm - pluie) x 0,7 : rapport FIXE, vérifié
 //              le 08/11/2026. Ces colonnes permettront de tester un rapport selon la

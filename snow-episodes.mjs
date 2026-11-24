@@ -38,6 +38,8 @@
 // Les épisodes viennent d'une série qui inclut les jours passés (past_days) :
 // sans eux, le cumul baisserait tout seul à mesure que l'épisode avance.
 
+import { local as localGeneve } from './silence.mjs';
+
 const JOUR_MS = 864e5;
 
 const versJours = (iso) => Date.parse(`${iso}T00:00:00Z`) / JOUR_MS;
@@ -242,4 +244,53 @@ export function ecranNeige(eps, dates, neige, decisions, opts) {
     episodes,
     episode: episodes[0] ?? null,
   };
+}
+
+// D-008, Décision 4 (Greg 24.11.2026) : à l'écran, un épisode COMMENCÉ montre la neige qui
+// reste à tomber, aujourd'hui compris à partir de l'heure de l'envoi, et la plage restante,
+// pas le cumul depuis son début. Sous `min` cm restants, il laisse la place à l'épisode
+// suivant, ou à rien. Avant son début, rien ne change : cumul complet, le chiffre de l'alerte.
+// Les alertes ne changent pas (cumul de l'épisode).
+// Appelée par wind-alert à chaque envoi vers TRMNL (toutes les 4 h, et quand l'alerte neige
+// change d'épisode), sur le contenu de data/neige-ecran.json, qui garde les cumuls. n =
+// cet objet ; maintenantMs = heure de l'envoi. Champs ajoutés à chaque épisode (rien de
+// retiré) : `total` (cumul complet de l'épisode, celui de l'alerte) et `cours` (vrai si
+// commencé : `cm` et `de` sont alors ce qui reste).
+// Aujourd'hui : heures restantes de `h` (60 heures depuis le run neige) si elles couvrent
+// la fin de la journée, sinon la journée entière de `jours` (jamais moins que la prévision).
+export function resteEcran(n, maintenantMs, { minAffichage = n?.min ?? 5, minJour = 1, local = localGeneve } = {}) {
+  if (!Array.isArray(n?.episodes)) return n;   // fichier sans liste : rien à recalculer
+  const auj = local(new Date(maintenantMs)).jour;
+  const parJour = new Map((n.jours ?? []).map((x) => [x.d, Number.isFinite(x.cm) ? x.cm : 0]));
+  let resteAuj = parJour.get(auj) ?? 0;
+  const h = n.h;
+  if (h && Number.isFinite(h.h0) && Array.isArray(h.cm)) {
+    let s = 0, trou = false;
+    // h couvre la fin de la journée si sa dernière heure finit demain (minuit pile compris).
+    const fin = local(new Date((h.h0 + h.cm.length * 3600) * 1000)).jour > auj;
+    h.cm.forEach((cm, i) => {
+      const debut = (h.h0 + i * 3600) * 1000;
+      if (local(new Date(debut)).jour !== auj) return;
+      if (debut + 3600e3 <= maintenantMs) return;
+      if (typeof cm !== 'number' || !Number.isFinite(cm)) trou = true;
+      else s += cm;
+    });
+    if (fin && !trou) resteAuj = s;
+  }
+  const resteJour = (d) => (d === auj ? resteAuj : d > auj ? parJour.get(d) ?? 0 : 0);
+  const episodes = [];
+  for (const e of n.episodes) {
+    if (e.de > auj) {
+      episodes.push({ ...e, total: e.cm, cours: false });
+      continue;
+    }
+    if (e.a < auj) continue;                    // fini : l'écran l'écartait déjà
+    const jours = [...parJour.keys()].filter((d) => d >= auj && d <= e.a).sort();
+    if (!jours.includes(auj)) jours.unshift(auj);
+    const reste = jours.reduce((a, d) => a + resteJour(d), 0);
+    if (reste < minAffichage) continue;
+    const de = jours.find((d) => resteJour(d) >= minJour) ?? auj;
+    episodes.push({ ...e, cm: Math.round(reste), de, total: e.cm, cours: true });
+  }
+  return { ...n, episodes, episode: episodes[0] ?? null };
 }

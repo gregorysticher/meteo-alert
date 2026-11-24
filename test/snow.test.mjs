@@ -33,7 +33,8 @@ function lancer(script, mock, env = {}, etat = null, fichiers = {}) {
       ['--import', 'file:///' + MOCK.replace(/\\/g, '/'), join(RACINE, script)], {
         cwd: dir, encoding: 'utf8',
         env: { ...process.env, DRY_RUN: 'true', IGNORER_SAISON: 'true',
-          SEUIL_CM: '10', NTFY_TOPIC_NEIGE: '', SILENCE_NOCTURNE: '', HAUSSE_PCT: '',
+          SEUIL_CM: '10', NTFY_TOPIC_NEIGE: '', SILENCE_NOCTURNE: '', HAUSSE_PCT: '', MOCK_MSL: 'ok',
+          GITHUB_OUTPUT: '', GITHUB_STEP_SUMMARY: '', RELANCE: '', RUN_ORIGINE: '',
           MOCK_FETCH: typeof mock === 'string' ? mock : JSON.stringify(mock), ...env },
       });
     return {
@@ -672,4 +673,122 @@ test('annoncée : DRY_RUN avec une panne en cours -> escalade calculée (rouge),
   assert.equal(r.code, 1, r.out);
   assert.match(r.out, /snowfall_sum \(journal\) en panne depuis plus de 24 h/);
   assert.deepEqual(r.sources[0], JSON.parse(suivi));
+});
+
+// ---- D-008 : journal MeteoSuisse en parallèle, relance après un refus d'Open-Meteo ------
+
+const sortieGh = () => {
+  const d = mkdtempSync(join(tmpdir(), 'gh-'));
+  const out = join(d, 'out'), resume = join(d, 'resume');
+  writeFileSync(out, ''); writeFileSync(resume, '');
+  return { env: { GITHUB_OUTPUT: out, GITHUB_STEP_SUMMARY: resume },
+    lire: () => ({ out: readFileSync(out, 'utf8'), resume: readFileSync(resume, 'utf8') }),
+    fin: () => rmSync(d, { recursive: true, force: true }) };
+};
+
+test('annoncée (D-008) : journal msl, msl7 et icon7 écrits, information seulement', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), REEL);
+  assert.equal(r.code, 0, r.out);
+  assert.doesNotMatch(r.out, /AVERTISSEMENT/);
+  const lignes = r.journal.trim().split('\n').slice(1).map((l) => l.split(','));
+  const de = (m) => lignes.filter((l) => l[5] === m);
+  // 1 mm/h à −6 °C à 1943 m, soit −6,51 °C à 2022 m : toute la précipitation en neige.
+  const parJour = 24 * rapportTemperature(-6 - 0.0065 * 79);
+  assert.ok(de('msl').length >= 2, r.out);
+  assert.ok(de('msl7').length >= 2, r.out);
+  for (const l of [...de('msl'), ...de('msl7')]) {
+    assert.ok(Math.abs(+l[3] - parJour) < 0.05, l.join(','));
+    assert.equal(+l[6], 24);
+  }
+  assert.ok(de('msl').every((l) => l[2] > jourLocal(0)), 'jour du run incomplet (heures du matin absentes) : pas écrit');
+  // icon7 : fenêtre 7h → 7h rangée au jour où elle commence, neige de midi comprise.
+  assert.deepEqual(de('icon7').map((l) => [l[2], +l[3], +l[4]]),
+    [[jourLocal(0), 0, 0], [jourLocal(1), 7, 1], [jourLocal(2), 5, 2], [jourLocal(3), 0, 3]]);
+  assert.match(r.out, /Journal neige MeteoSuisse : run 202611240400, point 19999 \(1943 m\)/);
+  assert.match(r.out, /ntfy → Neige annoncée/);
+});
+
+test('annoncée (D-008) : MeteoSuisse en panne -> avertissement, vert, alerte partie, rien de msl', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), { ...REEL, MOCK_MSL: 'panne' });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /AVERTISSEMENT MeteoSuisse Planachaux \(journal\) : STAC : HTTP 503/);
+  assert.match(r.out, /ntfy → Neige annoncée/);
+  assert.doesNotMatch(r.journal, /,msl/);
+  assert.ok(r.sources[0]['MeteoSuisse Planachaux (journal)']);
+});
+
+test('annoncée (D-008) : DRY_RUN -> MeteoSuisse lu et affiché, rien écrit', () => {
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]));
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /msl7 : /);
+  assert.match(r.out, /rien d'écrit \(DRY_RUN\)/);
+  assert.equal(r.journal, '');
+});
+
+test('annoncée (D-008) : 429 -> rouge et relance demandée ; puis la relance réussit -> rattrapée', () => {
+  const gh = sortieGh();
+  const gh2 = sortieGh();
+  try {
+    const r = lancer('snow-forecast-alert.mjs', { status: 429, body: { error: true, reason: 'Hourly API request limit exceeded' } },
+      { ...REEL, ...gh.env });
+    assert.equal(r.code, 1, r.out);
+    assert.match(gh.lire().out, /^relance=true$/m);
+    assert.match(r.out, /Relance demandée au workflow \(HTTP 429\)/);
+    // Le run relancé (RELANCE=1) : Open-Meteo répond, alerte normale, résumé explicite.
+    const r2 = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]),
+      { ...REEL, ...gh2.env, RELANCE: '1', RUN_ORIGINE: '123' });
+    assert.equal(r2.code, 0, r2.out);
+    assert.match(r2.out, /ntfy → Neige annoncée/);
+    assert.match(gh2.lire().resume, /Relance après le refus d'Open-Meteo du run 123 : Open-Meteo a répondu, l'alerte est rattrapée/);
+    assert.doesNotMatch(gh2.lire().out, /relance=true/);
+  } finally { gh.fin(); gh2.fin(); }
+});
+
+test('annoncée (D-008) : relance, Open-Meteo répond mais ntfy échoue -> rouge, pas « rattrapée »', () => {
+  const gh = sortieGh();
+  try {
+    const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]),
+      { ...REEL, ...gh.env, RELANCE: '1', RUN_ORIGINE: '123', MOCK_NTFY_STATUS: '500' });
+    assert.equal(r.code, 1, r.out);
+    assert.match(gh.lire().resume, /Open-Meteo a répondu, mais le run a échoué ensuite/);
+    assert.doesNotMatch(gh.lire().resume, /l'alerte est rattrapée/);
+  } finally { gh.fin(); }
+});
+
+test('annoncée (D-008) : réponse 200 illisible -> rouge, pas de relance', () => {
+  const gh = sortieGh();
+  try {
+    const r = lancer('snow-forecast-alert.mjs', { status: 200, body: '{pas du json' }, { ...REEL, ...gh.env });
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /Réponse d'Open-Meteo illisible/);
+    assert.doesNotMatch(gh.lire().out, /relance=true/);
+  } finally { gh.fin(); }
+});
+
+test('annoncée (D-008) : relance qui échoue encore -> rouge, pas d\'autre relance', () => {
+  const gh = sortieGh();
+  try {
+    const r = lancer('snow-forecast-alert.mjs', 'network-error', { ...REEL, ...gh.env, RELANCE: '1', RUN_ORIGINE: '123' });
+    assert.equal(r.code, 1, r.out);
+    assert.doesNotMatch(gh.lire().out, /relance=true/);
+    assert.match(gh.lire().resume, /du run 123 : nouvel échec \(ECONNRESET/);
+  } finally { gh.fin(); }
+});
+
+test('annoncée (D-008) : 503 et injoignable -> relance ; 400 -> pas de relance ; DRY_RUN et seuil forcé -> jamais', () => {
+  const cas = [
+    [{ status: 503, body: {} }, REEL, true],
+    ['network-error', REEL, true],
+    [{ status: 400, body: { error: true } }, REEL, false],
+    [{ status: 429, body: {} }, {}, false],
+    [{ status: 429, body: {} }, { ...REEL, SEUIL_FORCE: '5' }, false],
+  ];
+  for (const [mock, env, attendu] of cas) {
+    const gh = sortieGh();
+    try {
+      const r = lancer('snow-forecast-alert.mjs', mock, { ...env, ...gh.env });
+      assert.equal(r.code, 1, r.out);
+      assert.equal(/relance=true/.test(gh.lire().out), attendu, `${JSON.stringify(mock)} ${JSON.stringify(env)}`);
+    } finally { gh.fin(); }
+  }
 });

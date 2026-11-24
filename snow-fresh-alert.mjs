@@ -279,7 +279,7 @@ async function qaNeige() {
     const tolerance = pct / 100;
     const qa = verdicts(lireEnvois(), mesures, { jour, tolerance });
     if (!DRY_RUN) ecrireVerdicts(qa);
-    const texte = rapportVerdicts(qa, lignes, mesures);
+    const texte = rapportVerdicts(qa, lignes, mesures, { jour });
     console.log("\n" + texte);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, texte + "\n");
     sourceOk("QA alertes neige");
