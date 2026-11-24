@@ -25,11 +25,6 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
       à 22h : probable, pas encore prouvé. TRMNL force un rafraîchissement à chaque bord de
       l'horaire (7h00 et 22h01, hors du rythme de 15 min, vu les 21 et 23.11). Pour le
       prouver : un soir, milieu deux fois vers 21h45, puis regarder l'écran après 22h05.
-- [ ] **D-007, neige annoncée par MeteoSuisse** : dire oui ou non au journal en parallèle
-      (prévision MeteoSuisse Planachaux convertie D-005, comparée à ILI2, sans toucher à
-      l'alerte), puis décider de la bascule après 4 à 6 épisodes. Détail chiffré dans la
-      Réponse de D-007 (`docs/demandes-wingfoil.md`). La session WINGFOIL peut trancher.
-      Premier signal (22-23.11, 52 cm mesurés à ILI2) : MeteoSuisse 50 cm, Open-Meteo 80 cm.
 - [ ] **Second écran vide** : le signaler avec l'heure s'il revient (non
       reproduit le 2026-11-07). Spec B2.
 
@@ -39,6 +34,10 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ### Avant le 15/04/2027 — prioritaire
 
+- [ ] D-008 : vérifier les premières lignes `msl` / `msl7` / `icon7` après le run neige de
+      16h23 le 2026-11-24, puis le premier tableau « ICON contre MeteoSuisse » du rapport QA
+      neige fraîche (17h47). Bilan de l'épisode 25-26.11 vers le 2026-11-28 avec la
+      comparaison des deux sources (à refaire à chaque épisode ; recalage après 4 à 6).
 - [ ] Contrôler le premier vrai `W.reco` à l'écran à l'ouverture de la
       saison (2027-04-15) : jour, heures, inversion.
 - [ ] Redéployer le Worker exige `wrangler login` (déconnecté après le déploiement) :
@@ -66,6 +65,11 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ## Fait récemment
 
+- [x] 2026-11-24 — D-008 en service : journal MeteoSuisse Planachaux en parallèle (`msl`,
+      `msl7`, `icon7`, rapport QA par fenêtre 7h-7h et par épisode), relance unique du run
+      neige après un refus d'Open-Meteo (`relance.mjs`, `RELANCE_NEIGE_MIN` = 40), relance
+      écran informative, écran = neige qui reste à tomber d'un épisode commencé. 406 tests,
+      revue indépendante, DRY_RUN verts.
 - [x] 2026-11-24 — D-003 : bilan final de l'épisode du 15 au 23.11 dans
       `docs/demandes-wingfoil.md`. 9 messages (3 sous les règles actuelles), verdicts
       1 `OK`, 5 `SURESTIME`, 3 `RATE`, tous trop haut (phase douce comptée en neige).

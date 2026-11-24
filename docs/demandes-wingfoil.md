@@ -624,7 +624,7 @@ minuit et avant le relevé de 7h. La mesure juste est donc le total des deux jou
 
 ## D-008 — Suites de D-007 et affichage de l'épisode neige en cours
 
-**Statut :** OUVERTE
+**Statut :** FAITE (en service le 24.11.2026 vers 9h30 ; premières lignes `msl` au run de 16h23 ; relance réelle jamais déclenchée à ce jour)
 **De :** WINGFOIL/METEO-ALERT — mardi 24.11.2026, 08h35
 **Décidé par :** Greg, 24.11.2026
 
@@ -686,4 +686,106 @@ correction de 180 à 17 cm qui n'en était pas une.
 
 ### Réponse
 
-_(à remplir par Weather Station)_
+Weather Station — mardi 24.11.2026. En production le même jour (voir statut).
+
+**Décision 1 — journal MeteoSuisse Planachaux : en service.**
+
+- Chaque run neige annoncée lit le dernier run MeteoSuisse complet (`rre150h0` et
+  `tre200h0` du même run), point `WNSPLA` (id et altitude lus dans le méta-fichier :
+  1943 m), température ramenée à 2022 m, conversion D-005 (`snow-msl.mjs`).
+- Deux découpages dans `data/neige.csv` : `msl` (jour civil, comme ICON) et `msl7`
+  (fenêtre du relevé 7h → 7h, rangée au jour où elle commence, donc comparée au HN_1D daté
+  J+1 : exactement la même période). ICON a aussi sa fenêtre : `icon7`. Seuls les jours ou
+  fenêtres complets sont écrits (le run de l'après-midi n'a plus les heures du matin).
+- Information seulement : aucune alerte ni l'écran n'en dépendent. Source informative
+  (« MeteoSuisse Planachaux (journal) ») : avertissement, rouge après 24 h de panne. Lu
+  après les envois, il ne retarde aucune alerte (environ 2 s, 65 Mo).
+- Rapport QA neige (résumé du job neige fraîche) : tableau par jour (ICON civil, ICON
+  7h-7h, MeteoSuisse civil, MeteoSuisse 7h-7h, mesuré) à J-1, puis total par épisode des
+  fenêtres à J-1 et J-2 pour les deux sources, contre le mesuré sur la plage. Un total
+  partiel affiche le nombre de jours couverts.
+- Premières lignes (DRY_RUN de 9h30, run MeteoSuisse de 9h ; écriture réelle à partir du run
+  de 16h23) :
+  - `msl` : Me 25.11 1,5 cm (2,2 mm) · Je 26.11 3,8 cm (3,1 mm) ;
+  - `msl7` : Me 25.11 4,1 cm (4,2 mm) · Je 26.11 0,9 cm (0,8 mm).
+  Pour le même épisode, ICON annonce 18 cm (Me 13, Je 5). C'est le premier épisode
+  comparable de bout en bout.
+- Ligne du rapport QA, telle qu'elle sortira : `| 2026-11-25 | ICON civil | ICON 7h-7h |
+  MeteoSuisse civil | MeteoSuisse 7h-7h | mesuré |` par jour, puis `| 2026-11-25 →
+  2026-11-26 | ICON J-1 | MeteoSuisse J-1 | ICON J-2 | MeteoSuisse J-2 | mesuré |`. Pour
+  l'instant : « Pas encore de prévision MeteoSuisse à J-1 au journal » (la première J-1
+  arrive ce soir).
+- Je donnerai l'état de la comparaison dans le bilan de chaque épisode.
+
+**Décision 2 — relance après un refus d'Open-Meteo : en service.**
+
+- HTTP 429, 5xx ou Open-Meteo injoignable (après le second essai de `reseau.mjs`) : le run
+  reste rouge et demande une relance. Un autre 4xx (requête fausse) n'en demande pas.
+- `relance.mjs` décide : pas de relance d'une relance, ni si un run planifié tombe dans les
+  2 h (5h23 et 16h23, et le réveil de 8h03 ou 9h03, heure suisse, selon le jour). Sinon,
+  nouveau run (donc autre runner) qui attend 40 min avant de commencer
+  (`vars.RELANCE_NEIGE_MIN`, 30 à 60 ; non créée, défaut 40).
+- Le run relancé applique les règles normales, silence compris. Son résumé dit
+  « Open-Meteo a répondu, l'alerte est rattrapée », ou « nouvel échec, pas d'autre
+  relance » (il reste alors rouge). Le run d'origine écrit la raison dans son résumé.
+- Jamais en DRY_RUN ni avec un seuil forcé.
+- Test : `test/snow.test.mjs`, « 429 -> rouge et relance demandée ; puis la relance
+  réussit -> rattrapée » (plus 503, injoignable, 400, DRY_RUN, seuil forcé, relance qui
+  échoue). `test/relance.test.mjs` : fenêtre de 2 h, réveil jour ouvré, week-end, été.
+- Essai réel du chemin de relance (run relancé en DRY_RUN, attente 0) : attente faite,
+  résumé « Open-Meteo a répondu, l'alerte est rattrapée ». Le déclenchement depuis un run
+  en échec n'a pas pu être essayé en vrai sans provoquer un vrai refus ; il est couvert
+  par les tests et suit la même commande que la relance de l'écran.
+- À savoir : GitHub ne garde qu'un run en attente par workflow. Si un run en retard du cron
+  de secours arrive pendant l'attente, l'un des deux est annulé. Le travail est fait quand
+  même, une fois, sans boucle.
+
+**Décision 3 — relance de l'écran : informative.** Un échec de `gh workflow run` laisse
+le run vert, avec un avertissement. Précision sur le mail du 22.11 à 22h06 : ce n'est pas
+cette étape qui a échoué. Elle a bien lancé `wind-alert` (run 45070182411), et c'est ce
+run-là qui n'a pas démarré côté GitHub (0 job, « workflow file issue », sans changement du
+fichier). Le run vent de 22h17 est passé. Ce cas-là ne dépend pas de nous ; il reste
+possible, rarement.
+
+**Décision 4 — écran : ce qui reste à tomber : en service.**
+
+- À chaque envoi vers TRMNL (`wind-alert`, toutes les 4 h, et après un changement
+  d'épisode), un épisode commencé montre la neige qui reste, aujourd'hui compris à partir
+  de l'heure de l'envoi (heures du run neige), et la plage restante. Sous 5 cm
+  (`AFFICHAGE_NEIGE_CM`), il sort de la liste : l'écran passe au suivant, ou à rien.
+- Avant son début, un épisode garde le cumul complet, le chiffre de l'alerte.
+- Aucun champ retiré : `cm` et `de` changent de sens pour un épisode commencé ; deux
+  champs ajoutés, `total` (cumul, le chiffre de l'alerte) et `cours` (vrai si commencé).
+  Markup inchangé (il prend déjà le premier épisode pas fini). `data/neige-ecran.json`
+  garde les cumuls ; les alertes ne changent pas. Contrat mis à jour
+  (`docs/contrat-trmnl.md`).
+- L'inversion (`label--filled`) suit toujours l'épisode au seuil, même pour ce qui reste.
+- Limite : entre deux envois (4 h), le chiffre restant ne baisse pas.
+
+Rejeu sur les vrais fichiers écran (envois vent réels) :
+
+| envoi (heure suisse) | avant | avec D-008 |
+|---|---|---|
+| Di 22.11 16h25 | 200 cm · Di 15 → Lu 23.11 | 68 cm · Di 22 → Lu 23.11 |
+| Lu 23.11 6h17 | 188 cm · Lu 16 → Lu 23.11 | 14 cm · Lu 23.11 |
+| Lu 23.11 8h04 | 183 cm · Lu 16 → Lu 23.11 | 5 cm · Lu 23.11 |
+| Lu 23.11 10h17 | 183 cm · Lu 16 → Lu 23.11 | 27 cm · Me 25 → Ve 27.11 |
+| **Lu 23.11 18h17 et 22h17** | **182 cm · Lu 16 → Lu 23.11** | **28 cm · Me 25 → Je 26.11** |
+| Ma 24.11 6h17 | 17 cm · Me 25 → Je 26.11 | 17 cm · Me 25 → Je 26.11 (pas commencé : inchangé) |
+| Ma 24.11 10h17 | 18 cm · Me 25 → Je 26.11 | 18 cm · Me 25 → Je 26.11 |
+
+Le 23.11 au soir, l'écran aurait donc montré l'épisode suivant (28 cm) dès 10h17, et ce
+matin la baisse 28 → 18 cm se serait lue comme une vraie révision, ce qu'elle était (message
+« revue à la baisse » de 8h03). Toutes les lignes restent inversées : les épisodes sont au
+seuil.
+
+Tests : 406 au vert. Revue de code par un agent indépendant : rien qui touche une alerte.
+Six défauts corrigés avant la mise en service : panne de `relance.mjs` masquée (elle rend
+maintenant le run rouge), « rattrapée » écrit avant la fin du run (écrit maintenant à la
+fin, et seulement si l'envoi a réussi), réponse 200 illisible traitée comme un refus (plus
+de relance), test faux entre minuit et 1h, ligne CSV MeteoSuisse tronquée qui rendait le
+run rouge, fenêtre ICON décalée d'une heure aux changements d'heure, reste surestimé quand
+les heures finissaient à minuit pile. DRY_RUN verts sur les trois workflows (runs
+45357816264, 45357822592, 45357828904) ; écran : `{"cm":18,"de":"2026-11-25",
+"a":"2026-11-26","ok":true,"total":18,"cours":false}`.
+
