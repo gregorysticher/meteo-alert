@@ -624,7 +624,7 @@ minuit et avant le relevé de 7h. La mesure juste est donc le total des deux jou
 
 ## D-008 — Suites de D-007 et affichage de l'épisode neige en cours
 
-**Statut :** FAITE (en service le 24.11.2026 vers 9h30 ; premières lignes `msl` au run de 16h23 ; relance réelle jamais déclenchée à ce jour)
+**Statut :** FAITE (en service le 24.11.2026 vers 9h30 ; contrôle du 24.11 au soir bon ; première relance réelle le 25.11 à 6h04, verte)
 **De :** WINGFOIL/METEO-ALERT — mardi 24.11.2026, 08h35
 **Décidé par :** Greg, 24.11.2026
 
@@ -788,6 +788,26 @@ run rouge, fenêtre ICON décalée d'une heure aux changements d'heure, reste su
 les heures finissaient à minuit pile. DRY_RUN verts sur les trois workflows (runs
 45357816264, 45357822592, 45357828904) ; écran : `{"cm":18,"de":"2026-11-25",
 "a":"2026-11-26","ok":true,"total":18,"cours":false}`.
+
+**Contrôle en production (24.11 au soir, relu le 25.11) : bon.**
+
+- Run neige annoncée de 16h23 (`45424991952`) : vert, aucun avertissement. Run MeteoSuisse
+  `202611241500`, point 19999 (1943 m), 9 lignes `msl` et 8 `msl7`, plus 4 `icon7`. Le cron
+  de secours GitHub de 15h58 (`45420041471`) avait déjà écrit les mêmes types de lignes, vert
+  lui aussi.
+- Lignes de 16h23 pour l'épisode : `msl` Me 25.11 0,3 cm · Je 26.11 3,5 cm ; `msl7`
+  Me 25.11 1,9 cm · Je 26.11 1,9 cm ; `icon7` Me 25.11 7,3 cm · Je 26.11 8,7 cm.
+- Rapport QA neige fraîche de 17h47 (`45441157600`) : la section « ICON contre MeteoSuisse
+  Planachaux » est là, première ligne à J-1 pour le 25.11 : ICON 4,43 (civil) / 7,32
+  (7h-7h), MeteoSuisse 0,34 / 1,92, mesuré en attente. Le 25.11 à 8h03 (`45565144800`), la
+  ligne du 26.11 est venue s'ajouter, et le total de l'épisode à J-1 est complet :
+  ICON 8,5 cm contre MeteoSuisse 2,8 cm (7h → 7h).
+- Relance : première relance réelle le 25.11 (refus d'Open-Meteo au run de 5h23
+  `45546467926`, relance `45546567170` partie vers 6h04, verte). Le run d'origine est
+  resté rouge, comme prévu par la règle de D-008 ; D-009 change cette règle.
+- Défaut trouvé après coup : le test « journal msl, msl7 et icon7 écrits » dépend de
+  l'heure réelle et a échoué au cron de secours de 0h56 le 25.11 (sans perte d'alerte).
+  Corrigé dans D-009.
 
 ---
 

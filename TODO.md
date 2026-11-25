@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-24
+Dernière mise à jour : 2026-11-25
 Session : Weather Station — https://claude.ai/code/session_01V44DmrGmT76TSq2yZ4XBUY — PC claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
@@ -34,10 +34,10 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ### Avant le 15/04/2027 — prioritaire
 
-- [ ] D-008 : vérifier les premières lignes `msl` / `msl7` / `icon7` après le run neige de
-      16h23 le 2026-11-24, puis le premier tableau « ICON contre MeteoSuisse » du rapport QA
-      neige fraîche (17h47). Bilan de l'épisode 25-26.11 vers le 2026-11-28 avec la
-      comparaison des deux sources (à refaire à chaque épisode ; recalage après 4 à 6).
+- [x] D-008 : premières lignes `msl` / `msl7` / `icon7` (run de 16h23 le 2026-11-24) et
+      premier tableau « ICON contre MeteoSuisse » (17h47) vérifiés, bons.
+- [ ] D-008 : bilan de l'épisode 25-26.11 vers le 2026-11-28 avec la comparaison des deux
+      sources (à refaire à chaque épisode ; recalage après 4 à 6). Échéance : 2026-11-28.
 - [ ] Contrôler le premier vrai `W.reco` à l'écran à l'ouverture de la
       saison (2027-04-15) : jour, heures, inversion.
 - [ ] Redéployer le Worker exige `wrangler login` (déconnecté après le déploiement) :
