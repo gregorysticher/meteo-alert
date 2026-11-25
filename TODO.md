@@ -38,6 +38,8 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
       premier tableau « ICON contre MeteoSuisse » (17h47) vérifiés, bons.
 - [ ] D-008 : bilan de l'épisode 25-26.11 vers le 2026-11-28 avec la comparaison des deux
       sources (à refaire à chaque épisode ; recalage après 4 à 6). Échéance : 2026-11-28.
+- [ ] D-009 : au prochain refus d'Open-Meteo, vérifier en vrai que le run d'origine finit
+      vert avec « Open-Meteo refusé, relance à HHhMM », et que la relance rend le verdict.
 - [ ] Contrôler le premier vrai `W.reco` à l'écran à l'ouverture de la
       saison (2027-04-15) : jour, heures, inversion.
 - [ ] Redéployer le Worker exige `wrangler login` (déconnecté après le déploiement) :
@@ -65,6 +67,12 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ## Fait récemment
 
+- [x] 2026-11-25 — D-009 en service : horloge forcée des tests (`test/helpers/horloge.mjs`),
+      suite passée sur 17 instants piégeux (2 défauts de test trouvés et corrigés) ; run
+      neige annoncée vert avec avertissement quand une relance est programmée (étape
+      `Verdict`), rouge sinon. 412 tests, revue indépendante, DRY_RUN verts.
+- [x] 2026-11-25 — D-008 contrôlé en production : lignes MeteoSuisse et tableau QA bons ;
+      première relance réelle (5h23 → 6h04) verte.
 - [x] 2026-11-24 — D-008 en service : journal MeteoSuisse Planachaux en parallèle (`msl`,
       `msl7`, `icon7`, rapport QA par fenêtre 7h-7h et par épisode), relance unique du run
       neige après un refus d'Open-Meteo (`relance.mjs`, `RELANCE_NEIGE_MIN` = 40), relance

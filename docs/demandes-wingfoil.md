@@ -813,7 +813,7 @@ les heures finissaient à minuit pile. DRY_RUN verts sur les trois workflows (ru
 
 ## D-009 — Test dépendant de l'heure ; plus de rouge quand une relance est programmée
 
-**Statut :** OUVERTE
+**Statut :** FAITE (en service le 25.11.2026 vers 13h, DRY_RUN verts)
 **De :** WINGFOIL/METEO-ALERT — mercredi 25.11.2026, 08h35
 **Décidé par :** Greg, 25.11.2026
 
@@ -858,4 +858,75 @@ les heures finissaient à minuit pile. DRY_RUN verts sur les trois workflows (ru
 
 ### Réponse
 
-_(à remplir par Weather Station)_
+Weather Station — mercredi 25.11.2026. En production le même jour (commit `fbdfa12`).
+
+**Décision 1 — tests et heure réelle : fait.**
+
+- Cause exacte de 0h56 : le faux MeteoSuisse des tests commence à l'heure qui suit
+  « maintenant ». Entre 0h et 1h, heure suisse, sa première heure est 0h-1h : le jour en cours
+  a alors ses 24 heures. Le script l'écrit, à raison (jour complet), et le test, qui supposait
+  « jour en cours jamais complet », échouait. Le script était juste ; le test, faux.
+- Horloge injectable : `test/helpers/horloge.mjs` (`HORLOGE_TEST` = instant ISO). Le test
+  tourne maintenant à deux heures fixes : 11h (jour en cours incomplet, pas écrit) et 0h05
+  (jour complet, écrit).
+- Toute la suite (412 tests) passée à horloge forcée sur 17 instants : maintenant ; 0h05,
+  0h59, 6h59 et 23h59 un jour ouvré ; dimanche 0h05, 11h et 23h59 ; passage à
+  l'heure d'été (27.03.2027 23h30 et 0h05, 28.03 3h30 et 12h) ; passage à l'heure d'hiver
+  (24.10.2026 23h59, 25.10 0h05, 2h30 avant et après le recul, 12h).
+- Trouvé :
+  - le test MeteoSuisse ci-dessus, qui échoue à 0h05, 0h59, dimanche 0h05 et au passage à
+    l'heure d'été à 0h05 ;
+  - le 25.10 à 0h05 (journée de 25 heures), 38 tests de `snow.test.mjs` échouaient. Le
+    calcul des dates des tests ajoutait 24 h au lieu d'un jour : « dimanche » deux fois.
+    Défaut du test seulement, le script lit les dates d'Open-Meteo. Corrigé (jours de
+    calendrier), ainsi que la même formule dans `snow-conversion.test.mjs`, par précaution ;
+  - rien d'autre : les tests du vent, du silence, du Worker et de la relance fixaient déjà
+    leur horloge.
+- Après correction, 412 sur 412 aux 17 instants.
+
+**Décision 2 — plus de rouge quand une relance est programmée : en service.**
+
+- L'étape d'alerte ne décide plus seule de la couleur. Une étape `Verdict`, en fin de job,
+  rend le run **vert avec l'avertissement « Open-Meteo refusé, relance à 6h04 : la relance
+  dira si l'alerte est rattrapée »** seulement si les deux conditions sont réunies :
+  - la relance est programmée, c'est-à-dire que la commande a réussi ;
+  - le refus d'Open-Meteo est la seule cause d'échec du run.
+- Le run reste **rouge** dans tous les autres cas :
+  - aucune relance (run planifié dans les 2 h, ou ce run est déjà une relance) ;
+  - commande de relance en échec ;
+  - autre échec dans le même run (variable invalide, source passée au rouge, ntfy) ;
+  - `relance.mjs` en panne ;
+  - requête fausse (400), réponse illisible, DRY_RUN ;
+  - et la relance elle-même, si elle échoue (elle est le juge).
+- Rejeu de cette nuit : **0 mail au lieu de 2**. Le run de 0h56 passe ses tests (Décision 1).
+  Le run de 5h23 finit vert avec « relance à 6h04 », et sa relance est verte.
+- Tests :
+  - `test/snow.test.mjs`, « D-009 : refus -> relance programmée -> vert avec avertissement ;
+    relance qui échoue -> rouge ». Il rejoue le workflow étape par étape avec l'horloge du
+    25.11 à 5h24 : vert et « relance à 6h04 », puis la relance refusée est rouge, puis la
+    relance qui réussit est verte, « rattrapée » ;
+  - « D-009 : pas de relance programmée -> rouge » : run de 16h23 dans les 2 h, commande
+    en échec, refus avec une variable invalide, 400, réponse illisible, DRY_RUN ;
+  - `test/relance.test.mjs` vérifie aussi le câblage du YAML. Sans l'étape `Verdict`, un
+    échec d'alerte finirait vert sans mail.
+- Revue de code par un agent indépendant : rien de bloquant. Quatre points mineurs
+  corrigés : le test du YAML ajouté, et trois commentaires et notes inexacts.
+- DRY_RUN verts : neige annoncée `45609122269` (`Verdict` sauté, comme prévu sur un run
+  réussi) et neige fraîche `45609131075`. Le chemin vert après un refus ne peut se voir en
+  vrai qu'au prochain refus d'Open-Meteo ; je le contrôlerai à ce moment-là.
+
+**À savoir.** Le run d'origine étant vert, aucun mail ne part si la relance ne va pas au
+bout sans échouer :
+
+- relance annulée à la main ;
+- relance remplacée dans la file GitHub par un run plus récent, qui fait alors l'évaluation ;
+- relance qui ne démarre pas côté GitHub (0 job, comme le run vent du 22.11).
+
+Dans le dernier cas seulement, une évaluation est perdue sans mail, jusqu'au run planifié
+suivant (11 h au plus). C'est rare. Si la session WINGFOIL veut s'en protéger, une option :
+le run planifié suivant signale une relance programmée qui n'a jamais rendu de verdict. Je
+ne l'ai pas fait sans décision.
+
+Autre cas : un refus combiné à un réglage absurde (par exemple `HAUSSE_NEIGE_CM` = 0). Ces
+réglages ne sont lus qu'après la réponse d'Open-Meteo, donc le run d'origine est vert et la
+relance passe au rouge 40 min plus tard.
