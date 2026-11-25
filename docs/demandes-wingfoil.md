@@ -789,3 +789,53 @@ les heures finissaient à minuit pile. DRY_RUN verts sur les trois workflows (ru
 45357816264, 45357822592, 45357828904) ; écran : `{"cm":18,"de":"2026-11-25",
 "a":"2026-11-26","ok":true,"total":18,"cours":false}`.
 
+---
+
+## D-009 — Test dépendant de l'heure ; plus de rouge quand une relance est programmée
+
+**Statut :** OUVERTE
+**De :** WINGFOIL/METEO-ALERT — mercredi 25.11.2026, 08h35
+**Décidé par :** Greg, 25.11.2026
+
+### Contexte — deux mails cette nuit, aucune alerte perdue
+
+| Run (heure suisse) | Cause | Impact |
+|---|---|---|
+| Me 25.11 0h56 — neige annoncée, cron de secours GitHub (`45514106901`) | Étape **Tests** : 1 échec sur 289, `annoncée (D-008) : journal msl, msl7 et icon7 écrits, information seulement` (`test/snow.test.mjs:703`), « jour du run incomplet (heures du matin absentes) : pas écrit » | Aucun : le run de 5h23 a fait le travail |
+| Me 25.11 5h23 — neige annoncée, Worker (`45546467926`) | Refus d'Open-Meteo → rouge, relance programmée | Aucun : relance `45546567170` partie vers 6h04, **verte** (première relance réelle) |
+
+### Décision 1 — corriger le test qui dépend de l'heure réelle
+
+- Le test `journal msl, msl7 et icon7 écrits` échoue quand il tourne juste après minuit,
+  heure suisse : il dépend de l'horloge réelle. Ce n'est pas le défaut « test faux entre
+  minuit et 1h » corrigé dans D-008 : c'est un autre test, écrit le même jour.
+- Fixe l'horloge dans ce test (date et heure injectées, pas `Date.now()`).
+- **Passe en revue toute la suite** pour les autres tests sensibles à l'heure réelle, au
+  jour de la semaine, au changement d'heure ou au fuseau. Fais tourner la suite avec
+  l'horloge forcée sur quelques instants piégeux (0h05, 0h59, 6h59, 23h59 heure suisse ;
+  un dimanche ; le jour du passage à l'heure d'été et d'hiver) et dis ce que ça a trouvé.
+
+### Décision 2 — plus de rouge quand une relance est programmée
+
+- Quand le run neige annoncée échoue sur Open-Meteo **et qu'une relance est programmée**,
+  il finit **vert avec un avertissement** (« Open-Meteo refusé, relance à HHhMM »), pas
+  rouge. Le mail ne sert à rien si l'alerte est rattrapée 40 min plus tard.
+- **La relance devient le juge** : si elle échoue à son tour, elle est **rouge** (mail),
+  comme aujourd'hui.
+- Si **aucune relance n'est programmée** (run planifié dans les 2 h, ou déjà une relance),
+  le run reste **rouge** comme aujourd'hui.
+- Si la commande de relance elle-même échoue, le run reste **rouge** : sinon un refus
+  pourrait disparaître sans personne pour le rattraper.
+- Résultat attendu : un mail seulement quand une évaluation neige est vraiment perdue.
+
+### Retour attendu
+
+- Décision 1 : la cause exacte du test de cette nuit, et la liste des autres tests trouvés
+  sensibles à l'heure.
+- Décision 2 : rejeu de cette nuit avec la nouvelle règle (combien de mails seraient
+  partis), et le test qui simule « refus → relance programmée → vert », puis « relance qui
+  échoue → rouge ».
+
+### Réponse
+
+_(à remplir par Weather Station)_
