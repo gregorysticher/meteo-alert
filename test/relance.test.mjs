@@ -60,3 +60,47 @@ test('script : code 0 = relancer, 3 = non ; raison au résumé, attente en sorti
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('verdict (D-009) : vert seulement si relance programmée et refus seule cause', async () => {
+  const { verdict } = await import('../relance.mjs');
+  assert.deepEqual(verdict({ seule: true, programmee: true, heure: '6h04' }).vert, true);
+  assert.match(verdict({ seule: true, programmee: true, heure: '6h04' }).texte, /^Open-Meteo refusé, relance à 6h04/);
+  assert.equal(verdict({ seule: false, programmee: true }).vert, false);
+  assert.equal(verdict({ seule: true, programmee: false }).vert, false);
+  assert.equal(verdict({}).vert, false);
+  assert.equal(decider({ maintenant: d('2026-11-25T04:24:31Z') }).heure, '6h04');
+  assert.equal(decider({ maintenant: d('2026-11-25T09:00:00Z'), attente: 60 }).heure, '11h00');
+});
+
+test('script verdict : code 0 + ::warning, ou code 1 + ::error', () => {
+  const lancerV = (env) => spawnSync(process.execPath, [join(RACINE, 'relance.mjs'), 'verdict'],
+    { encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: '', ...env } });
+  const v = lancerV({ RELANCE_SEULE: 'true', PROGRAMMEE: 'true', HEURE: '6h04' });
+  assert.equal(v.status, 0);
+  assert.match(v.stdout, /^::warning title=Open-Meteo refusé::Open-Meteo refusé, relance à 6h04/m);
+  const r = lancerV({ RELANCE_SEULE: 'true', PROGRAMMEE: '', HEURE: '' });
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /^::error /m);
+});
+
+// Le YAML lui-même (D-009) : sans ces lignes, une étape d'alerte en échec finirait verte,
+// sans mail (continue-on-error sans Verdict).
+test('workflow neige annoncée : continue-on-error, relance et Verdict câblés', () => {
+  const y = readFileSync(join(RACINE, '.github', 'workflows', 'snow-forecast-alert.yml'), 'utf8');
+  const etape = (nom) => y.slice(y.indexOf(`- name: ${nom}`)).split(/\n      - name: /)[0];
+  assert.match(etape('Vérifier les chutes annoncées'), /^\s+id: alerte\n\s+continue-on-error: true$/m);
+  const r = etape('Programmer une relance (refus Open-Meteo)');
+  assert.match(r, /id: relance\n\s+if: always\(\) && steps\.alerte\.outcome == 'failure' && steps\.alerte\.outputs\.relance == 'true' && inputs\.relance != '1'/);
+  assert.match(r, /\^heure=/);
+  assert.match(r, /gh workflow run snow-forecast-alert\.yml[^\n]*\n\s+echo "programmee=true" >> "\$GITHUB_OUTPUT"/);
+  assert.match(r, /heure_relance=\$H/);
+  const v = etape('Verdict');
+  assert.match(v, /if: always\(\) && steps\.alerte\.outcome == 'failure'/);
+  assert.match(v, /RELANCE_SEULE: \$\{\{ steps\.alerte\.outputs\.relance_seule \}\}/);
+  assert.match(v, /PROGRAMMEE: \$\{\{ steps\.relance\.outputs\.programmee \}\}/);
+  assert.match(v, /HEURE: \$\{\{ steps\.relance\.outputs\.heure_relance \}\}/);
+  assert.match(v, /run: node relance\.mjs verdict/);
+  // Verdict en dernier, et plus aucun failure() qui dépendrait de la conclusion de l'alerte.
+  assert.ok(y.lastIndexOf('- name: ') === y.indexOf('- name: Verdict'));
+  assert.doesNotMatch(y, /failure\(\)/);
+});

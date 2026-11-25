@@ -16,6 +16,8 @@ import { rapportTemperature } from '../snow-conversion.mjs';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MOCK = join(RACINE, 'test', 'helpers', 'mock-fetch.mjs');
+// Horloge forcée (D-009) : HORLOGE_TEST dans l'env d'un script lancé fixe son « maintenant ».
+const HORLOGE = 'file:///' + join(RACINE, 'test', 'helpers', 'horloge.mjs').replace(/\\/g, '/');
 
 // cwd = dossier temporaire vide : un script qui écrirait malgré DRY_RUN le
 // ferait là (le test « aucun fichier écrit » le voit), jamais dans le vrai
@@ -30,7 +32,7 @@ function lancer(script, mock, env = {}, etat = null, fichiers = {}) {
       writeFileSync(join(dir, f), texte);
     }
     const r = spawnSync(process.execPath,
-      ['--import', 'file:///' + MOCK.replace(/\\/g, '/'), join(RACINE, script)], {
+      ['--import', HORLOGE, '--import', 'file:///' + MOCK.replace(/\\/g, '/'), join(RACINE, script)], {
         cwd: dir, encoding: 'utf8',
         env: { ...process.env, DRY_RUN: 'true', IGNORER_SAISON: 'true',
           SEUIL_CM: '10', NTFY_TOPIC_NEIGE: '', SILENCE_NOCTURNE: '', HAUSSE_PCT: '', MOCK_MSL: 'ok',
@@ -53,9 +55,17 @@ function lancer(script, mock, env = {}, etat = null, fichiers = {}) {
   }
 }
 
-const jourLocal = (decalage = 0) => new Intl.DateTimeFormat('sv-SE', {
-  timeZone: 'Europe/Zurich', year: 'numeric', month: '2-digit', day: '2-digit',
-}).format(new Date(Date.now() + decalage * 864e5));
+// Jour civil suisse, `decalage` jours de calendrier après `base` (ms ; maintenant par défaut).
+// Pas « + 24 h » : un jour de changement d'heure a 23 ou 25 heures (D-009).
+const jourLocal = (decalage = 0, base = Date.now()) => {
+  const j = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Zurich', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(base));
+  const d = new Date(`${j}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + decalage);
+  return d.toISOString().slice(0, 10);
+};
+const jourLocalA = jourLocal;
 
 // ---- journal --------------------------------------------------------------
 
@@ -87,9 +97,10 @@ test('journal : prévisions, mesures dédoublonnées, rapport J-1', () => {
 // Horaire (D-005) : toute la neige du jour tombe à midi à −5 °C (part neige 1), en mm
 // tels que la conversion redonne exactement la valeur ; null = jour sans données.
 // snowfall_sum (0,7 fixe, information) = la même valeur.
-const prev = (neige, unite = 'mm', passes = []) => {
+// `base` (ms) : horloge du script lancé, si elle est forcée (HORLOGE_TEST).
+const prev = (neige, unite = 'mm', passes = [], base = Date.now()) => {
   const valeurs = [...passes, ...neige];
-  const time = [...passes.map((_, i) => jourLocal(i - passes.length)), ...neige.map((_, i) => jourLocal(i))];
+  const time = [...passes.map((_, i) => jourLocal(i - passes.length, base)), ...neige.map((_, i) => jourLocal(i, base))];
   const h = { time: [], precipitation: [], temperature_2m: [] };
   time.forEach((d, i) => {
     for (let k = 0; k < 24; k++) {
@@ -686,8 +697,14 @@ const sortieGh = () => {
     fin: () => rmSync(d, { recursive: true, force: true }) };
 };
 
-test('annoncée (D-008) : journal msl, msl7 et icon7 écrits, information seulement', () => {
-  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), REEL);
+// Horloge fixée (D-009) : le mock MeteoSuisse part de l'heure pleine qui suit « maintenant ».
+// À 11h, le jour en cours n'a pas ses heures du matin. Le 25.11 à 0h56, sur l'horloge réelle,
+// il les avait toutes (première heure = 0h-1h) et ce test échouait.
+for (const [t, jourEcrit] of [['2026-11-24T10:00:00Z', false], ['2026-11-24T23:05:00Z', true]]) {
+test(`annoncée (D-008) : journal msl, msl7 et icon7 écrits, information seulement (${t})`, () => {
+  const base = Date.parse(t);
+  const jourLocal = (d = 0) => jourLocalA(d, base);
+  const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0], 'mm', [], base), { ...REEL, HORLOGE_TEST: t });
   assert.equal(r.code, 0, r.out);
   assert.doesNotMatch(r.out, /AVERTISSEMENT/);
   const lignes = r.journal.trim().split('\n').slice(1).map((l) => l.split(','));
@@ -700,13 +717,16 @@ test('annoncée (D-008) : journal msl, msl7 et icon7 écrits, information seulem
     assert.ok(Math.abs(+l[3] - parJour) < 0.05, l.join(','));
     assert.equal(+l[6], 24);
   }
-  assert.ok(de('msl').every((l) => l[2] > jourLocal(0)), 'jour du run incomplet (heures du matin absentes) : pas écrit');
+  // Jour en cours écrit seulement s'il est complet : à 0h05, ses 24 heures sont là.
+  assert.equal(de('msl').some((l) => l[2] === jourLocal(0)), jourEcrit, r.out);
+  assert.ok(de('msl').every((l) => l[2] >= jourLocal(0)), 'jour passé incomplet : pas écrit');
   // icon7 : fenêtre 7h → 7h rangée au jour où elle commence, neige de midi comprise.
   assert.deepEqual(de('icon7').map((l) => [l[2], +l[3], +l[4]]),
     [[jourLocal(0), 0, 0], [jourLocal(1), 7, 1], [jourLocal(2), 5, 2], [jourLocal(3), 0, 3]]);
   assert.match(r.out, /Journal neige MeteoSuisse : run 202611240400, point 19999 \(1943 m\)/);
   assert.match(r.out, /ntfy → Neige annoncée/);
 });
+}
 
 test('annoncée (D-008) : MeteoSuisse en panne -> avertissement, vert, alerte partie, rien de msl', () => {
   const r = lancer('snow-forecast-alert.mjs', prev([0, 7, 5, 0, 0]), { ...REEL, MOCK_MSL: 'panne' });
@@ -790,5 +810,66 @@ test('annoncée (D-008) : 503 et injoignable -> relance ; 400 -> pas de relance 
       assert.equal(r.code, 1, r.out);
       assert.equal(/relance=true/.test(gh.lire().out), attendu, `${JSON.stringify(mock)} ${JSON.stringify(env)}`);
     } finally { gh.fin(); }
+  }
+});
+
+// ---- D-009 : couleur du run quand une relance est programmée ---------------------------
+// Les étapes du workflow, dans l'ordre : alerte (script), relance (relance.mjs, puis
+// `gh workflow run` simulé par ghOk), verdict (relance.mjs verdict). Rend la couleur du job.
+function workflowNeige({ mock, horloge, env = {}, relance = false, ghOk = true }) {
+  const gh = sortieGh(), gh2 = sortieGh();
+  try {
+    const a = lancer('snow-forecast-alert.mjs', mock, { ...REEL, ...gh.env, HORLOGE_TEST: horloge, ...env,
+      ...(relance ? { RELANCE: '1', RUN_ORIGINE: '45546467926' } : {}) });
+    if (a.code === 0) return { vert: true, texte: 'alerte ok', a };
+    const sortie = (k, txt = gh.lire().out) => txt.match(new RegExp(`^${k}=(.*)$`, 'm'))?.[1] ?? '';
+    let programmee = '', heure = '';
+    if (sortie('relance') === 'true' && !relance) {
+      const r = spawnSync(process.execPath, ['--import', HORLOGE, join(RACINE, 'relance.mjs')], { encoding: 'utf8',
+        env: { ...process.env, ...gh2.env, HORLOGE_TEST: horloge, RELANCE: '', RELANCE_NEIGE_MIN: '' } });
+      if (r.status !== 0 && r.status !== 3) return { vert: false, texte: 'relance.mjs en panne', a };
+      if (r.status === 0) {
+        // Commande de relance en échec : l'étape est rouge, donc le run.
+        if (!ghOk) return { vert: false, texte: 'gh workflow run en échec', a };
+        programmee = 'true'; heure = sortie('heure', gh2.lire().out);
+      }
+    }
+    const v = spawnSync(process.execPath, [join(RACINE, 'relance.mjs'), 'verdict'], { encoding: 'utf8',
+      env: { ...process.env, GITHUB_STEP_SUMMARY: '', RELANCE_SEULE: sortie('relance_seule'), PROGRAMMEE: programmee, HEURE: heure } });
+    return { vert: v.status === 0, texte: v.stdout, a };
+  } finally { gh.fin(); gh2.fin(); }
+}
+const REFUS = { status: 429, body: { error: true, reason: 'Hourly API request limit exceeded' } };
+
+test('D-009 : refus -> relance programmée -> vert avec avertissement ; relance qui échoue -> rouge', () => {
+  // Rejeu de la nuit du 25.11 : run du Worker de 5h23, relance commandée à 5h24.
+  const w = workflowNeige({ mock: REFUS, horloge: '2026-11-25T04:24:31Z' });
+  assert.equal(w.vert, true, w.texte + w.a.out);
+  assert.match(w.texte, /::warning title=Open-Meteo refusé::Open-Meteo refusé, relance à 6h04/);
+  // La relance devient le juge : nouveau refus -> rouge (mail).
+  const r = workflowNeige({ mock: REFUS, horloge: '2026-11-25T05:04:40Z', relance: true });
+  assert.equal(r.vert, false, r.texte);
+  assert.match(r.texte, /::error title=alerte neige::/);
+  // La relance réussit : vert, sans avertissement.
+  const ok = workflowNeige({ mock: prev([0, 7, 5, 0, 0], 'mm', [], Date.parse('2026-11-25T05:04:40Z')),
+    horloge: '2026-11-25T05:04:40Z', relance: true });
+  assert.equal(ok.vert, true, ok.a.out);
+  assert.match(ok.a.out, /l'alerte est rattrapée/);
+});
+
+test('D-009 : pas de relance programmée -> rouge (run planifié dans les 2 h, commande en échec, autre échec)', () => {
+  // 15h Swiss : le run de 16h23 est dans les 2 h -> pas de relance -> rouge.
+  const p = workflowNeige({ mock: REFUS, horloge: '2026-11-25T14:00:00Z' });
+  assert.equal(p.vert, false, p.texte);
+  assert.match(p.texte, /aucune relance programmée/);
+  // `gh workflow run` échoue : rouge, un refus ne disparaît pas sans relance.
+  assert.equal(workflowNeige({ mock: REFUS, horloge: '2026-11-25T09:00:00Z', ghOk: false }).vert, false);
+  // Refus + variable invalide : la relance part, mais le run reste rouge.
+  const v = workflowNeige({ mock: REFUS, horloge: '2026-11-25T09:00:00Z', env: { HAUSSE_CM: 'abc' } });
+  assert.equal(v.vert, false, v.texte);
+  assert.match(v.texte, /aussi échoué pour une autre raison/);
+  // Requête fausse (400), réponse illisible, DRY_RUN : jamais de relance, rouge.
+  for (const [mock, env] of [[{ status: 400, body: { error: true } }, {}], [{ status: 200, body: '{x' }, {}], [REFUS, { DRY_RUN: 'true' }]]) {
+    assert.equal(workflowNeige({ mock, env, horloge: '2026-11-25T09:00:00Z' }).vert, false, JSON.stringify(mock));
   }
 });

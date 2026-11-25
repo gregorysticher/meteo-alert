@@ -13,7 +13,14 @@
 //
 // Sortie : code 0 = relancer, 3 = ne pas relancer ; la raison va dans le résumé du job.
 // Env : RELANCE (1 si ce run est déjà une relance), RELANCE_NEIGE_MIN, GITHUB_STEP_SUMMARY,
-//       GITHUB_OUTPUT (attente_min).
+//       GITHUB_OUTPUT (attente_min, heure = heure suisse de la relance, « 6h04 »).
+//
+// `node relance.mjs verdict` (D-009, Greg 25.11.2026) : couleur finale du run quand l'étape
+// d'alerte a échoué. Vert avec un avertissement seulement si une relance est programmée et
+// que le refus d'Open-Meteo est la seule cause d'échec ; sinon rouge (code 1). La relance
+// devient le juge : si elle échoue à son tour, elle est rouge.
+// Env : RELANCE_SEULE (true : le refus est la seule cause), PROGRAMMEE (true : la commande
+//       de relance a réussi), HEURE.
 
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -52,7 +59,28 @@ export function decider({ maintenant = new Date(), dejaRelance = false, attente 
     return { relancer: false, attente, raison: `run planifié à ${l.hhmm} (heure suisse), dans moins de ${FENETRE_H} h : pas de relance` };
   }
   const l = local(new Date(maintenant.getTime() + attente * 6e4));
-  return { relancer: true, attente, raison: `relance dans ${attente} min, vers ${l.hhmm} (heure suisse), sur un autre runner` };
+  const heure = l.hhmm.replace(/^0/, '').replace(':', 'h');
+  return { relancer: true, attente, heure,
+    raison: `relance dans ${attente} min, vers ${l.hhmm} (heure suisse), sur un autre runner` };
+}
+
+// { vert, texte } : couleur finale d'un run dont l'étape d'alerte a échoué (D-009).
+export function verdict({ seule = false, programmee = false, heure = '' } = {}) {
+  if (programmee && seule) {
+    return { vert: true, texte: `Open-Meteo refusé, relance à ${heure || '?'} : la relance dira si l'alerte est rattrapée.` };
+  }
+  if (programmee) {
+    return { vert: false, texte: 'Relance programmée, mais le run a aussi échoué pour une autre raison (voir le journal).' };
+  }
+  return { vert: false, texte: 'Étape d\'alerte en échec, aucune relance programmée : évaluation neige perdue pour ce run.' };
+}
+
+function principalVerdict() {
+  const { RELANCE_SEULE, PROGRAMMEE, HEURE, GITHUB_STEP_SUMMARY } = process.env;
+  const v = verdict({ seule: RELANCE_SEULE === 'true', programmee: PROGRAMMEE === 'true', heure: HEURE });
+  console.log(v.vert ? `::warning title=Open-Meteo refusé::${v.texte}` : `::error title=alerte neige::${v.texte}`);
+  if (GITHUB_STEP_SUMMARY) appendFileSync(GITHUB_STEP_SUMMARY, `**${v.texte}**\n\n`);
+  process.exitCode = v.vert ? 0 : 1;
 }
 
 async function principal() {
@@ -66,8 +94,11 @@ async function principal() {
   const texte = `Refus d'Open-Meteo : ${d.raison}.`;
   console.log(texte);
   if (GITHUB_STEP_SUMMARY) appendFileSync(GITHUB_STEP_SUMMARY, `**${texte}**\n\n`);
-  if (GITHUB_OUTPUT) appendFileSync(GITHUB_OUTPUT, `attente_min=${d.attente}\n`);
+  if (GITHUB_OUTPUT) appendFileSync(GITHUB_OUTPUT, `attente_min=${d.attente}\n` + (d.heure ? `heure=${d.heure}\n` : ''));
   process.exitCode = d.relancer ? 0 : 3;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await principal();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  if (process.argv[2] === 'verdict') principalVerdict();
+  else await principal();
+}

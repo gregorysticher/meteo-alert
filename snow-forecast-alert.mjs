@@ -234,10 +234,24 @@ function ecrireEcran(ecran) {
 
 // Relance après un refus d'Open-Meteo (D-008, Décision 2) : le script le signale au
 // workflow, qui décide (relance.mjs : pas de relance d'une relance, ni si un run planifié
-// tombe dans les 2 h) et lance un nouveau run plus tard, sur un autre runner. Le run qui a
-// échoué reste rouge. Rien en DRY_RUN ni avec un seuil forcé : ce sont des essais.
+// tombe dans les 2 h) et lance un nouveau run plus tard, sur un autre runner. Rien en
+// DRY_RUN ni avec un seuil forcé : ce sont des essais.
+// D-009 (Greg, 25.11.2026) : ce script sort toujours en échec sur un refus ; le workflow
+// rend le run vert avec un avertissement seulement si la relance est programmée et que le
+// refus est la seule cause d'échec (relance_seule=true, relance.mjs verdict). Sinon rouge.
 const RELANCE = process.env.RELANCE === "1";
 let openMeteoRepondu = false;
+let relanceDemandee = false, echecAvantRefus = false;
+// Fin de run : le refus d'Open-Meteo est-il la seule cause d'échec ? Rien d'autre avant
+// (variable non numérique, lue au chargement), ni après (source passée au rouge, ntfy).
+// Réglages absurdes et état illisible ne sont lus qu'après la réponse d'Open-Meteo : sur un
+// refus, c'est la relance qui les verra (et passera au rouge).
+function finRelance(rouges = []) {
+  if (!relanceDemandee || !process.env.GITHUB_OUTPUT) return;
+  const seule = !echecAvantRefus && rouges.length === 0 && echecsNtfy.length === 0;
+  appendFileSync(process.env.GITHUB_OUTPUT, `relance_seule=${seule}\n`);
+  if (!seule) console.log("Refus d'Open-Meteo, et d'autres échecs dans ce run : il reste rouge.");
+}
 // Fin du run relancé : « rattrapée » seulement si tout le run a réussi (envoi, état).
 function bilanRelance() {
   if (!RELANCE || !openMeteoRepondu) return;
@@ -257,6 +271,9 @@ function demanderRelance(cause) {
     return;
   }
   if (DRY_RUN || SEUIL_FORCE) return;
+  // Appelé avant que l'appelant ne mette exitCode à 1 : un code déjà posé vient d'ailleurs.
+  echecAvantRefus = Boolean(process.exitCode);
+  relanceDemandee = true;
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, "relance=true\n");
   console.log(`Relance demandée au workflow (${cause}).`);
 }
@@ -342,8 +359,8 @@ async function main() {
     res = await fetchEssai(url);
   } catch (err) {
     console.log(`Erreur d'accès à Open-Meteo : ${err.message} — aucune alerte.`);
-    process.exitCode = 1;
     demanderRelance(err.message);
+    process.exitCode = 1;
     return;
   }
   if (!res.ok) {
@@ -354,10 +371,10 @@ async function main() {
     const corps = await res.text().catch(() => "");
     console.log(`Open-Meteo refuse la requête (HTTP ${res.status}) — aucune alerte.`);
     console.log(`Réponse : ${corps.slice(0, 500)}`);
-    process.exitCode = 1;
     // Quota (429) ou panne du serveur (5xx) : passagers, relance possible (D-008). Un
     // autre 4xx est une requête fausse : la relancer ne changerait rien.
     if (res.status === 429 || res.status >= 500) demanderRelance(`HTTP ${res.status}`);
+    process.exitCode = 1;
     return;
   }
   try {
@@ -527,9 +544,12 @@ async function main() {
 }
 
 main()
-  .then(() => bilanSources())
-  .then(bilanRelance)
-  .then(sortieSiEchecs)
+  .then(() => {
+    const rouges = bilanSources();
+    bilanRelance();
+    sortieSiEchecs();
+    finRelance(rouges);
+  })
   .catch((err) => {
     console.error("Erreur inattendue :", err.message);
     console.log("Aucune alerte envoyée.");

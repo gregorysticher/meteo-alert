@@ -98,9 +98,15 @@ test('journal : fichier à 11 colonnes -> en-tête cm_fixe ajouté, anciennes li
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MOCK = join(RACINE, 'test', 'helpers', 'mock-fetch.mjs');
-const jourLocal = (decalage = 0) => new Intl.DateTimeFormat('sv-SE', {
-  timeZone: 'Europe/Zurich', year: 'numeric', month: '2-digit', day: '2-digit',
-}).format(new Date(Date.now() + decalage * 864e5));
+// Jours de calendrier, pas « + 24 h » : un jour de changement d'heure a 23 ou 25 heures (D-009).
+const jourLocal = (decalage = 0) => {
+  const j = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Zurich', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  const d = new Date(`${j}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + decalage);
+  return d.toISOString().slice(0, 10);
+};
 
 function lancer(body, env = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'conv-run-'));

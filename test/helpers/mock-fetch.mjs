@@ -67,7 +67,8 @@ if (spec) {
       }
       const param = /\.(rre150h0|tre200h0)\.csv$/.exec(u)?.[1];
       if (!param) return new Response('absent', { status: 404 });
-      // Départ à l'heure pleine qui suit : le jour local en cours n'est jamais complet.
+      // Première valeur = heure qui finit à l'heure pleine suivante : le jour local en cours
+      // est incomplet, sauf entre 0h et 1h (heure suisse), où ses 24 heures sont là (D-009).
       const t0 = new Date(); t0.setUTCMinutes(0, 0, 0);
       const lignes = [`point_id;point_type_id;Date;${param}`];
       for (let i = 1; i <= 96; i++) {

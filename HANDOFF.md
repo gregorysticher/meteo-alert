@@ -152,8 +152,16 @@ Depuis D-008 (24.11.2026), aussi MeteoSuisse Planachaux (`msl` jour civil, `msl7
 en plus) ; sous 5 cm restants, l'épisode suivant. `data/neige-ecran.json` garde les cumuls.
 **Relance après un refus d'Open-Meteo (D-008)** : 429, 5xx ou injoignable → une relance
 dans un nouveau run 40 min plus tard (`vars.RELANCE_NEIGE_MIN`, 30 à 60), sauf relance d'une
-relance ou run planifié dans les 2 h (`relance.mjs`). Le run qui a échoué reste rouge ; le
-résumé du run relancé dit si l'alerte est rattrapée.
+relance ou run planifié dans les 2 h (`relance.mjs`). Depuis D-009, le run qui a échoué
+finit vert avec un avertissement « Open-Meteo refusé, relance à HHhMM » si la relance est
+programmée et que le refus est la seule cause (étape `Verdict`, `relance.mjs verdict`) ;
+sinon rouge. La relance est le juge : rouge si elle échoue. Son résumé dit si l'alerte est
+rattrapée.
+**Horloge des tests (D-009)** : `test/helpers/horloge.mjs`, `HORLOGE_TEST` = instant ISO.
+Toute la suite à une heure forcée : `NODE_OPTIONS="--import=file:///C:/Users/grego/Google%20Drive/Claude/weather-station/meteo-alert/test/helpers/horloge.mjs"
+HORLOGE_TEST=2026-11-24T23:05:00Z node --test test/*.test.mjs` (espace du chemin en `%20` :
+NODE_OPTIONS coupe aux espaces). Chaque processus enfant repart de l'instant donné : garder
+quelques minutes de marge avant minuit.
 
 **QA des alertes neige** (D-003, `snow-verdict.mjs`) : chaque message neige annoncée parti
 est journalisé dans `data/alertes-neige.csv` ; l'alerte neige fraîche recalcule

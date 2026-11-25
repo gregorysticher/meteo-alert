@@ -70,8 +70,12 @@ jobs:
       - name: Tests
         run: node --test test/gravite.test.mjs test/snow.test.mjs test/snow-conversion.test.mjs test/snow-detail.test.mjs test/snow-episodes.test.mjs test/reseau.test.mjs test/silence.test.mjs test/snow-verdict.test.mjs test/snow-msl.test.mjs test/relance.test.mjs
 
+      # continue-on-error (D-009) : la couleur finale se décide à l'étape « Verdict » (fin
+      # du job). Un échec de cette étape reste rouge, sauf refus d'Open-Meteo seul avec
+      # relance programmée : vert avec un avertissement.
       - name: Vérifier les chutes annoncées
         id: alerte
+        continue-on-error: true
         env:
           NTFY_TOPIC_NEIGE: ${{ secrets.NTFY_TOPIC_NEIGE }}
           DRY_RUN: ${{ inputs.dry_run }}
@@ -123,10 +127,12 @@ jobs:
           exit 1
 
       # Refus d'Open-Meteo (429, 5xx, injoignable) : une seule relance, 30 à 60 min plus tard,
-      # dans un nouveau run (D-008, Décision 2). Ce run-ci reste rouge. relance.mjs refuse une
-      # relance d'une relance, ou si un run planifié tombe dans les 2 h.
+      # dans un nouveau run (D-008, Décision 2). relance.mjs refuse une relance d'une relance,
+      # ou si un run planifié tombe dans les 2 h. Si la commande de relance échoue, cette
+      # étape est rouge, donc le run aussi (D-009) : un refus ne disparaît jamais sans relance.
       - name: Programmer une relance (refus Open-Meteo)
-        if: failure() && steps.alerte.outputs.relance == 'true' && inputs.relance != '1'
+        id: relance
+        if: always() && steps.alerte.outcome == 'failure' && steps.alerte.outputs.relance == 'true' && inputs.relance != '1'
         env:
           GH_TOKEN: ${{ github.token }}
           RELANCE_NEIGE_MIN: ${{ vars.RELANCE_NEIGE_MIN }}
@@ -140,7 +146,10 @@ jobs:
           case $rc in
             0)
               A=$(grep '^attente_min=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)
+              H=$(grep '^heure=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)
               gh workflow run snow-forecast-alert.yml -f dry_run=false -f relance=1 -f attente_min="$A" -f origine=${{ github.run_id }}
+              echo "programmee=true" >> "$GITHUB_OUTPUT"
+              echo "heure_relance=$H" >> "$GITHUB_OUTPUT"
               ;;
             3) ;;
             *) echo "::error title=relance::relance.mjs en panne (code $rc) : pas de relance"; exit "$rc" ;;
@@ -159,3 +168,16 @@ jobs:
         run: |
           gh workflow run wind-alert.yml -f dry_run=0 -f qa_only=0 ||
             echo "::warning title=relance écran::wind-alert non relancé ; l'écran attendra le prochain run vent (4 h au plus)."
+
+      # Couleur finale quand l'étape d'alerte a échoué (D-009, Greg 25.11.2026) : vert avec un
+      # avertissement seulement si une relance est programmée et que le refus d'Open-Meteo est
+      # la seule cause ; la relance devient le juge (rouge si elle échoue à son tour). Sinon
+      # rouge : une évaluation neige est perdue. Dernière étape : l'écran et le commit passent
+      # avant.
+      - name: Verdict
+        if: always() && steps.alerte.outcome == 'failure'
+        env:
+          RELANCE_SEULE: ${{ steps.alerte.outputs.relance_seule }}
+          PROGRAMMEE: ${{ steps.relance.outputs.programmee }}
+          HEURE: ${{ steps.relance.outputs.heure_relance }}
+        run: node relance.mjs verdict
