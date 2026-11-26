@@ -157,6 +157,13 @@ finit vert avec un avertissement « Open-Meteo refusé, relance à HHhMM » si l
 programmée et que le refus est la seule cause (étape `Verdict`, `relance.mjs verdict`) ;
 sinon rouge. La relance est le juge : rouge si elle échoue. Son résumé dit si l'alerte est
 rattrapée.
+**Relance orpheline (D-010)** : la relance programmée est inscrite dans
+`data/relance-neige.json` (heure prévue, run d'origine), commité. Étape « Contrôler la
+relance inscrite » (`relance.mjs controle`, après l'alerte) : effacée par la relance
+elle-même ou par toute alerte réussie ; heure prévue dépassée de plus de 30 min
+(`MARGE_ORPHELINE_MIN`) sans évaluation → effacée et run rouge « relance prévue à HHhMM
+jamais terminée ». DRY_RUN et seuil forcé : rien effacé. Délai maximal jusqu'au mail : 13 h
+(refus à 16h23, mail au run de 5h23).
 **Horloge des tests (D-009)** : `test/helpers/horloge.mjs`, `HORLOGE_TEST` = instant ISO.
 Toute la suite à une heure forcée : `NODE_OPTIONS="--import=file:///C:/Users/grego/Google%20Drive/Claude/weather-station/meteo-alert/test/helpers/horloge.mjs"
 HORLOGE_TEST=2026-11-24T23:05:00Z node --test test/*.test.mjs` (espace du chemin en `%20` :

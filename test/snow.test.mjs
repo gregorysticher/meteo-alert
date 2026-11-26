@@ -814,30 +814,49 @@ test('annoncée (D-008) : 503 et injoignable -> relance ; 400 -> pas de relance 
 });
 
 // ---- D-009 : couleur du run quand une relance est programmée ---------------------------
-// Les étapes du workflow, dans l'ordre : alerte (script), relance (relance.mjs, puis
-// `gh workflow run` simulé par ghOk), verdict (relance.mjs verdict). Rend la couleur du job.
-function workflowNeige({ mock, horloge, env = {}, relance = false, ghOk = true }) {
-  const gh = sortieGh(), gh2 = sortieGh();
+// Les étapes du workflow, dans l'ordre : alerte (script), contrôle de la relance inscrite
+// (D-010), relance (relance.mjs, `gh workflow run` simulé par ghOk, puis inscription),
+// verdict (relance.mjs verdict). Rend la couleur du job. `depot` = dossier qui garde
+// data/relance-neige.json d'un run à l'autre (le dépôt commité) ; `run` = numéro de ce run,
+// `origine` = run d'origine quand ce run est une relance.
+const INSC = 'data/relance-neige.json';
+function workflowNeige({ mock, horloge, env = {}, relance = false, ghOk = true, depot = null,
+  run = '45600000001', origine = '45546467926' }) {
+  const gh = sortieGh(), gh2 = sortieGh(), gh3 = sortieGh();
+  const dir = depot ?? mkdtempSync(join(tmpdir(), 'neige-depot-'));
+  const node = (args, e) => spawnSync(process.execPath, ['--import', HORLOGE, join(RACINE, 'relance.mjs'), ...args],
+    { cwd: dir, encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: '', HORLOGE_TEST: horloge, ...e } });
+  const insc = () => existsSync(join(dir, INSC)) ? readFileSync(join(dir, INSC), 'utf8') : null;
   try {
-    const a = lancer('snow-forecast-alert.mjs', mock, { ...REEL, ...gh.env, HORLOGE_TEST: horloge, ...env,
-      ...(relance ? { RELANCE: '1', RUN_ORIGINE: '45546467926' } : {}) });
-    if (a.code === 0) return { vert: true, texte: 'alerte ok', a };
+    const envRun = { ...REEL, ...env, ...(relance ? { RELANCE: '1', RUN_ORIGINE: origine } : {}) };
+    const a = lancer('snow-forecast-alert.mjs', mock, { ...envRun, ...gh.env, HORLOGE_TEST: horloge });
     const sortie = (k, txt = gh.lire().out) => txt.match(new RegExp(`^${k}=(.*)$`, 'm'))?.[1] ?? '';
+    const alerte = a.code === 0 ? 'success' : 'failure';
+    const c = node(['controle'], { ...gh3.env, ALERTE: alerte, DRY_RUN: envRun.DRY_RUN, SEUIL_FORCE: envRun.SEUIL_FORCE ?? '',
+      RELANCE: envRun.RELANCE ?? '', RUN_ORIGINE: envRun.RUN_ORIGINE ?? '' });
+    if (c.status !== 0) return { vert: false, texte: 'contrôle en panne ' + c.stderr, a, insc: insc() };
+    const orpheline = sortie('orpheline', gh3.lire().out);
     let programmee = '', heure = '';
-    if (sortie('relance') === 'true' && !relance) {
-      const r = spawnSync(process.execPath, ['--import', HORLOGE, join(RACINE, 'relance.mjs')], { encoding: 'utf8',
-        env: { ...process.env, ...gh2.env, HORLOGE_TEST: horloge, RELANCE: '', RELANCE_NEIGE_MIN: '' } });
-      if (r.status !== 0 && r.status !== 3) return { vert: false, texte: 'relance.mjs en panne', a };
+    if (alerte === 'failure' && sortie('relance') === 'true' && !relance) {
+      const r = node([], { ...gh2.env, RELANCE: '', RELANCE_NEIGE_MIN: '' });
+      if (r.status !== 0 && r.status !== 3) return { vert: false, texte: 'relance.mjs en panne', a, insc: insc() };
       if (r.status === 0) {
         // Commande de relance en échec : l'étape est rouge, donc le run.
-        if (!ghOk) return { vert: false, texte: 'gh workflow run en échec', a };
+        if (!ghOk) return { vert: false, texte: 'gh workflow run en échec', a, insc: insc() };
         programmee = 'true'; heure = sortie('heure', gh2.lire().out);
+        const i = node(['inscrire'], { ORIGINE: run, ATTENTE_MIN: sortie('attente_min', gh2.lire().out),
+          PREVUE: sortie('prevue', gh2.lire().out), DRY_RUN: envRun.DRY_RUN });
+        if (i.status !== 0) return { vert: false, texte: 'inscription en panne ' + i.stderr, a, insc: insc() };
       }
     }
-    const v = spawnSync(process.execPath, [join(RACINE, 'relance.mjs'), 'verdict'], { encoding: 'utf8',
-      env: { ...process.env, GITHUB_STEP_SUMMARY: '', RELANCE_SEULE: sortie('relance_seule'), PROGRAMMEE: programmee, HEURE: heure } });
-    return { vert: v.status === 0, texte: v.stdout, a };
-  } finally { gh.fin(); gh2.fin(); }
+    if (alerte === 'success' && !orpheline) return { vert: true, texte: 'alerte ok' + c.stdout, a, insc: insc() };
+    const v = node(['verdict'], { RELANCE_SEULE: sortie('relance_seule'), PROGRAMMEE: programmee, HEURE: heure,
+      ALERTE: alerte, ORPHELINE: orpheline });
+    return { vert: v.status === 0, texte: v.stdout + c.stdout, a, insc: insc() };
+  } finally {
+    gh.fin(); gh2.fin(); gh3.fin();
+    if (!depot) rmSync(dir, { recursive: true, force: true });
+  }
 }
 const REFUS = { status: 429, body: { error: true, reason: 'Hourly API request limit exceeded' } };
 
@@ -873,3 +892,87 @@ test('D-009 : pas de relance programmée -> rouge (run planifié dans les 2 h, c
     assert.equal(workflowNeige({ mock, env, horloge: '2026-11-25T09:00:00Z' }).vert, false, JSON.stringify(mock));
   }
 });
+
+// ---- D-010 : relance programmée qui n'a jamais rendu de verdict -------------------------
+const OK_A = (iso) => prev([0, 7, 5, 0, 0], 'mm', [], Date.parse(iso));
+const avecDepot = (f) => {
+  const depot = mkdtempSync(join(tmpdir(), 'neige-depot-'));
+  try { return f(depot); } finally { rmSync(depot, { recursive: true, force: true }); }
+};
+
+test('D-010 : relance jamais démarrée -> run suivant rouge, évaluation faite, inscription effacée', () => avecDepot((depot) => {
+  // Refus au run de 16h23 : relance à 17h03 (aucun run planifié dans les 2 h).
+  const a = workflowNeige({ mock: REFUS, horloge: '2026-11-25T15:23:30Z', depot, run: '45700000001' });
+  assert.equal(a.vert, true, a.texte);
+  const i = JSON.parse(a.insc);
+  assert.equal(i.origine, '45700000001');
+  assert.equal(i.prevue.slice(0, 16), '2026-11-25T16:03');
+  // La relance ne démarre jamais. Run planifié du lendemain 5h23 : il évalue, puis rouge.
+  const b = workflowNeige({ mock: OK_A('2026-11-26T04:23:40Z'), horloge: '2026-11-26T04:23:40Z', depot });
+  assert.equal(b.a.code, 0, b.a.out);
+  assert.equal(b.vert, false, b.texte);
+  assert.match(b.texte, /^::error title=alerte neige::Relance prévue à 17h03 \(25\.11\) jamais terminée \(run d'origine 45700000001\) : aucune évaluation neige entre 16h23 \(25\.11\) et 5h23 \(26\.11\)\. Ce run a fait l'évaluation\./m);
+  assert.equal(b.insc, null);
+  // Signalé une fois : le run suivant est vert.
+  const c = workflowNeige({ mock: OK_A('2026-11-26T07:03:20Z'), horloge: '2026-11-26T07:03:20Z', depot });
+  assert.equal(c.vert, true, c.texte);
+}));
+
+test('D-010 : relance remplacée par un run plus récent qui réussit -> rien de rouge', () => avecDepot((depot) => {
+  const a = workflowNeige({ mock: REFUS, horloge: '2026-11-25T04:24:31Z', depot });
+  assert.ok(a.vert && a.insc, a.texte);
+  // Le cron GitHub de secours prend la place de la relance en file et réussit.
+  const b = workflowNeige({ mock: OK_A('2026-11-25T04:31:00Z'), horloge: '2026-11-25T04:31:00Z', depot });
+  assert.equal(b.vert, true, b.texte);
+  assert.equal(b.insc, null);
+  assert.match(b.texte, /évaluation réussie, la relance n'est plus nécessaire \(inscription effacée\)/);
+  // Plus tard, rien n'est signalé.
+  assert.equal(workflowNeige({ mock: OK_A('2026-11-25T07:03:00Z'), horloge: '2026-11-25T07:03:00Z', depot }).vert, true);
+}));
+
+test('D-010 : relance réussie ou en échec -> inscription effacée, pas de second mail', () => {
+  avecDepot((depot) => {
+    workflowNeige({ mock: REFUS, horloge: '2026-11-25T04:24:31Z', depot, run: '45700000002' });
+    const r = workflowNeige({ mock: OK_A('2026-11-25T05:05:40Z'), horloge: '2026-11-25T05:05:40Z', depot,
+      relance: true, origine: '45700000002' });
+    assert.equal(r.vert, true, r.texte);
+    assert.equal(r.insc, null);
+  });
+  avecDepot((depot) => {
+    workflowNeige({ mock: REFUS, horloge: '2026-11-25T04:24:31Z', depot, run: '45700000003' });
+    // La relance part en retard (file d'attente) et échoue : elle est le juge, rouge, une fois.
+    const r = workflowNeige({ mock: REFUS, horloge: '2026-11-25T06:10:00Z', depot, relance: true, origine: '45700000003' });
+    assert.equal(r.vert, false, r.texte);
+    assert.doesNotMatch(r.texte, /jamais terminée/);
+    assert.equal(r.insc, null);
+    assert.equal(workflowNeige({ mock: OK_A('2026-11-25T07:03:00Z'), horloge: '2026-11-25T07:03:00Z', depot }).vert, true);
+  });
+});
+
+test('D-010 : DRY_RUN et seuil forcé n\'écrivent ni n\'effacent rien', () => avecDepot((depot) => {
+  // Refus en DRY_RUN : pas de relance, donc pas d'inscription.
+  const d = workflowNeige({ mock: REFUS, horloge: '2026-11-25T04:24:31Z', depot, env: { DRY_RUN: 'true' } });
+  assert.equal(d.insc, null);
+  // Inscription en retard : un essai la laisse telle quelle, sans rouge.
+  workflowNeige({ mock: REFUS, horloge: '2026-11-25T15:23:30Z', depot, run: '45700000004' });
+  const avant = readFileSync(join(depot, INSC), 'utf8');
+  for (const env of [{ DRY_RUN: 'true' }, { SEUIL_CM: '5', SEUIL_FORCE: '5' }]) {
+    const e = workflowNeige({ mock: OK_A('2026-11-26T04:23:40Z'), horloge: '2026-11-26T04:23:40Z', depot, env });
+    assert.equal(e.vert, true, e.texte);
+    assert.equal(e.insc, avant);
+    assert.match(e.texte, /essai : rien effacé ni signalé/);
+  }
+}));
+
+test('D-010 : relance encore attendue gardée ; inscription illisible -> rouge', () => avecDepot((depot) => {
+  workflowNeige({ mock: REFUS, horloge: '2026-11-25T04:24:31Z', depot });
+  // Run manuel en échec (400) avant l'heure de la relance : rouge, inscription gardée.
+  const m = workflowNeige({ mock: { status: 400, body: { error: true } }, horloge: '2026-11-25T04:40:00Z', depot });
+  assert.equal(m.vert, false);
+  assert.ok(m.insc);
+  writeFileSync(join(depot, INSC), '{x');
+  const r = workflowNeige({ mock: OK_A('2026-11-25T07:03:00Z'), horloge: '2026-11-25T07:03:00Z', depot });
+  assert.equal(r.vert, false, r.texte);
+  assert.match(r.texte, /Inscription de relance illisible/);
+  assert.equal(r.insc, null);
+}));

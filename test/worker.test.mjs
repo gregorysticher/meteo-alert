@@ -81,7 +81,10 @@ test('les workflows transmettent vraiment l\'entree au script', () => {
   for (const y of [annonce, fraiche]) assert.ok(y.includes('test/snow-verdict.test.mjs'), 'tests QA neige joués');
   assert.ok(annonce.includes('actions: write'));
   assert.ok(annonce.includes("always() && steps.alerte.outputs.ecran_change == 'true'"));
-  assert.ok(annonce.indexOf('git commit') < annonce.indexOf('gh workflow run'), 'relance apres le commit');
+  // Relance de l'écran après le commit (wind-alert lit le fichier poussé). La relance neige
+  // (D-010) passe avant le commit : son inscription doit être commitée.
+  assert.ok(annonce.indexOf('git commit') < annonce.indexOf('gh workflow run wind-alert.yml'), 'relance ecran apres le commit');
+  assert.ok(annonce.indexOf('gh workflow run snow-forecast-alert.yml') < annonce.indexOf('git commit'), 'inscription D-010 commitee');
   assert.ok(annonce.includes('gh workflow run wind-alert.yml -f dry_run=0'));
   for (const f of ['wind-alert', 'snow-forecast-alert', 'snow-fresh-alert']) {
     assert.ok(readFileSync(`.github/workflows/${f}.yml`, 'utf8').includes('ref: ${{ github.ref_name }}'), f);

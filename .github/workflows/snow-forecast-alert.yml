@@ -103,39 +103,35 @@ jobs:
           RUN_ORIGINE: ${{ inputs.origine }}
         run: node snow-forecast-alert.mjs
 
-      - name: Commit l'état si modifié
+      # Relances orphelines (D-010, Greg 26.11.2026) : toute évaluation perdue produit un mail.
+      # Efface l'inscription d'une relance (data/relance-neige.json) quand une évaluation a eu
+      # lieu (ce run est cette relance, ou son alerte a réussi). Heure prévue dépassée de plus
+      # de 30 min sans évaluation : efface et sort orpheline, le Verdict rend le run rouge.
+      # DRY_RUN et seuil forcé : rien effacé, rien signalé.
+      - name: Contrôler la relance inscrite
+        id: controle
         if: always()
-        run: |
-          git config --global user.name "snow-alert-bot"
-          git config --global user.email "snow-alert-bot@users.noreply.github.com"
-          # Un par un : un git add avec un chemin absent n'ajoute RIEN.
-          for f in snow-forecast-alerted.json data/neige.csv data/neige-ecran.json data/alertes-neige.csv data/sources-neige-annoncee.json; do
-            if [ -f "$f" ]; then git add "$f"; fi
-          done
-          if git diff --staged --quiet; then
-            echo "Rien à committer."
-            exit 0
-          fi
-          git commit -m "chore: alerte neige annoncée / journal neige [skip ci]"
-          # wind-alert pousse aussi dans le dépôt : rebase avant push, 3 essais.
-          for i in 1 2 3; do
-            git pull --rebase --autostash && git push && exit 0
-            git rebase --abort 2>/dev/null || true
-            sleep $((i * 10))
-          done
-          echo "::error::push impossible après 3 essais"
-          exit 1
+        env:
+          ALERTE: ${{ steps.alerte.outcome }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          SEUIL_FORCE: ${{ inputs.seuil_cm }}
+          RELANCE: ${{ inputs.relance }}
+          RUN_ORIGINE: ${{ inputs.origine }}
+        run: node relance.mjs controle
 
       # Refus d'Open-Meteo (429, 5xx, injoignable) : une seule relance, 30 à 60 min plus tard,
       # dans un nouveau run (D-008, Décision 2). relance.mjs refuse une relance d'une relance,
       # ou si un run planifié tombe dans les 2 h. Si la commande de relance échoue, cette
       # étape est rouge, donc le run aussi (D-009) : un refus ne disparaît jamais sans relance.
+      # La relance programmée est inscrite (D-010), puis commitée à l'étape suivante ; le run
+      # relancé attend avant son checkout, il part donc de ce commit.
       - name: Programmer une relance (refus Open-Meteo)
         id: relance
         if: always() && steps.alerte.outcome == 'failure' && steps.alerte.outputs.relance == 'true' && inputs.relance != '1'
         env:
           GH_TOKEN: ${{ github.token }}
           RELANCE_NEIGE_MIN: ${{ vars.RELANCE_NEIGE_MIN }}
+          DRY_RUN: ${{ inputs.dry_run }}
         # relance.mjs : 0 = relancer, 3 = pas de relance (raison au résumé), autre = panne du
         # script, qui doit se voir.
         run: |
@@ -150,10 +146,38 @@ jobs:
               gh workflow run snow-forecast-alert.yml -f dry_run=false -f relance=1 -f attente_min="$A" -f origine=${{ github.run_id }}
               echo "programmee=true" >> "$GITHUB_OUTPUT"
               echo "heure_relance=$H" >> "$GITHUB_OUTPUT"
+              P=$(grep '^prevue=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)
+              ORIGINE=${{ github.run_id }} ATTENTE_MIN="$A" PREVUE="$P" node relance.mjs inscrire
               ;;
             3) ;;
             *) echo "::error title=relance::relance.mjs en panne (code $rc) : pas de relance"; exit "$rc" ;;
           esac
+
+      - name: Commit l'état si modifié
+        if: always()
+        run: |
+          git config --global user.name "snow-alert-bot"
+          git config --global user.email "snow-alert-bot@users.noreply.github.com"
+          # Un par un : un git add avec un chemin absent n'ajoute RIEN.
+          for f in snow-forecast-alerted.json data/neige.csv data/neige-ecran.json data/alertes-neige.csv data/sources-neige-annoncee.json; do
+            if [ -f "$f" ]; then git add "$f"; fi
+          done
+          # Inscription de relance (D-010) : écrite ou effacée ; git add enregistre aussi l'effacement.
+          f=data/relance-neige.json
+          if [ -f "$f" ] || git ls-files --error-unmatch "$f" >/dev/null 2>&1; then git add "$f"; fi
+          if git diff --staged --quiet; then
+            echo "Rien à committer."
+            exit 0
+          fi
+          git commit -m "chore: alerte neige annoncée / journal neige [skip ci]"
+          # wind-alert pousse aussi dans le dépôt : rebase avant push, 3 essais.
+          for i in 1 2 3; do
+            git pull --rebase --autostash && git push && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 10))
+          done
+          echo "::error::push impossible après 3 essais"
+          exit 1
 
       # Après le commit : wind-alert lit le fichier poussé. Au plus une relance par run
       # neige. always() : une alerte partie doit s'afficher même si le journal long a
@@ -172,12 +196,14 @@ jobs:
       # Couleur finale quand l'étape d'alerte a échoué (D-009, Greg 25.11.2026) : vert avec un
       # avertissement seulement si une relance est programmée et que le refus d'Open-Meteo est
       # la seule cause ; la relance devient le juge (rouge si elle échoue à son tour). Sinon
-      # rouge : une évaluation neige est perdue. Dernière étape : l'écran et le commit passent
-      # avant.
+      # rouge : une évaluation neige est perdue. Relance orpheline (D-010) : toujours rouge,
+      # même si l'alerte de ce run a réussi. Dernière étape : l'écran et le commit passent avant.
       - name: Verdict
-        if: always() && steps.alerte.outcome == 'failure'
+        if: always() && (steps.alerte.outcome == 'failure' || steps.controle.outputs.orpheline != '')
         env:
           RELANCE_SEULE: ${{ steps.alerte.outputs.relance_seule }}
           PROGRAMMEE: ${{ steps.relance.outputs.programmee }}
           HEURE: ${{ steps.relance.outputs.heure_relance }}
+          ALERTE: ${{ steps.alerte.outcome }}
+          ORPHELINE: ${{ steps.controle.outputs.orpheline }}
         run: node relance.mjs verdict

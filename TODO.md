@@ -1,6 +1,6 @@
 # TODO — Weather station (meteo-alert + TRMNL)
 
-Dernière mise à jour : 2026-11-25
+Dernière mise à jour : 2026-11-26
 Session : Weather Station — https://claude.ai/code/session_01V44DmrGmT76TSq2yZ4XBUY — PC claude://claude.ai/epitaxy/local_0979867e-6d1b-45c0-973d-5fd7476274f3
 Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
@@ -40,6 +40,8 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
       sources (à refaire à chaque épisode ; recalage après 4 à 6). Échéance : 2026-11-28.
 - [ ] D-009 : au prochain refus d'Open-Meteo, vérifier en vrai que le run d'origine finit
       vert avec « Open-Meteo refusé, relance à HHhMM », et que la relance rend le verdict.
+      D-010 au même moment : `data/relance-neige.json` écrit par le run d'origine, effacé
+      par la relance.
 - [ ] Contrôler le premier vrai `W.reco` à l'écran à l'ouverture de la
       saison (2027-04-15) : jour, heures, inversion.
 - [ ] Redéployer le Worker exige `wrangler login` (déconnecté après le déploiement) :
@@ -67,6 +69,10 @@ Contexte complet : [`HANDOFF.md`](HANDOFF.md).
 
 ## Fait récemment
 
+- [x] 2026-11-26 — D-010 en service : une relance programmée est inscrite
+      (`data/relance-neige.json`) ; toute évaluation réussie l'efface ; jamais terminée
+      30 min après l'heure prévue → run suivant rouge, évaluation faite. Mail au plus 13 h
+      après l'évaluation perdue (refus à 16h23, run de 5h23).
 - [x] 2026-11-25 — D-009 en service : horloge forcée des tests (`test/helpers/horloge.mjs`),
       suite passée sur 17 instants piégeux (2 défauts de test trouvés et corrigés) ; run
       neige annoncée vert avec avertissement quand une relance est programmée (étape
