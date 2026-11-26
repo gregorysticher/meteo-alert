@@ -142,7 +142,7 @@ relance passe au rouge 40 min plus tard.
 
 ## D-010 — Relance programmée qui n'a jamais rendu de verdict
 
-**Statut :** OUVERTE
+**Statut :** FAITE (en service le 26.11.2026 vers 13h15, DRY_RUN vert)
 **De :** WINGFOIL/METEO-ALERT — jeudi 26.11.2026, 10h30
 **Décidé par :** Greg, 26.11.2026
 
@@ -179,4 +179,65 @@ vert : si la relance ne démarre jamais côté GitHub (0 job, comme le run vent 
 
 ### Réponse
 
-_(à remplir par Weather Station)_
+**Fait, comme décidé, sans écart.** En service depuis le commit 018aec3 (26.11.2026).
+
+**Mécanisme**
+- Après une commande de relance réussie, le run d'origine écrit `data/relance-neige.json` :
+  run d'origine, heure prévue (la même que celle de l'avertissement « relance à HHhMM ») et
+  heure du refus. Le fichier est commité avec le reste de l'état. L'étape de relance passe
+  donc avant le commit. La relance de l'écran reste après le commit.
+- Nouvelle étape « Contrôler la relance inscrite », juste après l'alerte, à chaque run :
+  - la relance elle-même (même run d'origine) efface l'inscription, qu'elle réussisse ou
+    non : elle est le juge (D-009), un seul mail si elle échoue ;
+  - tout autre run dont l'alerte réussit l'efface (planifié, cron de secours, run qui a pris
+    la place de la relance dans la file) ;
+  - heure prévue dépassée de plus de **30 min** sans évaluation : le run fait son évaluation,
+    efface l'inscription et finit **rouge** à l'étape Verdict, avec par exemple :
+    « Relance prévue à 17h03 (25.11) jamais terminée (run d'origine N) : aucune évaluation
+    neige entre 16h23 (25.11) et 5h23 (26.11). Ce run a fait l'évaluation. » Les dates
+    n'apparaissent que si le message couvre deux jours ;
+  - un fichier illisible donne aussi un run rouge, puis il est effacé ;
+  - DRY_RUN et seuil forcé : rien écrit, rien effacé, rien signalé (une ligne au journal).
+- Marge de 30 min : la relance évalue 2 à 4 min après son heure prévue, et le run planifié
+  suivant tombe toujours au moins 2 h après (une relance n'est programmée que si aucun run
+  planifié ne tombe dans les 2 h). La marge ne change donc jamais le résultat. Elle est en
+  constante (`MARGE_ORPHELINE_MIN` dans `relance.mjs`), à côté de `FENETRE_H` : c'est un
+  réglage de mécanique, pas un seuil d'alerte.
+
+**Tests demandés, tous verts** (`test/snow.test.mjs`, simulation des étapes du workflow
+d'un run à l'autre, avec un dépôt qui garde l'inscription) :
+- relance jamais démarrée → run suivant rouge, évaluation faite, inscription effacée ; le run
+  d'après est vert (un seul mail) ;
+- relance remplacée par un run plus récent qui réussit → rien de rouge, inscription effacée ;
+- relance réussie → inscription effacée ; relance partie en retard qui échoue → rouge une
+  fois, sans message « jamais terminée », puis vert ;
+- DRY_RUN et seuil forcé n'écrivent ni n'effacent rien ;
+- en plus : relance encore attendue gardée par un run en échec ; fichier illisible → rouge ;
+  câblage du YAML (ordre des étapes, conditions, commit de l'effacement).
+
+Toute la suite (420 tests) passe aux 17 instants forcés de D-009. J'ai aussi vérifié dans un
+dépôt jetable que le commit enregistre bien l'effacement du fichier. La revue indépendante
+n'a rien trouvé de bloquant ; ses remarques mineures sont corrigées (heure prévue unique,
+dates dans le message, texte quand l'alerte n'a pas tourné, erreur affichée une seule fois).
+DRY_RUN 45817575253 vert : contrôle exécuté, rien trouvé, rien écrit.
+
+**Délai maximal entre une évaluation perdue et le mail : 13 h.** Calculé sur un an de runs
+planifiés (949 cas où une relance est programmée) :
+
+| Refus au run de | Mail au run planifié de | Délai |
+|---|---|---|
+| 16h23 (hiver) ou 17h23 (été) | 5h23 ou 6h23 le lendemain | **13 h** |
+| 8h03 ou 9h03 (réveil) | 16h23 ou 17h23 | 7 h 20 à 9 h 20 |
+| 5h23 ou 6h23 | réveil 8h03 ou 9h03 | 2 h 40 à 3 h 40 |
+
+Dans la nuit, le cron GitHub de secours de 16h23 arrive souvent en retard (vers 20h-23h). Il
+fait une vraie évaluation, donc il peut signaler la relance perdue plus tôt. Le mail de
+GitHub n'est pas soumis au silence nocturne. Correction de D-009 : j'y avais écrit 11 h au
+plus, c'est 13 h depuis le refus (12 h 20 depuis l'heure prévue de la relance).
+
+**Cas restants, sans perte silencieuse**
+- La relance évalue mais son push échoue : elle est rouge (mail), l'inscription reste sur
+  GitHub, et le run suivant est rouge aussi, à tort (« jamais terminée »). Deux mails pour un
+  seul incident, rien de perdu. C'est rare : je n'ai rien ajouté.
+- Pour réduire les 13 h, une option : faire vérifier l'inscription par le run vent, qui
+  tourne toutes les 4 h. Je ne l'ai pas fait sans décision.
